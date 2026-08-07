@@ -8,7 +8,7 @@ import { createOpponent, settleVerdict } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -559,7 +559,8 @@ async function showReport(end) {
     `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次；` +
     `平均思考${(stats.avgTimeMs / 1000).toFixed(1)}秒` +
     (stats.slowest ? `；最久一手：第${stats.slowest.round}局想了${(stats.slowest.ms / 1000).toFixed(0)}秒才报${stats.slowest.bid.count}个${stats.slowest.bid.face}` : '') +
-    (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '');
+    (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
+    ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '');
 
   const ov = $('overlay');
   ov.classList.remove('hidden');
@@ -614,7 +615,7 @@ function openDrawer(section) {
       <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
     <h2 id="profileSec">它眼中的你</h2>
-    <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
+    <p>${profileBrief(profile, false) || '还没有档案。打一场，他就开始记了。'}</p>
     ${
       profile.stats.length
         ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报率</th><th>开牌</th><th>被开</th><th>均时</th></tr>${profile.stats
@@ -645,7 +646,8 @@ function openDrawer(section) {
   else d.scrollTop = 0;
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
     saveLedger({ you: 100, opp: 100 });
-    e.target.textContent = '翻篇了，下一场生效';
+    profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
+    e.target.textContent = '翻篇了，下一场生效（他记下了）';
     e.target.disabled = true;
   });
   d.querySelector('#closeDrawer').addEventListener('click', () => {
