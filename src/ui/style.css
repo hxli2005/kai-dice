@@ -512,6 +512,16 @@ button.danger:active { transform: scale(0.95); }
 #drawer .note-item { border-left: 2px solid var(--lamp-dim); padding-left: 0.6rem; margin: 0.5rem 0; }
 .close-x { position: absolute; top: calc(env(safe-area-inset-top) + 0.7rem); right: 1rem; background: none; border: none; color: var(--dim); font-size: 1.5rem; }
 
+/* 连接状态点：亮=LLM 在线，红=降级沉默，灰=未开口 */
+.brain { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none; }
+.brain.on { background: var(--lamp); box-shadow: 0 0 6px rgba(232, 169, 79, 0.8); }
+.brain.off { background: var(--red-hi); box-shadow: 0 0 6px rgba(232, 90, 68, 0.7); }
+.brain.idle { background: #5d5142; }
+
+.test-line { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.1rem; color: var(--dim); }
+.test-line.ok { color: var(--lamp); }
+.test-line.bad { color: var(--red-hi); }
+
 .fade-in { animation: fadein 0.3s both; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 

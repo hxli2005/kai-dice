@@ -108,7 +108,8 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
   }
 }
 
-// channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）
+// channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）。
+// channel 可传函数（每手求值）——设置保存后下一手立即生效，不用等下一场。
 export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, fetchFn } = {}) {
   const silent = createSilentBot(persona.strategy); // 策略参数随人设（Q10④）
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
@@ -118,20 +119,23 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
     async decide(ob) {
       if (ob.yourDice === null) return { action: { type: 'peek' } };
       const prompts = buildPrompts(ob, profile, persona);
+      const ch = typeof channel === 'function' ? channel() : channel;
       let decision = null;
       let raw = null;
-      if (channel) {
+      let error = null;
+      if (ch) {
         try {
-          raw = await chat(channel, prompts, fetchFn);
+          raw = await chat(ch, prompts, fetchFn);
           decision = parseDecision(raw, ob);
-        } catch {
-          decision = null;
+          if (decision === null) error = 'bad-output';
+        } catch (e) {
+          error = e?.message ?? 'unknown';
         }
       }
       const silentFallback = decision === null;
       if (silentFallback) decision = { action: silent.decide(ob), say: '', note: '' };
-      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback });
-      return decision;
+      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error });
+      return { ...decision, silentFallback, error };
     },
   };
 }

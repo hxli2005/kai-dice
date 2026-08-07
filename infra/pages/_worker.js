@@ -30,7 +30,10 @@ export default {
             kv = "err:" + (e && e.message);
           }
         }
-        return json({ quota: !!env.QUOTA, secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY), kv });
+        // 带 Authorization 时顺带校验暗号（免费连通测试，不动 LLM）
+        const auth = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+        const pass = auth && env.FRIEND_PASS ? auth === env.FRIEND_PASS : null;
+        return json({ quota: !!env.QUOTA, secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY), kv, pass });
       }
       if (request.method !== "POST") return json({ error: "POST only" }, 405);
       if (!env.FRIEND_PASS || !env.DEEPSEEK_KEY) return json({ error: "服务端未配置暗号或 key" }, 503);

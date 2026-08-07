@@ -5,6 +5,7 @@ import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
 import { createOpponent, settleVerdict } from '../ai/agent.js';
+import { chat } from '../ai/llm.js';
 import { DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
 import { loadProfile, appendMatch, profileBrief, loadByok, saveByok } from './profile.js';
@@ -41,6 +42,43 @@ function channelOf() {
       headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
     };
   return b;
+}
+
+// 降级原因 → 人话（连接状态可见性）
+function friendlyError(msg = '') {
+  if (msg.includes('401')) return '暗号不对';
+  if (msg.includes('429')) return '今日额度用完';
+  if (msg.includes('503')) return '官方通道未开或已熔断';
+  if (msg.includes('404')) return '这个域名没有官方通道';
+  if (msg === 'bad-output') return '他说胡话了';
+  if (msg.includes('abort')) return '响应超时';
+  return '网络不通';
+}
+let fallbackNoticed = false;
+
+// 保存即测试：官方通道走 ping 免费校验暗号；自带 API 打一次最小真调用
+async function testChannel() {
+  const ch = channelOf();
+  if (!ch) return { ok: false, msg: '没填钥匙——他保持沉默' };
+  if (ch.baseUrl.endsWith('/api/llm')) {
+    try {
+      const r = await fetch(`${location.origin}/api/llm/ping`, {
+        headers: { authorization: `Bearer ${ch.apiKey}` },
+      });
+      const j = await r.json();
+      if (!j.secrets) return { ok: false, msg: '官方通道未开（服务端没配 key）' };
+      if (j.pass !== true) return { ok: false, msg: '暗号不对' };
+      return { ok: true, msg: '暗号对上了——他的嘴已归位' };
+    } catch {
+      return { ok: false, msg: '这个域名没有官方通道' };
+    }
+  }
+  try {
+    await chat(ch, { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
+    return { ok: true, msg: '接上了——他的嘴已归位' };
+  } catch (e) {
+    return { ok: false, msg: friendlyError(e?.message ?? '') };
+  }
 }
 
 function deviceId() {
@@ -309,6 +347,14 @@ function render() {
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');
 
   $('hint').textContent = hintFor(o, myTurn);
+
+  // 连接状态点：亮=LLM 在线，红=已降级沉默模式，灰=尚未开口；未配置则隐藏
+  const dot = $('brainDot');
+  if (!channelOf()) dot.className = 'brain hidden';
+  else {
+    const last = opponent?.logs.at(-1);
+    dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
+  }
 }
 
 // 首场只给最短操作指引（§2.5），规则全文在「规」页——桌面上只留对局
@@ -395,6 +441,10 @@ async function aiTurn() {
     $('oppDice').querySelectorAll('.die').forEach((el) => el.classList.add('reveal'));
     busy = false;
     return aiTurn();
+  }
+  if (d.silentFallback && d.error && channelOf() && !fallbackNoticed) {
+    fallbackNoticed = true;
+    $('hint').textContent = `接不上他的脑子（${friendlyError(d.error)}），先闭嘴算账`;
   }
   await sleep(Math.max(0, 900 + Math.random() * 800 - (performance.now() - t0)));
   const elapsedMs = performance.now() - t0;
@@ -574,7 +624,8 @@ function openDrawer() {
       <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
     </select>
-    <div class="btnrow"><button class="primary" id="saveByok">存好，下一场生效</button></div>
+    <div class="btnrow"><button class="primary" id="saveByok">存好，马上生效</button></div>
+    <div id="byokTest" class="test-line"></div>
     <h2>为什么信它</h2>
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
   d.querySelector('#closeDrawer').addEventListener('click', () => {
@@ -582,14 +633,24 @@ function openDrawer() {
     const o = ob();
     if (o.turn === 'A' && !o.over && !busy) startTimer();
   });
-  d.querySelector('#saveByok').addEventListener('click', () => {
+  d.querySelector('#saveByok').addEventListener('click', async () => {
     saveByok({
       baseUrl: d.querySelector('#fBase').value.trim(),
       apiKey: d.querySelector('#fKey').value.trim(),
       model: d.querySelector('#fModel').value.trim(),
       format: d.querySelector('#fFmt').value,
     });
-    d.classList.add('hidden');
+    const btn = d.querySelector('#saveByok');
+    const out = d.querySelector('#byokTest');
+    btn.disabled = true;
+    out.className = 'test-line';
+    out.textContent = '试他的脑子……';
+    const r = await testChannel();
+    btn.disabled = false;
+    out.textContent = (r.ok ? '✓ ' : '✗ ') + r.msg;
+    out.className = 'test-line ' + (r.ok ? 'ok' : 'bad');
+    render();
+    if (r.ok) setTimeout(() => d.classList.add('hidden'), 1200);
   });
 }
 
@@ -599,10 +660,11 @@ async function newMatch() {
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   match = await createMatch({ seed });
-  opponent = createOpponent({ channel: channelOf(), profile: profileBrief(profile), persona: DEFAULT_PERSONA });
+  opponent = createOpponent({ channel: channelOf, profile: profileBrief(profile), persona: DEFAULT_PERSONA });
   myDiceByRound = {};
   sel = null;
   busy = false;
+  fallbackNoticed = false;
   sfx.shake();
   speak(
     profile.matches === 0
