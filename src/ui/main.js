@@ -70,15 +70,19 @@ function render() {
     (o.zhai ? '<span class="mark">斋 ×1.5</span>' : '') +
     (o.blind.A ? '<span class="mark">你盲 ×2</span>' : '') +
     (o.blind.B ? '<span class="mark">他盲 ×2</span>' : '');
-  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${marks}`;
+  // 开值 = 此刻开牌的输赢额（单方投入 × 赔率）——深虚张即高赌注（§2.2）
+  const mult = 2 ** (o.blind.A ? 1 : 0) * 2 ** (o.blind.B ? 1 : 0) * (o.zhai ? 1.5 : 1);
+  const stake = o.currentBid ? ` · 开值 <b>${Math.round(o.potUnits * mult)}</b>` : '';
+  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${stake}${marks}`;
 
   $('bidBig').innerHTML = o.currentBid
     ? `<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
     : `<span class="none">${o.over ? '' : o.turn === 'A' ? '等你开口' : '他在想'}</span>`;
 
+  // 镜像：封印与筹码余额各贴各的骰子行
   const rs = lastEvent(o, 'roundStart');
-  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)}`;
-  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)}`;
+  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)} · 筹 ${o.chips.opp}`;
+  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)} · 筹 ${o.chips.you}`;
 
   // 我的骰子：未看则盖着（点击=看骰）；盲局锁死
   const mine = $('myDice');
