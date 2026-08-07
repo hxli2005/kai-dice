@@ -1,0 +1,8 @@
+{
+  "name": "kai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
