@@ -84,6 +84,26 @@ export function parseDecision(text, ob) {
   }
 }
 
+// 结算 1 次调用（§3.1）：场终判词＋档案笔记。失败返回 null，调用方用模板判词。
+export async function settleVerdict(channel, { won, statsText }, fetchFn) {
+  try {
+    const raw = await chat(
+      channel,
+      {
+        system: SYSTEM.replace(/严格输出一行 JSON[\s\S]*$/, '') +
+          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察"}',
+        user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}`,
+      },
+      fetchFn,
+    );
+    const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+    if (typeof j.verdict !== 'string') return null;
+    return { verdict: j.verdict.slice(0, 120), note: (j.note ?? '').slice(0, 80) };
+  } catch {
+    return null;
+  }
+}
+
 // channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）
 export function createLaoZhou({ channel, profile = '', fetchFn } = {}) {
   const silent = createSilentBot();

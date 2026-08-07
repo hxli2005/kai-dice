@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f0c0a">
+<title>开！</title>
+<link rel="stylesheet" href="src/ui/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="who">
+      <div class="seal">周</div>
+      <div>
+        <div class="name">老周</div>
+        <div class="sub" id="oppSub"></div>
+        <div class="dicerow" id="oppDice"></div>
+      </div>
+      <button id="gear" aria-label="设置">⚙</button>
+    </div>
+    <div class="bubble hidden" id="bubble"></div>
+  </header>
+
+  <main>
+    <div id="pot"></div>
+    <div id="bidBig"></div>
+    <div id="hint"></div>
+    <div id="commit"></div>
+  </main>
+
+  <footer>
+    <div id="timer"><i></i></div>
+    <div id="gauge"></div>
+    <div class="dicerow" id="myDice"></div>
+    <div id="pickRow">
+      <div class="stepper">
+        <button id="cntDown">−</button>
+        <span class="val" id="cntVal">2</span>
+        <button id="cntUp">＋</button>
+      </div>
+      <div id="facePick"></div>
+    </div>
+    <div id="actionRow">
+      <button class="stamp" id="blindBtn">盲<small>池×2</small></button>
+      <button class="stamp" id="zhaiBtn">斋<small>池×1.5</small></button>
+      <button class="primary" id="bidBtn">报</button>
+      <button class="danger" id="openBtn">开</button>
+    </div>
+  </footer>
+
+  <div id="overlay" class="hidden"></div>
+  <div id="drawer" class="hidden"></div>
+</div>
+<script type="module" src="src/ui/main.js"></script>
+</body>
+</html>

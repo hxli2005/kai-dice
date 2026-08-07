@@ -1,0 +1,321 @@
+/* 《开！》深夜酒馆（DESIGN §6）：一张桌，一盏灯，不做立绘。 */
+
+:root {
+  --bg: #0f0c0a;
+  --wood: #1c1512;
+  --wood-hi: #2b201a;
+  --lamp: #e8a94f;
+  --lamp-dim: #9a7440;
+  --ink: #efe6d6;
+  --dim: #8d7c69;
+  --red: #c8402e;
+  --red-hi: #e85a44;
+  --die-face: #f2e8d5;
+  --die-pip: #2a211a;
+  --serif: 'Songti SC', 'Noto Serif SC', 'STSong', serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  height: 100dvh;
+  max-width: 30rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  /* 一盏灯 */
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 34%, #33261c 0%, #1c1512 55%, #0f0c0a 100%);
+}
+#app::before { /* 灯锥 */
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 46% 30% at 50% 36%, rgba(232, 169, 79, 0.14), transparent 70%);
+}
+
+.hidden { display: none !important; }
+
+/* ---------- 对面：老周 ---------- */
+header {
+  padding: calc(env(safe-area-inset-top) + 0.8rem) 1rem 0.4rem;
+  min-height: 7.4rem;
+}
+.who { display: flex; align-items: center; gap: 0.7rem; }
+.seal {
+  width: 2.6rem; height: 2.6rem;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+  color: var(--red-hi);
+  display: grid; place-items: center;
+  font-size: 1.3rem; font-weight: 700;
+  background: rgba(200, 64, 46, 0.08);
+  transform: rotate(-8deg);
+}
+.name { font-size: 1.05rem; letter-spacing: 0.12em; }
+.sub { font-size: 0.72rem; color: var(--dim); margin-top: 0.15rem; }
+#gear {
+  margin-left: auto;
+  background: none; border: none; color: var(--dim);
+  font-size: 1.25rem; padding: 0.4rem; cursor: pointer;
+}
+.bubble {
+  margin: 0.55rem 0 0 3.3rem;
+  padding: 0.55rem 0.8rem;
+  background: rgba(242, 232, 213, 0.07);
+  border: 1px solid rgba(242, 232, 213, 0.14);
+  border-radius: 2px 12px 12px 12px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  min-height: 2.5rem;
+  max-width: 85%;
+  width: fit-content;
+}
+.bubble.silent { color: var(--dim); font-style: italic; }
+
+/* ---------- 桌面 ---------- */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  position: relative;
+}
+#pot { font-size: 0.8rem; color: var(--lamp-dim); letter-spacing: 0.08em; }
+#pot b { color: var(--lamp); font-weight: 400; }
+.mark {
+  display: inline-block;
+  border: 1px solid var(--red);
+  color: var(--red-hi);
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 2px;
+  transform: rotate(-4deg);
+  margin-left: 0.45rem;
+}
+#bidBig {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  min-height: 4.6rem;
+  align-items: center;
+}
+#bidBig .n { font-size: 3.6rem; color: var(--ink); }
+#bidBig .x { font-size: 1.2rem; color: var(--dim); }
+#bidBig .none { font-size: 1rem; color: var(--dim); letter-spacing: 0.3em; }
+#hint { font-size: 0.8rem; color: var(--dim); min-height: 1.2rem; text-align: center; }
+#commit {
+  position: absolute; bottom: 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.62rem; color: #5d5142;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- 骰子 ---------- */
+.dicerow { display: flex; gap: 0.45rem; margin-top: 0.3rem; }
+.die {
+  width: 3rem; height: 3rem;
+  border-radius: 0.55rem;
+  background: var(--die-face);
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 0.35rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 -2px 3px rgba(0, 0, 0, 0.12);
+}
+.die i {
+  border-radius: 50%;
+  background: var(--die-pip);
+  align-self: center; justify-self: center;
+  width: 0.5rem; height: 0.5rem;
+}
+.die.wild i { background: var(--red); }
+.die.small { width: 1.15rem; height: 1.15rem; border-radius: 0.25rem; padding: 0.14rem; }
+.die.small i { width: 0.18rem; height: 0.18rem; }
+.die.back {
+  background: var(--wood-hi);
+  box-shadow: inset 0 0 0 1px rgba(232, 169, 79, 0.25), 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+.die.hit { box-shadow: 0 0 12px var(--lamp), 0 2px 6px rgba(0, 0, 0, 0.5); }
+.die.dark { opacity: 0.35; }
+/* pip 定位：g=grid-area */
+.p-tl { grid-area: 1/1; } .p-tr { grid-area: 1/3; }
+.p-ml { grid-area: 2/1; } .p-c { grid-area: 2/2; } .p-mr { grid-area: 2/3; }
+.p-bl { grid-area: 3/1; } .p-br { grid-area: 3/3; }
+
+@keyframes roll-in {
+  from { transform: translateY(-0.8rem) rotate(-18deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.die.reveal { animation: roll-in 0.28s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
+@keyframes die-lost {
+  40% { transform: translateY(0.2rem) rotate(8deg); }
+  100% { transform: translateY(2.2rem) rotate(30deg); opacity: 0; }
+}
+.die.lost { animation: die-lost 0.7s ease-in forwards; }
+
+/* ---------- 我的区 ---------- */
+footer {
+  padding: 0 1rem calc(env(safe-area-inset-bottom) + 0.9rem);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
+}
+#timer { height: 2px; background: rgba(242, 232, 213, 0.12); border-radius: 1px; margin-bottom: 0.7rem; }
+#timer i {
+  display: block; height: 100%;
+  background: var(--lamp);
+  border-radius: 1px;
+  transform-origin: left;
+}
+#timer.low i { background: var(--red-hi); }
+#gauge {
+  font-size: 0.82rem; color: var(--dim);
+  text-align: center; min-height: 1.3rem; margin-bottom: 0.55rem;
+}
+#gauge b { color: var(--lamp); font-weight: 400; font-variant-numeric: tabular-nums; }
+#myDice { justify-content: center; margin-bottom: 0.8rem; }
+#myDice .die.back { cursor: pointer; }
+
+#pickRow { display: flex; align-items: center; gap: 0.5rem; justify-content: center; margin-bottom: 0.7rem; }
+.stepper { display: flex; align-items: center; gap: 0.1rem; }
+.stepper button {
+  width: 2rem; height: 2rem;
+  font-size: 1.1rem;
+  background: none; border: 1px solid rgba(242, 232, 213, 0.22);
+  color: var(--ink); border-radius: 0.5rem;
+  font-family: var(--serif);
+}
+.stepper button:disabled { opacity: 0.25; }
+.stepper .val {
+  min-width: 1.8rem; text-align: center;
+  font-size: 1.5rem; font-variant-numeric: tabular-nums;
+}
+#facePick { display: flex; gap: 0.25rem; }
+#facePick .die { width: 2.15rem; height: 2.15rem; border-radius: 0.45rem; padding: 0.24rem; opacity: 0.45; border: none; cursor: pointer; }
+#facePick .die i { width: 0.3rem; height: 0.3rem; }
+#facePick .die.sel { opacity: 1; outline: 2px solid var(--lamp); outline-offset: 1px; }
+#facePick .die:disabled { opacity: 0.12; }
+
+#actionRow { display: flex; gap: 0.55rem; }
+.stamp {
+  width: 3.2rem;
+  border: 1px solid var(--lamp-dim);
+  background: none; color: var(--lamp);
+  border-radius: 0.55rem;
+  font-family: var(--serif); font-size: 1rem;
+  padding: 0.2rem 0;
+  line-height: 1.15;
+}
+.stamp small { display: block; font-size: 0.58rem; color: var(--dim); }
+.stamp:disabled { opacity: 0.22; }
+button.primary {
+  flex: 1;
+  background: var(--lamp); color: #201607;
+  border: none; border-radius: 0.55rem;
+  font-family: var(--serif); font-size: 1.05rem;
+  padding: 0.85rem 0;
+  letter-spacing: 0.06em;
+}
+button.primary:disabled { opacity: 0.3; }
+#bidBtn { font-size: 0.98rem; white-space: nowrap; }
+button.primary:active { transform: scale(0.97); }
+button.danger {
+  width: 5.2rem;
+  background: var(--red); color: #fff2ea;
+  border: none; border-radius: 0.55rem;
+  font-family: var(--serif); font-size: 1.35rem; font-weight: 700;
+  letter-spacing: 0.1em;
+}
+button.danger:disabled { opacity: 0.25; }
+button.danger:active { transform: scale(0.95); }
+
+/* ---------- 开牌演出 ---------- */
+@keyframes shake {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-6px, 3px); }
+  40% { transform: translate(5px, -4px); }
+  60% { transform: translate(-4px, -2px); }
+  80% { transform: translate(3px, 2px); }
+}
+#app.shake { animation: shake 0.35s; }
+#overlay {
+  position: absolute; inset: 0; z-index: 20;
+  background: rgba(8, 6, 5, 0.88);
+  backdrop-filter: blur(3px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1rem; padding: 1.4rem;
+  text-align: center;
+}
+@keyframes kai-pop {
+  0% { transform: scale(3); opacity: 0; }
+  55% { transform: scale(0.92); opacity: 1; }
+  100% { transform: scale(1); }
+}
+#overlay .kai {
+  font-size: 5rem; color: var(--red-hi); font-weight: 700;
+  animation: kai-pop 0.4s cubic-bezier(0.2, 1.3, 0.4, 1);
+  text-shadow: 0 0 30px rgba(200, 64, 46, 0.5);
+}
+#overlay .row-label { font-size: 0.78rem; color: var(--dim); letter-spacing: 0.2em; }
+#overlay .verdict-line { font-size: 1.05rem; line-height: 1.6; }
+#overlay .count { font-size: 1.6rem; color: var(--lamp); font-variant-numeric: tabular-nums; }
+
+/* ---------- 报告卡 ---------- */
+.card {
+  background: linear-gradient(160deg, #241b15, #17110d);
+  border: 1px solid rgba(232, 169, 79, 0.25);
+  border-radius: 0.9rem;
+  padding: 1.5rem 1.3rem;
+  width: 100%; max-width: 21rem;
+  text-align: left;
+}
+.card h2 { font-size: 0.8rem; color: var(--dim); letter-spacing: 0.3em; font-weight: 400; }
+.card .persona { font-size: 2.4rem; color: var(--lamp); margin: 0.35rem 0 0.9rem; }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem; font-size: 0.85rem; }
+.card dt { color: var(--dim); }
+.card dd { text-align: right; font-variant-numeric: tabular-nums; }
+.card .verdict {
+  margin-top: 1rem; padding-top: 0.9rem;
+  border-top: 1px dashed rgba(242, 232, 213, 0.18);
+  font-size: 0.95rem; line-height: 1.7;
+}
+.card .verdict::before { content: '老周批：'; color: var(--red-hi); }
+#overlay .again { margin-top: 0.4rem; width: 100%; max-width: 21rem; flex: none; padding: 0.85rem 0; }
+#overlay .small-note { font-size: 0.7rem; color: var(--dim); }
+
+/* ---------- 抽屉：设置与档案 ---------- */
+#drawer {
+  position: absolute; inset: 0; z-index: 30;
+  background: rgba(8, 6, 5, 0.96);
+  padding: calc(env(safe-area-inset-top) + 1.2rem) 1.4rem 2rem;
+  overflow-y: auto;
+}
+#drawer h2 { font-size: 1.1rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.6rem; color: var(--lamp); font-weight: 400; }
+#drawer p, #drawer li { font-size: 0.85rem; color: var(--dim); line-height: 1.7; }
+#drawer label { display: block; font-size: 0.8rem; color: var(--dim); margin: 0.6rem 0 0.2rem; }
+#drawer input, #drawer select {
+  width: 100%; padding: 0.55rem 0.7rem;
+  background: rgba(242, 232, 213, 0.06);
+  border: 1px solid rgba(242, 232, 213, 0.18);
+  border-radius: 0.45rem; color: var(--ink);
+  font-family: var(--mono); font-size: 0.85rem;
+}
+#drawer .btnrow { display: flex; gap: 0.6rem; margin-top: 1rem; }
+#drawer .note-item { border-left: 2px solid var(--lamp-dim); padding-left: 0.6rem; margin: 0.5rem 0; }
+.close-x { position: absolute; top: calc(env(safe-area-inset-top) + 0.7rem); right: 1rem; background: none; border: none; color: var(--dim); font-size: 1.5rem; }
+
+.fade-in { animation: fadein 0.3s both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
