@@ -79,6 +79,13 @@ test('非当前玩家不可行动；阶梯外报数被拒', async () => {
   await assert.rejects(() => m.act('B', { type: 'bid', count: 2, face: 6 }), /bid off ladder/);
 });
 
+test('startChips 支持 {A,B} 不对称初始（跨场账本）', async () => {
+  const m = await createMatch({ seed: 1, config: { startChips: { A: 37, B: -5 } } });
+  const o = m.observe('A');
+  assert.equal(o.chips.you, 37);
+  assert.equal(o.chips.opp, -5);
+});
+
 // ---------- 自对弈：随机合法 bot 互打，验证全局不变量 ----------
 
 async function selfPlay(seed) {

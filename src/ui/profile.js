@@ -38,6 +38,19 @@ export function profileBrief(p) {
   return head + habits + (notes ? `你的旧笔记：${notes}` : '');
 }
 
+// 跨场账本（TODO(Q12) 占位）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）
+const LEDGER_KEY = 'kai.ledger.v1';
+export function loadLedger(storage = localStorage) {
+  try {
+    const l = JSON.parse(storage.getItem(LEDGER_KEY));
+    if (l && Number.isFinite(l.you) && Number.isFinite(l.opp)) return l;
+  } catch {}
+  return { you: 100, opp: 100 };
+}
+export function saveLedger(l, storage = localStorage) {
+  storage.setItem(LEDGER_KEY, JSON.stringify(l));
+}
+
 export function loadByok(storage = localStorage) {
   try {
     return JSON.parse(storage.getItem(BYOK_KEY));

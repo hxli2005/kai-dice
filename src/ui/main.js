@@ -8,7 +8,7 @@ import { createOpponent, settleVerdict } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, loadByok, saveByok } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -551,6 +551,7 @@ function challengeLine(rv, re) {
 async function showReport(end) {
   const o = ob();
   const won = end.winner === 'A';
+  saveLedger({ you: end.chips.A, opp: end.chips.B }); // 账本落袋，下一场带着走
   const stats = computeStats(o.events, 'A', myDiceByRound);
   const byok = channelOf();
   const statsText =
@@ -568,7 +569,7 @@ async function showReport(end) {
       <div class="persona">${persona(stats)}</div>
       <dl>
         <dt>胜负</dt><dd>${won ? `赢 · ${end.rounds} 局` : `输 · ${end.rounds} 局`}</dd>
-        <dt>筹码</dt><dd>${end.chips.A}</dd>
+        <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}</dd>
         <dt>虚报率</dt><dd>${pct(stats.bluffRate)}</dd>
         <dt>开牌命中</dt><dd>${stats.myChallengeHits}/${stats.myChallenges}</dd>
         <dt>被他开</dt><dd>${stats.timesChallenged} 次</dd>
@@ -615,6 +616,7 @@ function openDrawer() {
     <h2>它眼中的你</h2>
     <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
     ${profile.notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
+    <p>身家 ${loadLedger().you}（他 ${loadLedger().opp}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
     <h2>接上他的脑子</h2>
     <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
@@ -628,6 +630,11 @@ function openDrawer() {
     <div id="byokTest" class="test-line"></div>
     <h2>为什么信它</h2>
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
+  d.querySelector('#resetLedger').addEventListener('click', (e) => {
+    saveLedger({ you: 100, opp: 100 });
+    e.target.textContent = '翻篇了，下一场生效';
+    e.target.disabled = true;
+  });
   d.querySelector('#closeDrawer').addEventListener('click', () => {
     d.classList.add('hidden');
     const o = ob();
@@ -659,7 +666,8 @@ async function newMatch() {
   $('overlay').classList.add('hidden');
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
-  match = await createMatch({ seed });
+  const ledger = loadLedger();
+  match = await createMatch({ seed, config: { startChips: { A: ledger.you, B: ledger.opp } } });
   opponent = createOpponent({ channel: channelOf, profile: profileBrief(profile), persona: DEFAULT_PERSONA });
   myDiceByRound = {};
   sel = null;
@@ -669,7 +677,9 @@ async function newMatch() {
   speak(
     profile.matches === 0
       ? '坐。规矩就一条：只能把话越报越大，不信就开。'
-      : `又来了。第 ${profile.matches + 1} 场，前头你赢 ${profile.wins} 场。摇盅。`,
+      : ledger.you <= 0
+        ? `账上你欠着 ${-ledger.you}。先赊着，骰子照摇。`
+        : `又来了。第 ${profile.matches + 1} 场，你账上还剩 ${ledger.you}。摇盅。`,
   );
   render();
   startTimer();

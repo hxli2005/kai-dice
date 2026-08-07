@@ -41,7 +41,11 @@ export async function createMatch({ seed, config = {} } = {}) {
 
   // 私有状态（闭包内，永不整体外泄）
   const diceCount = { A: cfg.startDice, B: cfg.startDice };
-  const chips = { A: cfg.startChips, B: cfg.startChips };
+  // startChips 可为 {A,B}（跨场账本续上回）或数字（双方同额）
+  const chips =
+    typeof cfg.startChips === 'object'
+      ? { A: cfg.startChips.A, B: cfg.startChips.B }
+      : { A: cfg.startChips, B: cfg.startChips };
   const events = []; // 公开事件流，双方同构可见
   let round = 0;
   let over = false;

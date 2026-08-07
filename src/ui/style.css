@@ -518,6 +518,14 @@ button.danger:active { transform: scale(0.95); }
 .brain.off { background: var(--red-hi); box-shadow: 0 0 6px rgba(232, 90, 68, 0.7); }
 .brain.idle { background: #5d5142; }
 
+.linkish {
+  background: none; border: none;
+  color: var(--lamp); text-decoration: underline;
+  font-family: var(--serif); font-size: 0.82rem;
+  cursor: pointer; padding: 0;
+}
+.linkish:disabled { color: var(--dim); text-decoration: none; }
+
 .test-line { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.1rem; color: var(--dim); }
 .test-line.ok { color: var(--lamp); }
 .test-line.bad { color: var(--red-hi); }
