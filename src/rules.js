@@ -1,6 +1,6 @@
 // 规则纯函数：报数阶梯与开牌判定（DESIGN §2）
 
-// TODO(Q1) 占位：飞局可报点数 2–6，斋局 1–6；点数自然序比大小
+// §2.1 阶梯边界：飞局可报 2–6（癞子不可作报点），斋局 1–6；点数自然序
 export function legalFaces(zhai) {
   return zhai ? [1, 2, 3, 4, 5, 6] : [2, 3, 4, 5, 6];
 }
@@ -11,7 +11,7 @@ export function beats(next, prev) {
   return next.count > prev.count || (next.count === prev.count && next.face > prev.face);
 }
 
-// 报数合法性：首报数量 ≥ 2；数量不超过场上总骰数（TODO(Q1)）；点数在许可范围
+// 报数合法性（§2.1）：首报数量 ≥ 2；数量上限＝场上总骰数；点数在许可范围
 export function isLegalBid(bid, prev, zhai, totalDice) {
   if (!Number.isInteger(bid.count) || !Number.isInteger(bid.face)) return false;
   if (!legalFaces(zhai).includes(bid.face)) return false;

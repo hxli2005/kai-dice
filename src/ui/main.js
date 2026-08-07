@@ -259,7 +259,10 @@ async function aiTurn() {
   const t0 = performance.now();
   const d = await laoZhou.decide(o);
   if (d.action.type === 'peek') {
+    // 揭盅是公开动作（§2.3）——他看骰，你看得见
     await match.act('B', d.action);
+    sfx.land();
+    $('oppDice').querySelectorAll('.die').forEach((el) => el.classList.add('reveal'));
     busy = false;
     return aiTurn();
   }

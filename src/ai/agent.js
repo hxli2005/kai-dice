@@ -15,18 +15,19 @@ const SYSTEM = `你是老周，深夜小酒馆的老板，正和客人玩大话�
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 
-// 本局叙事：报数与宣言序列，含用时指纹（§3.3）
+// 本局叙事：看骰、报数与宣言序列，含用时指纹（§3.3；揭盅时机也是阅读材料，§2.3）
 function narrate(events, you) {
   const start = events.findLastIndex((e) => e.type === 'roundStart');
   const lines = [];
   for (const e of events.slice(start + 1)) {
     const who = e.player === you ? '你' : '对方';
     const t = e.elapsedMs != null ? `（用时${(e.elapsedMs / 1000).toFixed(1)}秒）` : '';
+    if (e.type === 'peek' && e.player !== you) lines.push(`对方掀盅看了骰`);
     if (e.type === 'bid') lines.push(`${who}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')
       lines.push(`${who}宣言「${e.declaration === 'zhai' ? '斋' : '盲'}」${t}`);
   }
-  return lines.length ? lines.join('；') : '（本局尚无人报数）';
+  return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
 
 export function buildPrompts(ob, profile) {

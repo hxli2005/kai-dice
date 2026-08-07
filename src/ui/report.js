@@ -1,5 +1,5 @@
 // 结算报告卡数据面（DESIGN §5.2）：从事件流复算，判词素材同源（不许编）。
-// TODO(Q5) 统计口径占位：虚报=报数时刻 P(为真|自见骰面)<0.5；人格映射用简单阈值规则。
+// 统计口径（附:待定参数表）：虚报＝报数时刻 P(为真|自见骰面)<50%。
 
 import { probBidTrue } from '../probability.js';
 
@@ -67,7 +67,7 @@ export function computeStats(events, you, myDiceByRound) {
   };
 }
 
-// 酒桌人格（§5.2）。TODO(Q5) 映射规则占位
+// 酒桌人格（§5.2，附:待定参数表）：按序优先匹配
 export function persona(st) {
   if (st.myBlinds >= 2) return '盲侠';
   if (st.bluffRate > 0.5) return '赌徒';

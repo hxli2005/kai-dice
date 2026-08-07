@@ -28,7 +28,7 @@ const opp = (p) => (p === 'A' ? 'B' : 'A');
 
 export const DEFAULTS = {
   startDice: 5, // 附:待定参数表
-  startChips: 100, // TODO(Q2) 初始筹码量
+  startChips: 100, // §2.2 初始筹码；可为负，不触发终局
 };
 
 // 承诺哈希（§4.1）异步生成，故工厂为 async；act() 同为 async。
@@ -92,7 +92,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     if (!peeked[p] && !blind[p]) acts.push({ type: 'peek' });
     if (p !== turn) return acts;
     const myBids = bids.some((b) => b.player === p);
-    // TODO(Q3) 宣言时机占位：盲=本局自己首报前且未看骰；斋=仅首报者首报前
+    // §2.3 宣言窗口：盲=未看骰且未报过数；斋=仅首报者首报前；可叠加
     if (!peeked[p] && !blind[p] && !myBids) acts.push({ type: 'declare', declaration: 'blind' });
     if (p === firstBidder && bids.length === 0 && !zhai)
       acts.push({ type: 'declare', declaration: 'zhai' });
@@ -119,7 +119,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     });
     // 注池（§2.2）：单方投入 = 1 底注 + 每次报数追 1；净转移 = 单方投入 × 赔率
     const units = 1 + bids.length;
-    // TODO(Q2) 赔率叠加占位：双盲 ×4，与斋乘法叠加；转移额四舍五入
+    // §2.2 赔率：盲 ×2（双盲 ×4）与斋 ×1.5 乘法叠加，转移额四舍五入
     const mult = 2 ** (blind.A ? 1 : 0) * 2 ** (blind.B ? 1 : 0) * (zhai ? 1.5 : 1);
     const transfer = Math.round(units * mult);
     chips[loser] -= transfer;
@@ -138,7 +138,7 @@ export async function createMatch({ seed, config = {} } = {}) {
       over = true;
       emit({ type: 'matchEnd', winner, rounds: round, chips: { ...chips } });
     } else {
-      await startRound(loser); // TODO(Q4) 占位：输家先报
+      await startRound(loser); // §2.1 输家先报（并握斋权）
     }
   }
 
@@ -199,6 +199,6 @@ export async function createMatch({ seed, config = {} } = {}) {
     });
   }
 
-  await startRound('A'); // TODO(Q4) 占位：首局玩家位先报
+  await startRound('A'); // §2.1 首局玩家位先报
   return { observe, act };
 }
