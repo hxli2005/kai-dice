@@ -611,6 +611,54 @@ async function newMatch() {
   );
   render();
   startTimer();
+  showCoach();
+}
+
+// ---------- 新手指引（首次打开一次）：箭头标注三个操作点 ----------
+function showCoach() {
+  if (localStorage.getItem('kai.coach.v1') || profile.matches > 0) return;
+  stopTimer();
+  // 标注分道：sxF/exF 指定箭头在文字条与目标上的锚点位，三条线各占横向通道不相交
+  const marks = [
+    ['myDice', '① 点骰盅，偷看自己的骰子', 0.31, 0.24, 0.55, 0.5],
+    ['bidBtn', '② 报数：桌上共有几个几', 0.42, 0.04, 0.25, 0.2],
+    ['openBtn', '③ 觉得他吹牛，拍「开」', 0.52, 0.42, 0.72, 0.5],
+  ];
+  const c = document.createElement('div');
+  c.id = 'coach';
+  c.innerHTML = '<svg></svg><div class="anywhere">看明白了？点任意处，上桌</div>';
+  $('app').appendChild(c);
+  const appBox = $('app').getBoundingClientRect();
+  const svg = c.querySelector('svg');
+  let paths = '';
+  for (const [id, text, topF, leftF, sxF, exF] of marks) {
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.textContent = text;
+    tip.style.top = `${topF * 100}%`;
+    tip.style.left = `${leftF * 100}%`;
+    c.appendChild(tip);
+    $(id).classList.add('coach-glow');
+    // 弧线：从文字条锚点飞向目标锚点
+    const tb = tip.getBoundingClientRect();
+    const gb = $(id).getBoundingClientRect();
+    const sx = tb.left + tb.width * sxF - appBox.left;
+    const sy = tb.bottom + 6 - appBox.top;
+    const ex = gb.left + gb.width * exF - appBox.left;
+    const ey = gb.top - 10 - appBox.top;
+    const cx = (sx + ex) / 2 + (ex > sx ? 24 : -24);
+    const cy = (sy + ey) / 2;
+    paths += `<path d="M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}"/>
+      <polygon points="${ex - 5},${ey - 9} ${ex + 5},${ey - 9} ${ex},${ey + 2}"/>`;
+  }
+  svg.innerHTML = paths;
+  c.addEventListener('click', () => {
+    localStorage.setItem('kai.coach.v1', '1');
+    for (const [id] of marks) $(id).classList.remove('coach-glow');
+    c.remove();
+    const o = ob();
+    if (o.turn === 'A' && !o.over && !busy) startTimer();
+  });
 }
 
 // 人设上屏（Q10④：UI 从人设对象读取，不写死名字）

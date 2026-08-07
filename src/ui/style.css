@@ -72,7 +72,7 @@ header {
 }
 #rulesBtn { margin-left: auto; border: 1px solid rgba(141, 124, 105, 0.5); border-radius: 50%; width: 1.9rem; height: 1.9rem; font-size: 0.85rem; padding: 0; }
 /* 镜像元素：双方骰子行同尺寸同居中，封印与筹码各贴各的骰子 */
-.dicerow.mirror { justify-content: center; }
+.dicerow.mirror { justify-content: center; width: fit-content; margin-left: auto; margin-right: auto; }
 .meta-line {
   display: flex;
   align-items: baseline;
@@ -514,3 +514,45 @@ button.danger:active { transform: scale(0.95); }
 
 .fade-in { animation: fadein 0.3s both; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- 新手指引：手绘箭头标注操作点，只出现一次 ---------- */
+#coach {
+  position: absolute; inset: 0; z-index: 40;
+  background: rgba(8, 6, 5, 0.72);
+  animation: fadein 0.35s both;
+}
+#coach svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#coach path { stroke: var(--lamp); fill: none; stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.9; }
+#coach polygon { fill: var(--lamp); }
+#coach .tip {
+  position: absolute;
+  color: var(--lamp);
+  font-size: 1.02rem;
+  letter-spacing: 0.04em;
+  transform: rotate(-2deg);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+#coach .tip small { display: block; font-size: 0.72rem; color: var(--dim); margin-top: 0.1rem; }
+#coach .anywhere {
+  position: absolute;
+  top: 24.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--ink);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  opacity: 0.85;
+  animation: breath 2.2s ease-in-out infinite;
+}
+@keyframes breath {
+  50% { opacity: 0.45; }
+}
+.coach-glow {
+  position: relative;
+  z-index: 41;
+  outline: 2px dashed var(--lamp);
+  outline-offset: 4px;
+  border-radius: 0.6rem;
+  box-shadow: 0 0 16px rgba(232, 169, 79, 0.35);
+}
