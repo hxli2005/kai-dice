@@ -49,31 +49,40 @@ body {
 
 .hidden { display: none !important; }
 
-/* ---------- 对面：老周 ---------- */
+/* ---------- 对面：老周（与你的区域上下镜像） ---------- */
 header {
-  padding: calc(env(safe-area-inset-top) + 0.8rem) 1rem 0.4rem;
-  min-height: 7.4rem;
+  padding: calc(env(safe-area-inset-top) + 0.7rem) 1rem 0.3rem;
 }
-.who { display: flex; align-items: center; gap: 0.7rem; }
+.who { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.55rem; }
 .seal {
-  width: 2.6rem; height: 2.6rem;
+  width: 2.2rem; height: 2.2rem;
   border: 2px solid var(--red);
   border-radius: 50%;
   color: var(--red-hi);
   display: grid; place-items: center;
-  font-size: 1.3rem; font-weight: 700;
+  font-size: 1.1rem; font-weight: 700;
   background: rgba(200, 64, 46, 0.08);
   transform: rotate(-8deg);
 }
 .name { font-size: 1.05rem; letter-spacing: 0.12em; }
-.sub { font-size: 0.72rem; color: var(--dim); margin-top: 0.15rem; }
-#gear {
-  margin-left: auto;
+#gear, #rulesBtn {
   background: none; border: none; color: var(--dim);
-  font-size: 1.25rem; padding: 0.4rem; cursor: pointer;
+  font-size: 1.15rem; padding: 0.35rem; cursor: pointer;
+  font-family: var(--serif);
+}
+#rulesBtn { margin-left: auto; border: 1px solid rgba(141, 124, 105, 0.5); border-radius: 50%; width: 1.9rem; height: 1.9rem; font-size: 0.85rem; padding: 0; }
+/* 镜像元素：双方骰子行同尺寸同居中，封印各贴各的骰子 */
+.dicerow.mirror { justify-content: center; }
+.seal-line {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.62rem; color: #5d5142;
+  letter-spacing: 0.04em;
+  margin: 0.35rem 0;
+  min-height: 0.8rem;
 }
 .bubble {
-  margin: 0.55rem 0 0 3.3rem;
+  margin: 0.5rem auto 0;
   padding: 0.55rem 0.8rem;
   background: rgba(242, 232, 213, 0.07);
   border: 1px solid rgba(242, 232, 213, 0.14);
@@ -81,7 +90,7 @@ header {
   font-size: 0.95rem;
   line-height: 1.5;
   min-height: 2.5rem;
-  max-width: 85%;
+  max-width: 88%;
   width: fit-content;
 }
 .bubble.silent { color: var(--dim); font-style: italic; }
@@ -118,12 +127,7 @@ main {
 #bidBig .x { font-size: 1.2rem; color: var(--dim); }
 #bidBig .none { font-size: 1rem; color: var(--dim); letter-spacing: 0.3em; }
 #hint { font-size: 0.8rem; color: var(--dim); min-height: 1.2rem; text-align: center; }
-#commit {
-  position: absolute; bottom: 0.4rem;
-  font-family: var(--mono);
-  font-size: 0.62rem; color: #5d5142;
-  letter-spacing: 0.04em;
-}
+main #timer { width: 9rem; margin: 0.5rem 0 0.2rem; }
 
 /* ---------- 骰子 ---------- */
 .dicerow { display: flex; gap: 0.45rem; margin-top: 0.3rem; }
@@ -172,7 +176,7 @@ footer {
   padding: 0 1rem calc(env(safe-area-inset-bottom) + 0.9rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
-#timer { height: 2px; background: rgba(242, 232, 213, 0.12); border-radius: 1px; margin-bottom: 0.7rem; }
+#timer { height: 2px; background: rgba(242, 232, 213, 0.12); border-radius: 1px; }
 #timer i {
   display: block; height: 100%;
   background: var(--lamp);
@@ -214,11 +218,8 @@ footer {
   border: 1px solid var(--lamp-dim);
   background: none; color: var(--lamp);
   border-radius: 0.55rem;
-  font-family: var(--serif); font-size: 1rem;
-  padding: 0.2rem 0;
-  line-height: 1.15;
+  font-family: var(--serif); font-size: 1.1rem;
 }
-.stamp small { display: block; font-size: 0.58rem; color: var(--dim); }
 .stamp:disabled { opacity: 0.22; }
 button.primary {
   flex: 1;
@@ -299,12 +300,14 @@ button.danger:active { transform: scale(0.95); }
 /* ---------- 抽屉：设置与档案 ---------- */
 #drawer {
   position: absolute; inset: 0; z-index: 30;
-  background: rgba(8, 6, 5, 0.96);
+  background: #0d0a08;
   padding: calc(env(safe-area-inset-top) + 1.2rem) 1.4rem 2rem;
   overflow-y: auto;
 }
 #drawer h2 { font-size: 1.1rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.6rem; color: var(--lamp); font-weight: 400; }
 #drawer p, #drawer li { font-size: 0.85rem; color: var(--dim); line-height: 1.7; }
+#drawer ul { padding-left: 1.1rem; }
+#drawer li { margin-bottom: 0.35rem; }
 #drawer label { display: block; font-size: 0.8rem; color: var(--dim); margin: 0.6rem 0 0.2rem; }
 #drawer input, #drawer select {
   width: 100%; padding: 0.55rem 0.7rem;

@@ -63,21 +63,22 @@ function ensureSel(o) {
 function render() {
   const o = ob();
   const myTurn = o.turn === 'A' && !o.over && !busy;
-  $('oppSub').textContent = `第 ${o.round} 局 · 他 ${o.diceCount.opp} 骰 / 你 ${o.diceCount.you} 骰`;
-  $('oppDice').innerHTML = backHtml('small').repeat(o.diceCount.opp);
+  // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条
+  $('oppDice').innerHTML = backHtml().repeat(o.diceCount.opp);
 
   const marks =
     (o.zhai ? '<span class="mark">斋 ×1.5</span>' : '') +
     (o.blind.A ? '<span class="mark">你盲 ×2</span>' : '') +
     (o.blind.B ? '<span class="mark">他盲 ×2</span>' : '');
-  $('pot').innerHTML = `池 <b>${o.potUnits * 2}</b> 注${marks}`;
+  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${marks}`;
 
   $('bidBig').innerHTML = o.currentBid
     ? `<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
     : `<span class="none">${o.over ? '' : o.turn === 'A' ? '等你开口' : '他在想'}</span>`;
 
   const rs = lastEvent(o, 'roundStart');
-  $('commit').textContent = `封 他 ${rs.commits.B.slice(0, 8)} · 你 ${rs.commits.A.slice(0, 8)}`;
+  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)}`;
+  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)}`;
 
   // 我的骰子：未看则盖着（点击=看骰）；盲局锁死
   const mine = $('myDice');
@@ -143,15 +144,12 @@ function render() {
   $('hint').textContent = hintFor(o, myTurn);
 }
 
-// 首局旁白代替教学关（§2.5）：系统小字，不占老周的嘴
+// 首场只给最短操作指引（§2.5），规则全文在「规」页——桌面上只留对局
 function hintFor(o, myTurn) {
   if (o.over || !myTurn) return '';
-  if (profile.matches === 0 && o.round === 1) {
-    if (!o.yourDice && !o.blind.A) return '点骰盅看牌——或者不看，宣「盲」直接报';
-    if (!o.currentBid) return '报数：赌桌上（他 5 颗＋你 5 颗）至少有几个几点。1 是万能牌';
-    return '只能往上抬价。觉得他吹牛，就拍「开」';
-  }
   if (!o.yourDice && !o.blind.A) return '点骰盅看牌';
+  if (profile.matches === 0 && o.round === 1)
+    return o.currentBid ? '抬价，或拍「开」' : '报：桌上至少有几个几点';
   return '';
 }
 
@@ -370,12 +368,23 @@ async function showReport(end) {
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note] });
 }
 
-// ---------- 抽屉：档案 / BYOK / 公平说明 ----------
+// ---------- 抽屉：规矩 / 档案 / BYOK / 公平说明（统一入口，桌面不放说明） ----------
 function openDrawer() {
   const d = $('drawer');
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
+  stopTimer(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
+    <h2>规矩</h2>
+    <ul>
+      <li>你和他各摇五颗暗骰。轮流报数：「桌上至少有 N 个 X 点」——说的是双方合计。</li>
+      <li>报数只能往上抬：数量加大，或数量不变、点数加大。首报至少 2 个。</li>
+      <li>1 点是万能牌，替任何点数凑数。宣过「斋」的局例外。</li>
+      <li>不信他，就拍「开」。数够了，开的人输；不够，报的人输。输家掉一颗骰子，骰子掉光，这场就完了。</li>
+      <li>注池：每局双方各押 1 注底，此后每报一次数、双方各自动加 1 注。开牌定归属。</li>
+      <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
+      <li>每手 20 秒。超时自动替你抬最小价——你的犹豫，他看得见、记得住。</li>
+    </ul>
     <h2>它眼中的你</h2>
     <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
     ${profile.notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
@@ -391,7 +400,11 @@ function openDrawer() {
     <div class="btnrow"><button class="primary" id="saveByok">存好，下一场生效</button></div>
     <h2>为什么信它</h2>
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
-  d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
+  d.querySelector('#closeDrawer').addEventListener('click', () => {
+    d.classList.add('hidden');
+    const o = ob();
+    if (o.turn === 'A' && !o.over && !busy) startTimer();
+  });
   d.querySelector('#saveByok').addEventListener('click', () => {
     saveByok({
       baseUrl: d.querySelector('#fBase').value.trim(),
@@ -430,5 +443,6 @@ $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
 $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('gear').addEventListener('click', openDrawer);
+$('rulesBtn').addEventListener('click', openDrawer);
 
 newMatch();
