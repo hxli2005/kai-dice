@@ -595,7 +595,7 @@ async function showReport(end) {
 }
 
 // ---------- 抽屉：规矩 / 档案 / BYOK / 公平说明（统一入口，桌面不放说明） ----------
-function openDrawer() {
+function openDrawer(section) {
   const d = $('drawer');
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
   stopTimer(); // 看规矩不吃决策钟；关闭时重开当轮
@@ -613,8 +613,19 @@ function openDrawer() {
       <li>每手 20 秒。超时自动替你抬最小价——你的犹豫，他看得见、记得住。</li>
       <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
-    <h2>它眼中的你</h2>
+    <h2 id="profileSec">它眼中的你</h2>
     <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
+    ${
+      profile.stats.length
+        ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报率</th><th>开牌</th><th>被开</th><th>均时</th></tr>${profile.stats
+            .slice(-8)
+            .map((s, i, arr) => {
+              const idx = profile.stats.length - arr.length + i + 1;
+              return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td><td>${s.timesChallenged}</td><td>${(s.avgTimeMs / 1000).toFixed(1)}s</td></tr>`;
+            })
+            .join('')}</table>`
+        : ''
+    }
     ${profile.notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
     <p>身家 ${loadLedger().you}（他 ${loadLedger().opp}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
     <h2>接上他的脑子</h2>
@@ -630,6 +641,8 @@ function openDrawer() {
     <div id="byokTest" class="test-line"></div>
     <h2>为什么信它</h2>
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
+  if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
+  else d.scrollTop = 0;
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
     saveLedger({ you: 100, opp: 100 });
     e.target.textContent = '翻篇了，下一场生效';
@@ -745,7 +758,7 @@ $('blindBtn').addEventListener('click', () => onDeclare('blind'));
 $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
 $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
-$('gear').addEventListener('click', openDrawer);
-$('rulesBtn').addEventListener('click', openDrawer);
+$('gear').addEventListener('click', () => openDrawer('profile'));
+$('rulesBtn').addEventListener('click', () => openDrawer());
 
 newMatch();

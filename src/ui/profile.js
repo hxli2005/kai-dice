@@ -21,7 +21,7 @@ export function appendMatch(profile, { won, stats, notes }, storage = localStora
   profile.matches += 1;
   if (won) profile.wins += 1;
   profile.notes = [...profile.notes, ...notes.filter(Boolean)].slice(-30);
-  profile.stats = [...profile.stats, stats].slice(-20);
+  profile.stats = [...profile.stats, { ...stats, won }].slice(-20);
   storage.setItem(PROFILE_KEY, JSON.stringify(profile));
   return profile;
 }

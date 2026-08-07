@@ -518,6 +518,21 @@ button.danger:active { transform: scale(0.95); }
 .brain.off { background: var(--red-hi); box-shadow: 0 0 6px rgba(232, 90, 68, 0.7); }
 .brain.idle { background: #5d5142; }
 
+.stat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin: 0.5rem 0 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.stat-table th {
+  font-weight: 400; color: var(--dim);
+  text-align: right; padding: 0.25rem 0.3rem;
+  border-bottom: 1px dashed rgba(242, 232, 213, 0.2);
+}
+.stat-table td { text-align: right; padding: 0.3rem; color: var(--ink); }
+.stat-table th:first-child, .stat-table td:first-child { text-align: left; }
+
 .linkish {
   background: none; border: none;
   color: var(--lamp); text-decoration: underline;
