@@ -60,6 +60,20 @@ export const sfx = {
     burst({ freq: 3200, vol: 0.22, dur: 0.035, q: 3 });
     burst({ at: 0.06, freq: 2700, vol: 0.18, dur: 0.035, q: 3 });
   },
+  coin() {
+    // 单枚筹码落袋
+    burst({ freq: 2300 + Math.random() * 900, vol: 0.28, dur: 0.045, q: 4 });
+  },
+  jackpot() {
+    // 大额入账收尾
+    thump({ freq: 120, dur: 0.25, vol: 0.7 });
+    burst({ at: 0.05, freq: 1800, vol: 0.3, dur: 0.1, q: 1.5 });
+  },
+  stamp() {
+    // 宣言盖章
+    thump({ freq: 150, dur: 0.16, vol: 0.65 });
+    burst({ freq: 700, vol: 0.35, dur: 0.08, q: 1 });
+  },
   slam() {
     // 开！拍桌
     thump({ vol: 1 });

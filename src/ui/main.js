@@ -53,9 +53,10 @@ function lastEvent(o, type) {
   return o.events.findLast((e) => e.type === type);
 }
 
-// 池筹码堆：每注一枚，追注时新点落下带声（§2.2 池肥可见）
-function renderPotChips(n) {
+// 池筹码堆：每注一枚，追注时双向飞入带声（§2.2 池肥可见）；高倍池烧红
+function renderPotChips(n, hot) {
   const el = $('potChips');
+  el.classList.toggle('hot', !!hot);
   let cur = el.children.length;
   if (n < cur) {
     el.innerHTML = '';
@@ -64,8 +65,58 @@ function renderPotChips(n) {
   if (n > cur) {
     if (cur > 0) sfx.chips();
     for (let i = cur; i < n; i++)
-      el.insertAdjacentHTML('beforeend', '<span class="chip-dot pop"></span>');
+      el.insertAdjacentHTML(
+        'beforeend',
+        `<span class="chip-dot ${i % 2 ? 'pop' : 'pop-up'}"></span>`,
+      );
   }
+}
+
+// 宣言：红章拍在桌面上
+function stampFx(text) {
+  const s = document.createElement('div');
+  s.className = 'stamp-fx';
+  s.innerHTML = `<span>${text}</span>`;
+  $('app').appendChild(s);
+  sfx.stamp();
+  setTimeout(() => s.remove(), 700);
+}
+
+// 结算高潮：筹码从池心成串飞向赢家，大数字滚着涨（爽感预算的第二拍）
+async function chipFlight(ov, amount, youWin) {
+  const stage = document.createElement('div');
+  stage.className = 'chip-flight';
+  ov.appendChild(stage);
+  const amt = document.createElement('div');
+  amt.className = `win-amt ${youWin ? 'win' : 'lose'}`;
+  amt.textContent = youWin ? '＋0' : '−0';
+  stage.appendChild(amt);
+  const n = Math.min(amount, 14);
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('span');
+    c.className = 'chip-dot';
+    c.style.setProperty('--dx', `${Math.random() * 140 - 70}px`);
+    c.style.setProperty('--dy', `${(youWin ? 1 : -1) * (230 + Math.random() * 90)}px`);
+    c.style.animationDelay = `${i * 60}ms`;
+    stage.appendChild(c);
+    setTimeout(() => sfx.coin(), i * 60);
+  }
+  // 数字滚动与筹码流同步
+  const dur = n * 60 + 350;
+  const t0 = performance.now();
+  await new Promise((done) => {
+    const roll = () => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      const v = Math.round(amount * k);
+      amt.textContent = youWin ? `＋${v}` : `−${v}`;
+      if (k < 1) requestAnimationFrame(roll);
+      else done();
+    };
+    roll();
+  });
+  if (amount >= 8) sfx.jackpot();
+  await sleep(500);
+  stage.remove();
 }
 
 // 结算：输赢额浮出，余额跳动
@@ -100,11 +151,9 @@ function render() {
     (o.zhai ? '<span class="mark">斋 ×1.5</span>' : '') +
     (o.blind.A ? '<span class="mark">你盲 ×2</span>' : '') +
     (o.blind.B ? '<span class="mark">他盲 ×2</span>' : '');
-  // 开值 = 此刻开牌的输赢额（单方投入 × 赔率）——深虚张即高赌注（§2.2）
   const mult = 2 ** (o.blind.A ? 1 : 0) * 2 ** (o.blind.B ? 1 : 0) * (o.zhai ? 1.5 : 1);
-  const stake = o.currentBid ? ` · 开值 <b>${Math.round(o.potUnits * mult)}</b>` : '';
-  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${stake}${marks}`;
-  renderPotChips(o.potUnits * 2);
+  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${marks}`;
+  renderPotChips(o.potUnits * 2, mult > 1);
 
   $('bidBig').innerHTML = o.currentBid
     ? `<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
@@ -174,6 +223,8 @@ function render() {
     $('bidBtn').textContent = '没法再抬';
   }
   $('bidBtn').disabled = !myTurn || !bids;
+  // 赌注焊在扳机上：拍开就是这个数（§2.2 开值＝单方投入×赔率）
+  $('openBtn').innerHTML = o.currentBid ? `开<small>±${Math.round(o.potUnits * mult)}</small>` : '开';
   $('openBtn').disabled = !myTurn || !o.currentBid;
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');
@@ -238,7 +289,7 @@ async function onPeek() {
 
 async function onDeclare(declaration) {
   await match.act('A', { type: 'declare', declaration }, { elapsedMs: performance.now() - turnStart });
-  sfx.tick();
+  stampFx(declaration === 'blind' ? '盲 ×2' : '斋 ×1.5');
   render();
 }
 
@@ -270,7 +321,9 @@ async function aiTurn() {
   const elapsedMs = performance.now() - t0;
   if (d.action.type === 'challenge') return doChallenge('B', elapsedMs, false, d.say);
   await match.act('B', d.action, { elapsedMs });
-  sfx.tick();
+  if (d.action.type === 'declare')
+    stampFx(d.action.declaration === 'blind' ? '盲 ×2' : '斋 ×1.5');
+  else sfx.tick();
   if (d.say) speak(d.say);
   busy = false;
   if (d.action.type === 'declare') return aiTurn();
@@ -330,11 +383,12 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   await sleep(350);
   const youLose = re.loser === 'A';
   cnt.textContent = `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
-  ov.querySelector('#rvLine').innerHTML =
-    `${youLose ? '你' : '他'}输了这局，掉一颗骰<br><span class="row-label">池 ${re.transfer} 注归${youLose ? '他' : '你'}</span>`;
+  ov.querySelector('#rvLine').innerHTML = `${youLose ? '你' : '他'}输了这局，掉一颗骰`;
   sfx.loseDie();
   speak(sayText || challengeLine(rv, re));
-  await sleep(2200);
+  await sleep(600);
+  await chipFlight(ov, re.transfer, !youLose);
+  await sleep(1100);
 
   const end = lastEvent(o, 'matchEnd');
   if (end) return showReport(end);
