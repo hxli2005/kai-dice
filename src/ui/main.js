@@ -230,7 +230,7 @@ function render() {
   const g = $('gauge');
   if (o.currentBid && o.yourDice) {
     const p = probBidTrue(o.currentBid, o.yourDice, o.diceCount.opp, o.zhai);
-    g.innerHTML = `若他乱报，「${o.currentBid.count} 个 ${o.currentBid.face}」为真 <b>${pct(p)}</b>`;
+    g.innerHTML = `按你的骰子算，「${o.currentBid.count} 个 ${o.currentBid.face}」为真 <b>${pct(p)}</b>`;
   } else if (o.currentBid) {
     g.textContent = o.blind.A ? '盲局——你选的路' : '看了骰才有数';
   } else {
@@ -527,6 +527,7 @@ function openDrawer() {
       <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。</li>
       <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
       <li>每手 20 秒。超时自动替你抬最小价——你的犹豫，他看得见、记得住。</li>
+      <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
     <h2>它眼中的你</h2>
     <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
