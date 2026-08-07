@@ -119,6 +119,18 @@ async function chipFlight(ov, amount, youWin) {
   stage.remove();
 }
 
+// 余额＝一手筹码＋数字：枚数随余额涨缩（每 20 筹一枚），输赢一局肉眼可见
+function renderChips(id, balance) {
+  const el = $(id);
+  const n = balance <= 0 ? 0 : Math.min(8, 1 + Math.floor(balance / 20));
+  const prev = +el.dataset.n || 0;
+  el.classList.toggle('debt', balance < 0);
+  el.innerHTML =
+    `<span class="hand">${Array.from({ length: n }, (_, i) => `<span class="chip-dot ${i >= prev ? 'pop' : ''}"></span>`).join('')}</span>` +
+    `<b>${balance}</b>`;
+  el.dataset.n = n;
+}
+
 // 结算：输赢额浮出，余额跳动
 function showDelta(d) {
   for (const [id, v] of [['myChips', d], ['oppChips', -d]]) {
@@ -163,8 +175,8 @@ function render() {
   const rs = lastEvent(o, 'roundStart');
   $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)}`;
   $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)}`;
-  $('oppChips').innerHTML = `筹<b>${o.chips.opp}</b>`;
-  $('myChips').innerHTML = `筹<b>${o.chips.you}</b>`;
+  renderChips('oppChips', o.chips.opp);
+  renderChips('myChips', o.chips.you);
 
   // 我的骰子：未看则盖着（点击=看骰）；盲局锁死
   const mine = $('myDice');
