@@ -53,6 +53,36 @@ function lastEvent(o, type) {
   return o.events.findLast((e) => e.type === type);
 }
 
+// 池筹码堆：每注一枚，追注时新点落下带声（§2.2 池肥可见）
+function renderPotChips(n) {
+  const el = $('potChips');
+  let cur = el.children.length;
+  if (n < cur) {
+    el.innerHTML = '';
+    cur = 0;
+  }
+  if (n > cur) {
+    if (cur > 0) sfx.chips();
+    for (let i = cur; i < n; i++)
+      el.insertAdjacentHTML('beforeend', '<span class="chip-dot pop"></span>');
+  }
+}
+
+// 结算：输赢额浮出，余额跳动
+function showDelta(d) {
+  for (const [id, v] of [['myChips', d], ['oppChips', -d]]) {
+    const chip = $(id);
+    const s = document.createElement('span');
+    s.className = `delta ${v > 0 ? 'win' : 'lose'}`;
+    s.textContent = v > 0 ? `＋${v}` : `−${-v}`;
+    chip.parentElement.appendChild(s);
+    setTimeout(() => s.remove(), 1500);
+    chip.classList.add('pulse');
+    setTimeout(() => chip.classList.remove('pulse'), 600);
+  }
+  sfx.chips();
+}
+
 function ensureSel(o) {
   const bids = allLegalBids(o.currentBid, o.zhai, o.diceCount.you + o.diceCount.opp);
   if (!bids.length) return null;
@@ -74,6 +104,7 @@ function render() {
   const mult = 2 ** (o.blind.A ? 1 : 0) * 2 ** (o.blind.B ? 1 : 0) * (o.zhai ? 1.5 : 1);
   const stake = o.currentBid ? ` · 开值 <b>${Math.round(o.potUnits * mult)}</b>` : '';
   $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${stake}${marks}`;
+  renderPotChips(o.potUnits * 2);
 
   $('bidBig').innerHTML = o.currentBid
     ? `<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
@@ -81,8 +112,10 @@ function render() {
 
   // 镜像：封印与筹码余额各贴各的骰子行
   const rs = lastEvent(o, 'roundStart');
-  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)} · 筹 ${o.chips.opp}`;
-  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)} · 筹 ${o.chips.you}`;
+  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)}`;
+  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)}`;
+  $('oppChips').innerHTML = `筹<b>${o.chips.opp}</b>`;
+  $('myChips').innerHTML = `筹<b>${o.chips.you}</b>`;
 
   // 我的骰子：未看则盖着（点击=看骰）；盲局锁死
   const mine = $('myDice');
@@ -305,7 +338,9 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   ov.classList.add('hidden');
   sfx.shake();
   busy = false;
+  sel = null; // 新局重置报价选择
   render();
+  showDelta(youLose ? -re.transfer : re.transfer);
   const next = ob();
   myDiceByRound[next.round] = null;
   if (next.turn === 'A') startTimer();

@@ -55,6 +55,11 @@ export const sfx = {
   tick() {
     burst({ freq: 2600, vol: 0.12, dur: 0.03 });
   },
+  chips() {
+    // 筹码入池：两声脆响
+    burst({ freq: 3200, vol: 0.22, dur: 0.035, q: 3 });
+    burst({ at: 0.06, freq: 2700, vol: 0.18, dur: 0.035, q: 3 });
+  },
   slam() {
     // 开！拍桌
     thump({ vol: 1 });

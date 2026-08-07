@@ -71,16 +71,74 @@ header {
   font-family: var(--serif);
 }
 #rulesBtn { margin-left: auto; border: 1px solid rgba(141, 124, 105, 0.5); border-radius: 50%; width: 1.9rem; height: 1.9rem; font-size: 0.85rem; padding: 0; }
-/* 镜像元素：双方骰子行同尺寸同居中，封印各贴各的骰子 */
+/* 镜像元素：双方骰子行同尺寸同居中，封印与筹码各贴各的骰子 */
 .dicerow.mirror { justify-content: center; }
+.meta-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.9rem;
+  margin: 0.35rem 0;
+  min-height: 1.1rem;
+  position: relative;
+}
 .seal-line {
-  text-align: center;
   font-family: var(--mono);
   font-size: 0.62rem; color: #5d5142;
   letter-spacing: 0.04em;
-  margin: 0.35rem 0;
-  min-height: 0.8rem;
 }
+.chips {
+  font-size: 0.72rem; color: var(--lamp-dim);
+  letter-spacing: 0.08em;
+}
+.chips b {
+  font-size: 1.05rem; font-weight: 400;
+  color: var(--lamp);
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.15rem;
+}
+@keyframes chips-pulse {
+  35% { transform: scale(1.35); }
+}
+.chips.pulse b { display: inline-block; animation: chips-pulse 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.delta {
+  position: absolute;
+  right: 8%;
+  top: -0.2rem;
+  font-size: 1.05rem;
+  font-family: var(--serif);
+  pointer-events: none;
+  animation: delta-float 1.4s ease-out forwards;
+}
+.delta.win { color: var(--lamp); }
+.delta.lose { color: var(--red-hi); }
+@keyframes delta-float {
+  0% { opacity: 0; transform: translateY(0.4rem); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-1.3rem); }
+}
+
+/* 池筹码堆：每注一枚 */
+#potChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.28rem;
+  max-width: 76%;
+  min-height: 0.5rem;
+  margin-top: 0.15rem;
+}
+.chip-dot {
+  width: 0.46rem; height: 0.46rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--lamp), var(--lamp-dim) 75%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+@keyframes chip-in {
+  from { transform: translateY(-0.9rem) scale(0.4); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.chip-dot.pop { animation: chip-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
 .bubble {
   margin: 0.5rem auto 0;
   padding: 0.55rem 0.8rem;
