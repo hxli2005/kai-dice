@@ -8,7 +8,15 @@ import { probBidTrue } from '../probability.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 
-const SYSTEM = `你是老周，深夜小酒馆的老板，正和客人玩大话骰。人设：话少，句句带数据，记仇十年。台词一到两短句，不用感叹号，不解释规则；可以引用对方刚才的具体行为（用时、习惯、档案）。你收到的全是真实数据，禁止编造数字。
+// 嘴臭度三档（§3.5 Q6 裁决）：默认中辣。边界：只锚定真实数据、只毒打法、不碰人身、不用脏话
+const TONES = {
+  mild: '语气克制，不主动嘲讽，只陈述数据和判断。',
+  spicy:
+    '带刺。可以嘲讽对方的打法、用时、习惯——但每句嘲讽必须锚定给你的真实数据（他刚才的行为、档案），狠要狠在"说得对"。只评价打法，不作人身攻击，不用脏话。',
+  hell: '往死里嘲讽，每手都带刺，赢了补刀，输了嘴也不软——但每句都必须锚定给你的真实数据（他刚才的行为、档案），狠要狠在"说得对"。只评价打法与习惯，不作人身攻击，不用脏话。',
+};
+
+const systemFor = (tone) => `你是老周，深夜小酒馆的老板，正和客人玩大话骰。人设：话少，句句带数据，记仇十年。${TONES[tone] ?? TONES.spicy}台词一到两短句，不用感叹号，不解释规则；可以引用对方刚才的具体行为（用时、习惯、档案）。你收到的全是真实数据，禁止编造数字。
 规则提要：双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）；认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。默认 1 点是万能牌（斋局除外）。
 严格输出一行 JSON，不要其他文字：
 {"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"或"blind"},"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
@@ -30,7 +38,7 @@ function narrate(events, you) {
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
 
-export function buildPrompts(ob, profile) {
+export function buildPrompts(ob, profile, tone) {
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
   const p = (b) => probBidTrue(b, ob.yourDice, ob.diceCount.opp, ob.zhai);
@@ -53,7 +61,7 @@ export function buildPrompts(ob, profile) {
       .join('；')}。`,
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
   ];
-  return { system: SYSTEM, user: facts.join('\n') };
+  return { system: systemFor(tone), user: facts.join('\n') };
 }
 
 export function parseDecision(text, ob) {
@@ -86,12 +94,12 @@ export function parseDecision(text, ob) {
 }
 
 // 结算 1 次调用（§3.1）：场终判词＋档案笔记。失败返回 null，调用方用模板判词。
-export async function settleVerdict(channel, { won, statsText }, fetchFn) {
+export async function settleVerdict(channel, { won, statsText, tone }, fetchFn) {
   try {
     const raw = await chat(
       channel,
       {
-        system: SYSTEM.replace(/严格输出一行 JSON[\s\S]*$/, '') +
+        system: systemFor(tone).replace(/严格输出一行 JSON[\s\S]*$/, '') +
           '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察"}',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}`,
       },
@@ -106,14 +114,14 @@ export async function settleVerdict(channel, { won, statsText }, fetchFn) {
 }
 
 // channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）
-export function createLaoZhou({ channel, profile = '', fetchFn } = {}) {
+export function createLaoZhou({ channel, profile = '', tone, fetchFn } = {}) {
   const silent = createSilentBot();
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
   return {
     logs,
     async decide(ob) {
       if (ob.yourDice === null) return { action: { type: 'peek' } };
-      const prompts = buildPrompts(ob, profile);
+      const prompts = buildPrompts(ob, profile, tone);
       let decision = null;
       let raw = null;
       if (channel) {

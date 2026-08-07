@@ -38,6 +38,16 @@ export function profileBrief(p) {
   return head + habits + (notes ? `你的旧笔记：${notes}` : '');
 }
 
+// 嘴臭度（§3.5 Q6）：mild/spicy/hell，默认中辣
+const TONE_KEY = 'kai.tone.v1';
+export function loadTone(storage = localStorage) {
+  const t = storage.getItem(TONE_KEY);
+  return ['mild', 'spicy', 'hell'].includes(t) ? t : 'spicy';
+}
+export function saveTone(t, storage = localStorage) {
+  storage.setItem(TONE_KEY, t);
+}
+
 export function loadByok(storage = localStorage) {
   try {
     return JSON.parse(storage.getItem(BYOK_KEY));

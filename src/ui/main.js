@@ -6,7 +6,7 @@ import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
 import { createLaoZhou, settleVerdict } from '../ai/agent.js';
 import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, loadByok, saveByok } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, loadByok, saveByok, loadTone, saveTone } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -128,16 +128,24 @@ async function chipFlight(ov, amount, youWin) {
       punch(amt); // 每枚落袋，数字弹一下
     }, i * 90 + 450);
   });
-  // 数字滚动与筹码流同步
+  // 数字滚动与筹码流同步。rAF 在页面不可见时被冻结——必须有超时兜底，否则整场演出卡死
   const dur = n * 90 + 450;
   const t0 = performance.now();
   await new Promise((done) => {
+    const finish = () => {
+      amt.textContent = youWin ? `＋${amount}` : `−${amount}`;
+      done();
+    };
+    const guard = setTimeout(finish, dur + 800);
     const roll = () => {
       const k = Math.min(1, (performance.now() - t0) / dur);
       const v = Math.round(amount * k);
       amt.textContent = youWin ? `＋${v}` : `−${v}`;
       if (k < 1) requestAnimationFrame(roll);
-      else done();
+      else {
+        clearTimeout(guard);
+        done();
+      }
     };
     roll();
   });
@@ -502,7 +510,7 @@ async function showReport(end) {
   let verdict = null;
   let note = '';
   if (byok) {
-    const r = await settleVerdict(byok, { won, statsText });
+    const r = await settleVerdict(byok, { won, statsText, tone: loadTone() });
     if (r) ({ verdict, note } = r);
     renderCard(verdict ?? templateVerdict(stats, won));
   }
@@ -541,6 +549,11 @@ function openDrawer() {
       <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
     </select>
+    <label>他的嘴（需要接上面的脑子才生效）</label><select id="fTone">
+      <option value="mild" ${loadTone() === 'mild' ? 'selected' : ''}>温和——只报数据，不带刺</option>
+      <option value="spicy" ${loadTone() === 'spicy' ? 'selected' : ''}>中辣——嘲讽你的打法，句句有据</option>
+      <option value="hell" ${loadTone() === 'hell' ? 'selected' : ''}>地狱——往死里嘲讽，照样句句有据</option>
+    </select>
     <div class="btnrow"><button class="primary" id="saveByok">存好，下一场生效</button></div>
     <h2>为什么信它</h2>
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
@@ -556,6 +569,7 @@ function openDrawer() {
       model: d.querySelector('#fModel').value.trim(),
       format: d.querySelector('#fFmt').value,
     });
+    saveTone(d.querySelector('#fTone').value);
     d.classList.add('hidden');
   });
 }
@@ -566,7 +580,7 @@ async function newMatch() {
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   match = await createMatch({ seed });
-  laoZhou = createLaoZhou({ channel: loadByok(), profile: profileBrief(profile) });
+  laoZhou = createLaoZhou({ channel: loadByok(), profile: profileBrief(profile), tone: loadTone() });
   myDiceByRound = {};
   sel = null;
   busy = false;
