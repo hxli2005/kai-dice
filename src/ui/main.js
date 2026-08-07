@@ -96,13 +96,21 @@ function stampFx(text) {
   setTimeout(() => s.remove(), 700);
 }
 
-// 结算高潮：筹码从池心成串飞向赢家，大数字滚着涨（爽感预算的第二拍）
+// 结算高潮：筹码从池心飞向赢家侧的落袋点，大数字在落点接住每一枚（爽感预算的第二拍）
+const punch = (el, cls = 'punch') => {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+};
+
 async function chipFlight(ov, amount, youWin) {
   const stage = document.createElement('div');
   stage.className = 'chip-flight';
   ov.appendChild(stage);
+  // 数字站在钱的去处：你赢在下（你的手牌方向），他赢在上——不再压住摊牌文字
   const amt = document.createElement('div');
   amt.className = `win-amt ${youWin ? 'win' : 'lose'}`;
+  amt.style.top = youWin ? '78%' : '10%';
   amt.textContent = youWin ? '＋0' : '−0';
   stage.appendChild(amt);
   const toks = tokensOf(amount).slice(0, 14);
@@ -111,14 +119,17 @@ async function chipFlight(ov, amount, youWin) {
     const c = document.createElement('span');
     c.className = `chip-dot ${cls}`;
     c.innerHTML = `<i>${d}</i>`;
-    c.style.setProperty('--dx', `${Math.random() * 140 - 70}px`);
-    c.style.setProperty('--dy', `${(youWin ? 1 : -1) * (230 + Math.random() * 90)}px`);
+    c.style.setProperty('--dx', `${Math.random() * 90 - 45}px`);
+    c.style.setProperty('--dy', `${youWin ? 215 + Math.random() * 45 : -(300 + Math.random() * 55)}px`);
     c.style.animationDelay = `${i * 90}ms`;
     stage.appendChild(c);
-    setTimeout(() => sfx.coin(), i * 90);
+    setTimeout(() => {
+      sfx.coin();
+      punch(amt); // 每枚落袋，数字弹一下
+    }, i * 90 + 450);
   });
   // 数字滚动与筹码流同步
-  const dur = n * 90 + 350;
+  const dur = n * 90 + 450;
   const t0 = performance.now();
   await new Promise((done) => {
     const roll = () => {
@@ -130,8 +141,15 @@ async function chipFlight(ov, amount, youWin) {
     };
     roll();
   });
-  if (amount >= 8) sfx.jackpot();
-  await sleep(500);
+  // 收尾一记：slam ＋ 冲击波；大额加震屏
+  punch(amt, 'slam');
+  amt.insertAdjacentHTML('beforeend', '<span class="shockwave"></span>');
+  sfx.jackpot();
+  if (amount >= 8) {
+    $('app').classList.add('shake');
+    setTimeout(() => $('app').classList.remove('shake'), 400);
+  }
+  await sleep(700);
   stage.remove();
 }
 
