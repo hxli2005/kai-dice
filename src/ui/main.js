@@ -1,12 +1,13 @@
 // UI 状态机：引擎先行落子，表现层跟随（DESIGN §7.3）。
-// 玩家与老周走同一套 observe/act——本文件只是人类的"客户端"。
+// 玩家与 AI 对手走同一套 observe/act——本文件只是人类的"客户端"。
 
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
-import { createLaoZhou, settleVerdict } from '../ai/agent.js';
+import { createOpponent, settleVerdict } from '../ai/agent.js';
+import { DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, loadByok, saveByok, loadTone, saveTone } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, loadByok, saveByok } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -25,7 +26,31 @@ const dieHtml = (face, cls = '') =>
 const backHtml = (cls = '') => `<span class="die back ${cls}"></span>`;
 
 let profile = loadProfile();
-let match, laoZhou, myDiceByRound, sel, busy, turnStart, timerRAF, typeTimer;
+let match, opponent, myDiceByRound, sel, busy, turnStart, timerRAF, typeTimer;
+
+// 零配置官方通道（§9.2）：只填暗号 → 同域 /api/llm 代理；三格全填 → 自带 API
+function channelOf() {
+  const b = loadByok();
+  if (!b || !b.apiKey) return null;
+  if (!b.baseUrl)
+    return {
+      baseUrl: `${location.origin}/api/llm`,
+      apiKey: b.apiKey,
+      model: 'deepseek-chat',
+      format: 'openai',
+      headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
+    };
+  return b;
+}
+
+function deviceId() {
+  let id = localStorage.getItem('kai.device.v1');
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('kai.device.v1', id);
+  }
+  return id;
+}
 
 // ---------- 台词气泡（打字机，不阻塞输入 §3.5） ----------
 function speak(text) {
@@ -355,14 +380,14 @@ async function onBid() {
   aiTurn();
 }
 
-// ---------- 老周回合 ----------
+// ---------- 对手回合 ----------
 async function aiTurn() {
   const o = match.observe('B');
   if (o.over) return;
   busy = true;
   render();
   const t0 = performance.now();
-  const d = await laoZhou.decide(o);
+  const d = await opponent.decide(o);
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
     await match.act('B', d.action);
@@ -477,7 +502,7 @@ async function showReport(end) {
   const o = ob();
   const won = end.winner === 'A';
   const stats = computeStats(o.events, 'A', myDiceByRound);
-  const byok = loadByok();
+  const byok = channelOf();
   const statsText =
     `${end.rounds}局${won ? '客人赢' : '客人输'}；虚报率${pct(stats.bluffRate)}；` +
     `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次；` +
@@ -505,16 +530,16 @@ async function showReport(end) {
     <div class="small-note">截屏即可分享 · 这一场已记进他的本子</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
   };
-  renderCard(byok ? '老周在写你的档案……' : templateVerdict(stats, won));
+  renderCard(byok ? `${DEFAULT_PERSONA.name}在写你的档案……` : templateVerdict(stats, won));
 
   let verdict = null;
   let note = '';
   if (byok) {
-    const r = await settleVerdict(byok, { won, statsText, tone: loadTone() });
+    const r = await settleVerdict(byok, { won, statsText, persona: DEFAULT_PERSONA });
     if (r) ({ verdict, note } = r);
     renderCard(verdict ?? templateVerdict(stats, won));
   }
-  const aiNotes = laoZhou.logs.map((l) => l.note).filter(Boolean).slice(-2);
+  const aiNotes = opponent.logs.map((l) => l.note).filter(Boolean).slice(-2);
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note] });
 }
 
@@ -540,19 +565,14 @@ function openDrawer() {
     <h2>它眼中的你</h2>
     <p>${profileBrief(profile) || '还没有档案。打一场，他就开始记了。'}</p>
     ${profile.notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
-    <h2>换个脑子（自带 API）</h2>
-    <p>钥匙只存这台设备，浏览器直连模型商，不经任何中间服务器。留空则用沉默模式（他不说话，只算数）。</p>
+    <h2>接上他的脑子</h2>
+    <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <label>API Key</label><input id="fKey" type="password" value="${byok.apiKey}">
     <label>Model</label><input id="fModel" value="${byok.model}" placeholder="deepseek-chat">
     <label>格式</label><select id="fFmt">
       <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
-    </select>
-    <label>他的嘴（需要接上面的脑子才生效）</label><select id="fTone">
-      <option value="mild" ${loadTone() === 'mild' ? 'selected' : ''}>温和——只报数据，不带刺</option>
-      <option value="spicy" ${loadTone() === 'spicy' ? 'selected' : ''}>中辣——嘲讽你的打法，句句有据</option>
-      <option value="hell" ${loadTone() === 'hell' ? 'selected' : ''}>地狱——往死里嘲讽，照样句句有据</option>
     </select>
     <div class="btnrow"><button class="primary" id="saveByok">存好，下一场生效</button></div>
     <h2>为什么信它</h2>
@@ -569,7 +589,6 @@ function openDrawer() {
       model: d.querySelector('#fModel').value.trim(),
       format: d.querySelector('#fFmt').value,
     });
-    saveTone(d.querySelector('#fTone').value);
     d.classList.add('hidden');
   });
 }
@@ -580,7 +599,7 @@ async function newMatch() {
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   match = await createMatch({ seed });
-  laoZhou = createLaoZhou({ channel: loadByok(), profile: profileBrief(profile), tone: loadTone() });
+  opponent = createOpponent({ channel: channelOf(), profile: profileBrief(profile), persona: DEFAULT_PERSONA });
   myDiceByRound = {};
   sel = null;
   busy = false;
@@ -593,6 +612,11 @@ async function newMatch() {
   render();
   startTimer();
 }
+
+// 人设上屏（Q10④：UI 从人设对象读取，不写死名字）
+$('seal').textContent = DEFAULT_PERSONA.seal;
+$('oppName').textContent = DEFAULT_PERSONA.name;
+document.documentElement.style.setProperty('--persona-verdict', `'${DEFAULT_PERSONA.name}批：'`);
 
 $('bidBtn').addEventListener('click', onBid);
 $('openBtn').addEventListener('click', () => doChallenge('A'));

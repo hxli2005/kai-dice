@@ -2,7 +2,7 @@
 // 兼容 OpenAI 与 Anthropic 两种消息格式。fetch 可注入以便测试。
 
 export async function chat(
-  { baseUrl, apiKey, model, format = 'openai' },
+  { baseUrl, apiKey, model, format = 'openai', headers: extraHeaders },
   { system, user, maxTokens = 500, timeoutMs = 10_000 },
   fetchFn = globalThis.fetch,
 ) {
@@ -19,6 +19,7 @@ export async function chat(
               'x-api-key': apiKey,
               'anthropic-version': '2023-06-01',
               'anthropic-dangerous-direct-browser-access': 'true',
+              ...extraHeaders,
             },
             body: {
               model,
@@ -30,7 +31,7 @@ export async function chat(
           }
         : {
             url: `${url}/chat/completions`,
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...extraHeaders },
             body: {
               model,
               max_tokens: maxTokens,

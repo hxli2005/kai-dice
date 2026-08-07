@@ -1,0 +1,9 @@
+# Cloudflare Pages 项目配置（kai-dice）。deploy 用 npm run deploy。
+name = "kai-dice"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-08-01"
+
+# 配额与熔断计数（§9.3/§9.6）
+[[kv_namespaces]]
+binding = "QUOTA"
+id = "082e1ba75a3e41de9066e53c04e7f94b"

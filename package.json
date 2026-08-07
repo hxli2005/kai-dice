@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "dist": "rm -rf dist && mkdir -p dist && cp index.html dist/ && cp -R src dist/src && cp infra/pages/_worker.js dist/",
+    "deploy": "npm run dist && npx wrangler pages deploy dist --project-name=kai-dice --commit-dirty=true"
   }
 }

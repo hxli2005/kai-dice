@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
 import { chat } from '../src/ai/llm.js';
-import { buildPrompts, parseDecision, createLaoZhou } from '../src/ai/agent.js';
+import { buildPrompts, parseDecision, createOpponent } from '../src/ai/agent.js';
 
 const mockFetch = (handler) => async (url, init) => {
   const body = JSON.parse(init.body);
@@ -63,11 +63,11 @@ test('parseDecision：合法动作通过，非法与坏输出拒绝', async () =
   assert.equal(parseDecision('胡言乱语', ob), null);
 });
 
-test('createLaoZhou：LLM 垃圾输出与无通道时降级沉默模式，日志可审计', async () => {
+test('createOpponent：LLM 垃圾输出与无通道时降级沉默模式，日志可审计', async () => {
   const m = await createMatch({ seed: 9 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
-  const garbage = createLaoZhou({
+  const garbage = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     fetchFn: mockFetch(() => ({ choices: [{ message: { content: '???' } }] })),
   });
@@ -79,7 +79,7 @@ test('createLaoZhou：LLM 垃圾输出与无通道时降级沉默模式，日志
   assert.equal(garbage.logs.at(-1).silentFallback, true);
   assert.equal(garbage.logs.at(-1).raw, '???');
 
-  const noChannel = createLaoZhou({});
+  const noChannel = createOpponent({});
   const d2 = await noChannel.decide(m.observe('B'));
   assert.ok(['bid', 'challenge'].includes(d2.action.type));
   assert.equal(noChannel.logs.at(-1).silentFallback, true);

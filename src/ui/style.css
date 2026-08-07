@@ -49,7 +49,7 @@ body {
 
 .hidden { display: none !important; }
 
-/* ---------- 对面：老周（与你的区域上下镜像） ---------- */
+/* ---------- 对面：AI 对手（与你的区域上下镜像） ---------- */
 header {
   padding: calc(env(safe-area-inset-top) + 0.7rem) 1rem 0.3rem;
 }
@@ -485,7 +485,7 @@ button.danger:active { transform: scale(0.95); }
   border-top: 1px dashed rgba(242, 232, 213, 0.18);
   font-size: 0.95rem; line-height: 1.7;
 }
-.card .verdict::before { content: '老周批：'; color: var(--red-hi); }
+.card .verdict::before { content: var(--persona-verdict, '批：'); color: var(--red-hi); }
 #overlay .again { margin-top: 0.4rem; width: 100%; max-width: 21rem; flex: none; padding: 0.85rem 0; }
 #overlay .small-note { font-size: 0.7rem; color: var(--dim); }
 
