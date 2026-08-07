@@ -20,6 +20,18 @@ export default {
           },
         });
       }
+      if (url.pathname === "/api/llm/ping") {
+        let kv = "no-binding";
+        if (env.QUOTA) {
+          try {
+            await env.QUOTA.put("ping", String(Date.now()), { expirationTtl: 3600 });
+            kv = (await env.QUOTA.get("ping")) ? "rw-ok" : "write-lost";
+          } catch (e) {
+            kv = "err:" + (e && e.message);
+          }
+        }
+        return json({ quota: !!env.QUOTA, secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY), kv });
+      }
       if (request.method !== "POST") return json({ error: "POST only" }, 405);
       if (!env.FRIEND_PASS || !env.DEEPSEEK_KEY) return json({ error: "服务端未配置暗号或 key" }, 503);
       const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
