@@ -128,15 +128,47 @@ header {
   min-height: 0.5rem;
   margin-top: 0.15rem;
 }
-/* 实体筹码 token：琥珀圆片＋齿纹边＋内环。池、飞流、余额同款 */
+/* 实体筹码 token：齿纹圆片，经典面额配色（白1 红5 绿25 黑100）。池、飞流、余额同款 */
 .chip-dot {
   width: 0.8rem; height: 0.8rem;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #f2c56b, var(--lamp-dim) 82%);
+  display: grid; place-items: center;
   border: 2px dashed rgba(32, 22, 7, 0.72);
   box-shadow: inset 0 0 0 2px rgba(240, 197, 104, 0.35), 0 1px 3px rgba(0, 0, 0, 0.65);
   box-sizing: border-box;
+  background: radial-gradient(circle at 35% 30%, #f2c56b, var(--lamp-dim) 82%);
 }
+.chip-dot i {
+  font-style: normal;
+  font-family: var(--serif);
+  font-size: 0.4rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.chip-dot.d1 {
+  background: radial-gradient(circle at 35% 30%, #e5dac4, #b3a488 82%);
+  border-color: rgba(60, 46, 30, 0.6);
+  box-shadow: inset 0 0 0 2px rgba(255, 250, 238, 0.5), 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+.chip-dot.d1 i { color: #4a3a28; }
+.chip-dot.d5 {
+  background: radial-gradient(circle at 35% 30%, #c85040, #92301f 82%);
+  border-color: rgba(40, 10, 5, 0.65);
+  box-shadow: inset 0 0 0 2px rgba(255, 180, 160, 0.4), 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+.chip-dot.d5 i { color: #ffe9e2; }
+.chip-dot.d25 {
+  background: radial-gradient(circle at 35% 30%, #558a67, #35573f 82%);
+  border-color: rgba(12, 28, 16, 0.65);
+  box-shadow: inset 0 0 0 2px rgba(190, 235, 200, 0.35), 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+.chip-dot.d25 i { color: #e8f5e9; }
+.chip-dot.d100 {
+  background: radial-gradient(circle at 35% 30%, #3a3129, #1a1512 82%);
+  border-color: rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 0 0 2px rgba(232, 169, 79, 0.75), 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.chip-dot.d100 i { color: var(--lamp); font-size: 0.34rem; }
 @keyframes chip-in {
   from { transform: translateY(-1.4rem) scale(0.4); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -147,12 +179,8 @@ header {
 }
 .chip-dot.pop { animation: chip-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
 .chip-dot.pop-up { animation: chip-in-up 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
-/* 高倍池：盲/斋激活时筹码烧红 */
-#potChips.hot .chip-dot {
-  background: radial-gradient(circle at 35% 30%, var(--red-hi), var(--red) 82%);
-  box-shadow: inset 0 0 0 2px rgba(255, 160, 140, 0.4), 0 0 7px rgba(232, 90, 68, 0.6),
-    0 1px 3px rgba(0, 0, 0, 0.65);
-}
+/* 高倍池：盲/斋激活时红光晕（不改 token 本色，面额信息保留） */
+#potChips.hot .chip-dot { filter: drop-shadow(0 0 4px rgba(232, 90, 68, 0.75)); }
 
 /* 一手筹码：余额的实体锚——枚数随余额涨缩（每 20 筹一枚） */
 .hand {
@@ -162,7 +190,8 @@ header {
   margin-right: 0.3rem;
 }
 .hand .chip-dot { width: 0.95rem; height: 0.95rem; }
-.hand .chip-dot + .chip-dot { margin-left: -0.55rem; }
+.hand .chip-dot + .chip-dot { margin-left: -0.38rem; }
+.hand .chip-dot i { font-size: 0.44rem; }
 .hand .chip-dot.pop { animation: chip-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
 .chips.debt b { color: var(--red-hi); }
 

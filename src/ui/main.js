@@ -53,22 +53,36 @@ function lastEvent(o, type) {
   return o.events.findLast((e) => e.type === type);
 }
 
-// 池筹码堆：每注一枚，追注时双向飞入带声（§2.2 池肥可见）；高倍池烧红
+// 经典面额：白1 红5 绿25 黑100，贪婪分解——颜色即量级
+const DENOMS = [
+  [100, 'd100'],
+  [25, 'd25'],
+  [5, 'd5'],
+  [1, 'd1'],
+];
+function tokensOf(amount) {
+  const out = [];
+  let v = Math.max(0, Math.round(amount));
+  for (const [d, cls] of DENOMS) while (v >= d) { out.push([d, cls]); v -= d; }
+  return out;
+}
+const tokenHtml = ([d, cls], extra = '') =>
+  `<span class="chip-dot ${cls} ${extra}"><i>${d}</i></span>`;
+
+// 池筹码堆：按面额显示，追注时新筹飞入带声（§2.2 池肥可见）；高倍池红光
 function renderPotChips(n, hot) {
   const el = $('potChips');
   el.classList.toggle('hot', !!hot);
-  let cur = el.children.length;
-  if (n < cur) {
-    el.innerHTML = '';
-    cur = 0;
-  }
-  if (n > cur) {
-    if (cur > 0) sfx.chips();
-    for (let i = cur; i < n; i++)
-      el.insertAdjacentHTML(
-        'beforeend',
-        `<span class="chip-dot ${i % 2 ? 'pop' : 'pop-up'}"></span>`,
-      );
+  const toks = tokensOf(n);
+  const key = toks.map((t) => t[0]).join(',');
+  if (el.dataset.key !== key) {
+    const grew = n > +(el.dataset.n || 0);
+    if (grew && +el.dataset.n) sfx.chips();
+    el.innerHTML = toks
+      .map((t, i) => tokenHtml(t, grew && i >= toks.length - 2 ? (i % 2 ? 'pop' : 'pop-up') : ''))
+      .join('');
+    el.dataset.key = key;
+    el.dataset.n = n;
   }
 }
 
@@ -91,18 +105,20 @@ async function chipFlight(ov, amount, youWin) {
   amt.className = `win-amt ${youWin ? 'win' : 'lose'}`;
   amt.textContent = youWin ? '＋0' : '−0';
   stage.appendChild(amt);
-  const n = Math.min(amount, 14);
-  for (let i = 0; i < n; i++) {
+  const toks = tokensOf(amount).slice(0, 14);
+  const n = toks.length;
+  toks.forEach(([d, cls], i) => {
     const c = document.createElement('span');
-    c.className = 'chip-dot';
+    c.className = `chip-dot ${cls}`;
+    c.innerHTML = `<i>${d}</i>`;
     c.style.setProperty('--dx', `${Math.random() * 140 - 70}px`);
     c.style.setProperty('--dy', `${(youWin ? 1 : -1) * (230 + Math.random() * 90)}px`);
-    c.style.animationDelay = `${i * 60}ms`;
+    c.style.animationDelay = `${i * 90}ms`;
     stage.appendChild(c);
-    setTimeout(() => sfx.coin(), i * 60);
-  }
+    setTimeout(() => sfx.coin(), i * 90);
+  });
   // 数字滚动与筹码流同步
-  const dur = n * 60 + 350;
+  const dur = n * 90 + 350;
   const t0 = performance.now();
   await new Promise((done) => {
     const roll = () => {
@@ -119,16 +135,16 @@ async function chipFlight(ov, amount, youWin) {
   stage.remove();
 }
 
-// 余额＝一手筹码＋数字：枚数随余额涨缩（每 20 筹一枚），输赢一局肉眼可见
+// 余额＝一手面额筹码＋数字：颜色即量级，输赢换手肉眼可见
 function renderChips(id, balance) {
   const el = $(id);
-  const n = balance <= 0 ? 0 : Math.min(8, 1 + Math.floor(balance / 20));
+  const toks = tokensOf(balance).slice(0, 10);
   const prev = +el.dataset.n || 0;
   el.classList.toggle('debt', balance < 0);
   el.innerHTML =
-    `<span class="hand">${Array.from({ length: n }, (_, i) => `<span class="chip-dot ${i >= prev ? 'pop' : ''}"></span>`).join('')}</span>` +
+    `<span class="hand">${toks.map((t, i) => tokenHtml(t, i >= prev ? 'pop' : '')).join('')}</span>` +
     `<b>${balance}</b>`;
-  el.dataset.n = n;
+  el.dataset.n = toks.length;
 }
 
 // 结算：输赢额浮出，余额跳动
@@ -490,6 +506,7 @@ function openDrawer() {
       <li>1 点是万能牌，替任何点数凑数。宣过「斋」的局例外。</li>
       <li>不信他，就拍「开」。数够了，开的人输；不够，报的人输。输家掉一颗骰子，骰子掉光，这场就完了。</li>
       <li>注池：每局双方各押 1 注底，此后每报一次数、双方各自动加 1 注。开牌定归属。</li>
+      <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。</li>
       <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
       <li>每手 20 秒。超时自动替你抬最小价——你的犹豫，他看得见、记得住。</li>
     </ul>
