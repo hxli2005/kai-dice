@@ -107,10 +107,10 @@ async function chipFlight(ov, amount, youWin) {
   const stage = document.createElement('div');
   stage.className = 'chip-flight';
   ov.appendChild(stage);
-  // 数字站在钱的去处：你赢在下（你的手牌方向），他赢在上——不再压住摊牌文字
+  // 数字永远站你这侧——这是你的账（＋N/−N 都是你的变化）；筹码流才表达钱的去向
   const amt = document.createElement('div');
   amt.className = `win-amt ${youWin ? 'win' : 'lose'}`;
-  amt.style.top = youWin ? '78%' : '10%';
+  amt.style.top = '78%';
   amt.textContent = youWin ? '＋0' : '−0';
   stage.appendChild(amt);
   const toks = tokensOf(amount).slice(0, 14);
