@@ -3,7 +3,7 @@
 // 配额与熔断（§9.3/§9.6）：设备日配额 + 全局月熔断（月红线 ¥500 的调用数上限），KV 计数。
 // 超限返回 429/503 → 客户端自动降级沉默模式。KV 故障时放行（预充值余额是物理上限兜底）。
 
-const DEVICE_DAILY_LIMIT = 80; // 每设备每日调用（≈6 场）
+const DEVICE_DAILY_LIMIT = 150; // 每设备每日调用（≈12 场；2026-08-08 自 80 上调——重度测试一天就见底）
 const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低于 ¥500 红线一半，双保险）
 
 export default {
@@ -33,7 +33,22 @@ export default {
         // 带 Authorization 时顺带校验暗号（免费连通测试，不动 LLM）
         const auth = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
         const pass = auth && env.FRIEND_PASS ? auth === env.FRIEND_PASS : null;
-        return json({ quota: !!env.QUOTA, secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY), kv, pass });
+        // 带 X-Device 时回报今日用量——"连不上"从猜谜变成读数
+        let deviceUsed = null;
+        const dev = request.headers.get("X-Device");
+        if (env.QUOTA && dev) {
+          try {
+            deviceUsed = +(await env.QUOTA.get(`d:${dev.slice(0, 64)}:${new Date().toISOString().slice(0, 10)}`)) || 0;
+          } catch {}
+        }
+        return json({
+          quota: !!env.QUOTA,
+          secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY),
+          kv,
+          pass,
+          deviceUsed,
+          deviceLimit: DEVICE_DAILY_LIMIT,
+        });
       }
       if (request.method !== "POST") return json({ error: "POST only" }, 405);
       // Origin 锁域（§9.7 Q8②）：镜像站在浏览器里带的是自己的 Origin——有 Origin 且非本站即拒。

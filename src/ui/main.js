@@ -115,12 +115,14 @@ async function testPass() {
   if (!ch) return { ok: false, msg: '未填暗号' };
   try {
     const r = await fetch(`${location.origin}/api/llm/ping`, {
-      headers: { authorization: `Bearer ${ch.apiKey}` },
+      headers: { authorization: `Bearer ${ch.apiKey}`, 'X-Device': deviceId() },
     });
     const j = await r.json();
     if (!j.secrets) return { ok: false, msg: '官方通道未开（服务端没配 key）' };
     if (j.pass !== true) return { ok: false, msg: '暗号不对' };
-    return { ok: true, msg: '已连通' };
+    // 配额读数：连不上从猜谜变读数——额度见底时这里一眼可见
+    const usage = j.deviceUsed != null ? ` · 今日 ${j.deviceUsed}/${j.deviceLimit}` : '';
+    return { ok: true, msg: `已连通${usage}` };
   } catch {
     return { ok: false, msg: '这个域名没有官方通道' };
   }
