@@ -384,9 +384,11 @@ footer {
 #facePick .die.sel { opacity: 1; outline: 2px solid var(--lamp); outline-offset: 1px; }
 #facePick .die:disabled { opacity: 0.12; }
 
-/* 按钮两排对称：宣言章三等分居中，主动作对半镜像 */
+/* 按钮两排对称：宣言章三等分居中，主动作对半镜像；
+   可点的都抬离屏幕底缘，不可点的筹码垫底当桌边筹码架 */
 #declareRow { display: flex; gap: 0.55rem; margin-bottom: 0.5rem; }
 #actionRow { display: flex; gap: 0.55rem; }
+footer .meta-line { margin: 0.6rem 0 0; }
 .stamp {
   flex: 1;
   padding: 0.5rem 0;
