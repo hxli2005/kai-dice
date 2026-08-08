@@ -2,9 +2,10 @@
 // 每手 1 次调用（§3.1 成本约束）→ 事实工具结果预注入（等价于"他每手都用计算器"）。
 // 台词=真实推理的复述，事实全部来自注入的真实数据（§3.5 不许编）。
 // 任何失败 → 沉默模式顶班（§3.4 降级链），明显变弱是诚实的。
+// 词条（§8 实验桌）：规则卡明牌注入、动作 schema 动态扩展——LLM 读规则即生效（Q24 规则流动性）。
 
 import { allLegalBids, isLegalBid } from '../rules.js';
-import { probBidTrue } from '../probability.js';
+import { obProb, obProbExact } from '../probability.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { TONES, DEFAULT_PERSONA } from './personas.js';
@@ -22,19 +23,19 @@ const FACT_LINE =
   '你收到的全是真实数据，禁止编造数字。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。只评价打法，不作人身攻击，不用脏话。';
 const RULES_BRIEF = (three) =>
   `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
-const JSON_SPEC = `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅），"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
+const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
 
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
-const personaSystem = (p, three) =>
+const personaSystem = (p, three, modSpec = '') =>
   p.bare
     ? `你是 ${p.name}，一个以本名上桌的语言模型，正和人类客人玩大话骰。没有人设剧本——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
 ${RULES_BRIEF(three)}
-${JSON_SPEC}`
+${jsonSpec(modSpec)}`
     : `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}${FACT_LINE}
 ${p.flaws}${three ? TABLE_TALK : ''}
 ${RULES_BRIEF(three)}
-${JSON_SPEC}`;
+${jsonSpec(modSpec)}`;
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
@@ -42,7 +43,11 @@ const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
 // 称呼表：you→你；其余按 names 映射（三人桌需要分清是谁），缺省"对方"
 const whoOf = (you, names) => (p) => (p === you ? '你' : (names?.[p] ?? '对方'));
 
-// 本局叙事：看骰、报数与宣言序列（§3.3；揭盅时机也是阅读材料，§2.3）
+// 词条动作元数据（observe().mods 携带；许愿词条同构）
+const modActionsOf = (ob) => (ob.mods ?? []).flatMap((m) => m.actions.map((a) => ({ ...a, modName: m.name })));
+const modActionMeta = (ob, type) => modActionsOf(ob).find((a) => a.type === type);
+
+// 本局叙事：看骰、报数、宣言与词条动作序列（§3.3；揭盅时机也是阅读材料，§2.3）
 // Q15 证据分级：用时是三级遥测，不给秒数——只把极端犹豫/秒出标成现象，正常手不着墨
 const hesi = (e) =>
   e.elapsedMs == null ? '' : e.elapsedMs > 8000 ? '（这手前停了很久）' : e.elapsedMs < 1200 ? '（几乎秒出）' : '';
@@ -56,6 +61,16 @@ function narrate(events, you, names) {
     if (e.type === 'bid') lines.push(`${who(e.player)}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')
       lines.push(`${who(e.player)}宣言「${DECL[e.declaration] ?? e.declaration}」${t}`);
+    if (e.type === 'modAction')
+      lines.push(
+        e.op === 'revealOwnDie'
+          ? `${who(e.player)}亮出自己一颗 ${e.face}${t}`
+          : e.op === 'returnBid'
+            ? `${who(e.player)}把报价原样推了回去${t}`
+            : e.op === 'potMult'
+              ? `${who(e.player)}把本局池抬到 ×${e.x}${t}`
+              : `${who(e.player)}用了词条动作${t}`,
+      );
   }
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
@@ -76,6 +91,8 @@ function matchRecap(events, you, names) {
     .map((r) => {
       if (!r.out) return '';
       const b = r.out.bid;
+      if (r.out.calza)
+        return `第${r.round}局：${who(r.out.challenger)}掐${who(b.player)}的「${b.count}个${b.face}」（实有${r.out.actual}），${r.out.exact ? '掐中赢回一颗骰' : '掐空掉一颗骰'}`;
       return `第${r.round}局：${who(b.player)}报${b.count}个${b.face}被${who(r.challenger)}开，${r.out.stands ? '成立' : '不成立'}，${who(r.out.loser)}掉一骰`;
     })
     .filter(Boolean)
@@ -85,40 +102,65 @@ function matchRecap(events, you, names) {
 // 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
 const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
 
+// 词条候选动作行：op 驱动的说明（许愿词条同样生效——原子决定语义，不靠 id 白名单）
+function modCandidateLine(meta, ob, fmtP) {
+  const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":选的点数' : ''}}`;
+  let desc = '';
+  if (meta.ops.includes('calzaResolve'))
+    desc = `——宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`;
+  else if (meta.ops.includes('returnBid')) desc = `——把这口价原样推回给报价者，他必须自己接着抬`;
+  else if (meta.ops.includes('revealOwnDie')) desc = `——亮出自己选定的一颗骰给全桌看（选哪颗亮就是你的话术）`;
+  else if (meta.ops.includes('potMult')) desc = `——本局池翻倍`;
+  return `拍词条「${meta.label}」${desc}（${json}${meta.keepTurn ? '，之后你继续行动' : ''}）`;
+}
+
 export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
   const names = ctx.names;
   const three = (ob.players?.filter((q) => q.alive).length ?? 2) > 2 || !!ctx.three;
   const who = whoOf(ob.you, names);
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
-  const myDice = ob.yourDice ?? []; // 盲局/未看骰：按零已见算——这就是他的真实认知
-  const p = (b) => probBidTrue(b, myDice, ob.diceCount.opp, ob.zhai);
+  const p = (b) => obProb(ob, b); // 已知骰＝自见骰＋他人亮出的明骰（词条「亮」）
   const fmtP = persona.gear?.probInject === 'coarse' ? (v) => coarse(v) : (v) => pct(v);
   const top = [...bids].sort((a, b) => p(b) - p(a)).slice(0, 6);
   const isBlind = ob.blind?.[ob.you];
-  const diceLine = ob.yourDice
-    ? `你 ${ob.diceCount.you} 颗骰：[${ob.yourDice.join(', ')}]`
-    : isBlind
-      ? `你宣了盲——这局不看自己的骰盅（池已翻倍），${ob.diceCount.you} 颗骰蒙着打`
-      : `你还没掀自己的骰盅（${ob.diceCount.you} 颗）`;
+  const myShown = ob.shown?.[ob.you] ?? [];
+  const diceLine =
+    (ob.yourDice
+      ? `你 ${ob.diceCount.you} 颗骰：[${ob.yourDice.join(', ')}]`
+      : isBlind
+        ? `你宣了盲——这局不看自己的骰盅（池已翻倍），${ob.diceCount.you} 颗骰蒙着打`
+        : `你还没掀自己的骰盅（${ob.diceCount.you} 颗）`) +
+    (myShown.length ? `，其中你已亮给全桌：${myShown.join('、')}` : '');
+  const shownLine = (q) => {
+    const s = ob.shown?.[q.id] ?? [];
+    return s.length ? `（已亮出 ${s.join('、')}）` : '';
+  };
   const tableLine = three
     ? `桌上：${ob.players
         .filter((q) => q.id !== ob.you)
-        .map((q) => `${who(q.id)}${q.alive ? ` ${q.diceCount} 颗暗骰` : '（已出局）'}`)
+        .map((q) => `${who(q.id)}${q.alive ? ` ${q.diceCount} 颗暗骰${shownLine(q)}` : '（已出局）'}`)
         .join('，')}`
-    : `对方 ${ob.diceCount.opp} 颗暗骰`;
+    : `对方 ${ob.diceCount.opp} 颗暗骰${shownLine(ob.players.find((q) => q.id !== ob.you) ?? { id: null })}`;
   const bidder = ob.currentBid ? who(ob.currentBid.player) : null;
+  const returned = ob.currentBid && ob.currentBid.player === ob.you && ob.turn === ob.you; // 让报：自己的价被推回来了
+  const legalMods = ob.legal.filter((a) => modActionMeta(ob, a.type)).map((a) => modActionMeta(ob, a.type));
   const facts = [
     `第 ${ob.round} 局。${diceLine}，${tableLine}。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
+    ob.mods?.length
+      ? `本桌实验词条（明牌，全桌同权）：${ob.mods.map((m) => `「${m.name}」＝${m.card}`).join('　')}`
+      : null,
     matchRecap(ob.events, ob.you, names) ? `本场前情：${matchRecap(ob.events, ob.you, names)}。` : null,
     `本局进程：${narrate(ob.events, ob.you, names)}。`,
-    ob.currentBid
-      ? persona.gear?.probInject === 'coarse'
-        ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
-        : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
-      : `你是首报（数量至少 2）。`,
+    returned
+      ? `注意：你报的「${ob.currentBid.count} 个 ${ob.currentBid.face}」被原样推了回来——你必须自己继续抬，不能开自己的价。`
+      : ob.currentBid
+        ? persona.gear?.probInject === 'coarse'
+          ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
+          : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
+        : `你是首报（数量至少 2）。`,
     `可选动作：${[
-      ob.currentBid && `开牌`,
+      ob.legal.some((a) => a.type === 'challenge') && `开牌`,
       bids.length &&
         `抬价（候选：${top.map((b) => `${b.count}个${b.face}=${fmtP(p(b))}`).join('，')}；也可报其他合法阶梯）`,
       ...ob.legal
@@ -128,6 +170,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
             ? `拍「抬」（本局池×2，每局限一次）后再行动`
             : `宣言「${DECL[a.declaration]}」后再报`,
         ),
+      ...legalMods.map((meta) => modCandidateLine(meta, ob, fmtP)),
       !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
     ]
       .filter(Boolean)
@@ -142,7 +185,10 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       ? '【节拍要求】你在第 3 局结束前，至少要有一句台词引用对方本场更早的具体行为（让他知道你在记）。'
       : null,
   ].filter(Boolean);
-  return { system: personaSystem(persona, three), user: facts.join('\n') };
+  const modSpec = modActionsOf(ob)
+    .map((a) => `或{"type":"${a.type}"${a.params === 'face' ? ',"face":F' : ''}}（词条「${a.label}」）`)
+    .join('');
+  return { system: personaSystem(persona, three, modSpec), user: facts.join('\n') };
 }
 
 export function parseDecision(text, ob) {
@@ -151,6 +197,7 @@ export function parseDecision(text, ob) {
     const j = JSON.parse(m[0]);
     const a = j.action;
     const total = ob.diceCount.you + ob.diceCount.opp;
+    const modMeta = modActionMeta(ob, a.type);
     const ok =
       (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
       (a.type === 'challenge' && ob.legal.some((x) => x.type === 'challenge')) ||
@@ -158,7 +205,10 @@ export function parseDecision(text, ob) {
         ob.legal.some((x) => x.type === 'bid') &&
         isLegalBid(a, ob.currentBid, ob.zhai, total)) ||
       (a.type === 'declare' &&
-        ob.legal.some((x) => x.type === 'declare' && x.declaration === a.declaration));
+        ob.legal.some((x) => x.type === 'declare' && x.declaration === a.declaration)) ||
+      (modMeta &&
+        ob.legal.some((x) => x.type === a.type) &&
+        (modMeta.params !== 'face' || (Number.isInteger(a.face) && (ob.yourDice ?? []).includes(a.face))));
     if (!ok) return null;
     return {
       action:
@@ -166,9 +216,11 @@ export function parseDecision(text, ob) {
           ? { type: 'bid', count: a.count, face: a.face }
           : a.type === 'declare'
             ? { type: 'declare', declaration: a.declaration }
-            : a.type === 'peek'
-              ? { type: 'peek' }
-              : { type: 'challenge' },
+            : modMeta
+              ? { type: a.type, ...(modMeta.params === 'face' ? { face: a.face } : {}) }
+              : a.type === 'peek'
+                ? { type: 'peek' }
+                : { type: 'challenge' },
       say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
       note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
     };

@@ -1,6 +1,9 @@
 // 规则引擎（DESIGN §2、§2.5、§4）。N 人桌：轮转报数、开只开上家、淘汰至一人独存。
 // 架构宪法：引擎只暴露玩家接口 observe()/act()，对面是人是 AI 不知也不问。
 // 他人骰面不存在于 observe 返回的 schema 中——公平由 schema 强制。
+//
+// 词条运行时（§8 实验桌，Q32/Q37/Q39）：词条＝纯数据 AST（窗口谓词 × 效果原子），
+// 引擎按原子解释执行，运行期零 LLM 裁判。官方词条与玩家许愿共用同一语法（原子库见 src/mods/catalog.js）。
 
 import { isLegalBid, bidStands, countBid, allLegalBids } from './rules.js';
 
@@ -34,6 +37,8 @@ export const DEFAULTS = {
 export async function createMatch({ seed, config = {} } = {}) {
   const cfg = { ...DEFAULTS, ...config };
   const players = cfg.players ?? ['A', 'B'];
+  const mods = cfg.mods ?? []; // 词条（明牌规则卡）：已过静态校验的 AST
+  const modActs = mods.flatMap((m) => m.actions.map((a) => ({ mod: m, a })));
   const rng = mulberry32(seed ?? 1);
   const nonceGen = () =>
     Array.from({ length: 16 }, () => Math.floor(rng() * 16).toString(16)).join('');
@@ -41,10 +46,12 @@ export async function createMatch({ seed, config = {} } = {}) {
   // 私有状态（闭包内，永不整体外泄）
   const diceCount = {};
   const chips = {};
+  const usedMatch = {}; // 词条限次（每场）
   for (const p of players) {
     diceCount[p] = cfg.startDice;
     // startChips 可为 {A,B,...}（跨场账本续上回）或数字（全桌同额）
     chips[p] = typeof cfg.startChips === 'object' ? cfg.startChips[p] : cfg.startChips;
+    usedMatch[p] = {};
   }
   const events = []; // 公开事件流，全桌同构可见
   const eliminatedOrder = []; // 出局顺序（场终名次用）
@@ -59,6 +66,9 @@ export async function createMatch({ seed, config = {} } = {}) {
   let blind = null;
   let zhai = false;
   let raises = null; // Q22「抬」：{p: bool}，每人每局限一次，全桌对等生效
+  let shown = {}; // 词条「亮」：{p: [faces]} 本局公开亮出的自骰（公开事实，仍算手里的骰）
+  let usedRound = {}; // 词条限次（每局）
+  let modPotFactor = 1; // 词条 potMult 原子的本局倍率
 
   const alive = (p) => diceCount[p] > 0;
   const aliveList = () => players.filter(alive);
@@ -74,11 +84,12 @@ export async function createMatch({ seed, config = {} } = {}) {
   const totalDice = () => players.reduce((s, p) => s + diceCount[p], 0);
   const currentBid = () => (bids.length ? bids.at(-1) : null);
   const emit = (e) => events.push({ i: events.length, ...e });
-  // §2.2/Q22 赔率乘法叠加：每名盲者 ×2、每记「抬」×2、斋 ×1.5、深水线（第 6 档起）×2
+  // §2.2/Q22 赔率乘法叠加：每名盲者 ×2、每记「抬」×2、斋 ×1.5、深水线（第 6 档起）×2、词条倍率
   const potMult = () =>
     aliveList().reduce((m, p) => m * (blind[p] ? 2 : 1) * (raises[p] ? 2 : 1), 1) *
     (zhai ? 1.5 : 1) *
-    (bids.length >= 6 ? 2 : 1);
+    (bids.length >= 6 ? 2 : 1) *
+    modPotFactor;
 
   async function startRound(first) {
     round += 1;
@@ -88,6 +99,9 @@ export async function createMatch({ seed, config = {} } = {}) {
     blind = {};
     const commits = {};
     raises = {};
+    shown = {};
+    usedRound = {};
+    modPotFactor = 1;
     for (const p of aliveList()) {
       dice[p] = Array.from({ length: diceCount[p] }, () => 1 + Math.floor(rng() * 6));
       nonces[p] = nonceGen();
@@ -95,6 +109,8 @@ export async function createMatch({ seed, config = {} } = {}) {
       peeked[p] = false;
       blind[p] = false;
       raises[p] = false;
+      shown[p] = [];
+      usedRound[p] = {};
     }
     turn = first;
     firstBidder = first;
@@ -115,10 +131,65 @@ export async function createMatch({ seed, config = {} } = {}) {
       acts.push({ type: 'declare', declaration: 'zhai' });
     if (!raises[p]) acts.push({ type: 'declare', declaration: 'raise' });
     if (allLegalBids(currentBid(), zhai, totalDice()).length > 0) acts.push({ type: 'bid' });
-    // §2.5：开只能开上家——轮转报数下当前报价者必为你的上家，challenge 天然指向上家
-    if (bids.length > 0) acts.push({ type: 'challenge' });
+    // §2.5：开只能开上家——轮转报数下当前报价者必为你的上家。
+    // 「让报」词条可把报价推回报价者本人，故须挡"开自己的价"（基础局中此条件恒真）。
+    if (bids.length > 0 && currentBid().player !== p) acts.push({ type: 'challenge' });
+    // 词条动作：窗口谓词逐条评估（全部只在自己回合，schema 校验强制 turn=true）
+    for (const { a } of modActs) {
+      const w = a.window ?? {};
+      const cb = currentBid();
+      if (w.needBid && !cb) continue;
+      if (w.noBid && cb) continue;
+      if (w.notOwnBid && cb?.player === p) continue;
+      if (w.requiresPeeked && !peeked[p]) continue;
+      if (w.oncePer === 'round' && (usedRound[p]?.[a.type] ?? 0) >= 1) continue;
+      if (w.oncePer === 'match' && (usedMatch[p]?.[a.type] ?? 0) >= 1) continue;
+      if (w.minBids != null && bids.length < w.minBids) continue;
+      if (w.maxBids != null && bids.length > w.maxBids) continue;
+      // 防死局：推回去的人必须还抬得动
+      if (w.needRaisableByBidder && !(cb && allLegalBids(cb, zhai, totalDice()).length > 0)) continue;
+      acts.push({ type: a.type });
+    }
     return acts;
   }
+
+  // 结算共用件：胜者收池（其余活人各付 units×mult），返回转移明细
+  function payout(winner) {
+    const pay = Math.round((1 + bids.length) * potMult());
+    const transfers = {};
+    let pot = 0;
+    for (const q of aliveList())
+      if (q !== winner) {
+        transfers[q] = -pay;
+        chips[q] -= pay;
+        pot += pay;
+      }
+    transfers[winner] = pot;
+    chips[winner] += pot;
+    return { pay, transfers };
+  }
+
+  // 终局判定共用件：一人独存则场终，否则开下一局
+  async function finishRound(nextFirst, fallbackWinner) {
+    if (aliveList().length <= 1) {
+      over = true;
+      const champion = aliveList()[0] ?? fallbackWinner;
+      emit({
+        type: 'matchEnd',
+        winner: champion,
+        standings: [champion, ...[...eliminatedOrder].reverse()],
+        rounds: round,
+        chips: { ...chips },
+      });
+    } else {
+      await startRound(nextFirst);
+    }
+  }
+
+  const revealSnapshot = () => ({
+    dice: Object.fromEntries(aliveList().map((p) => [p, [...dice[p]]])),
+    nonces: { ...nonces },
+  });
 
   async function settle(challenger) {
     const bid = currentBid();
@@ -128,8 +199,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     const winner = stands ? bid.player : challenger; // 开牌局的胜者收池
     emit({
       type: 'reveal',
-      dice: Object.fromEntries(aliveList().map((p) => [p, [...dice[p]]])),
-      nonces: { ...nonces },
+      ...revealSnapshot(),
       bid: { ...bid },
       challenger,
       actual: countBid(bid, all, zhai),
@@ -138,19 +208,8 @@ export async function createMatch({ seed, config = {} } = {}) {
       loser,
     });
     // 注池（§2.2/§2.5）：全桌各底注 1、每次报数全桌各追 1；胜者收池——第三方的注跟池走
-    const units = 1 + bids.length;
-    const mult = potMult(); // 赔率四舍五入前累乘（盲/抬/斋/深水）
-    const pay = Math.round(units * mult);
-    const transfers = {};
-    let pot = 0;
-    for (const p of aliveList())
-      if (p !== winner) {
-        transfers[p] = -pay;
-        chips[p] -= pay;
-        pot += pay;
-      }
-    transfers[winner] = pot;
-    chips[winner] += pot;
+    const mult = potMult(); // 赔率四舍五入前累乘（盲/抬/斋/深水/词条）
+    const { pay, transfers } = payout(winner);
     diceCount[loser] -= 1;
     if (diceCount[loser] === 0) eliminatedOrder.push(loser);
     emit({
@@ -164,20 +223,89 @@ export async function createMatch({ seed, config = {} } = {}) {
       chips: { ...chips },
       diceCount: { ...diceCount },
     });
-    if (aliveList().length <= 1) {
-      over = true;
-      const champion = aliveList()[0] ?? winner;
-      emit({
-        type: 'matchEnd',
-        winner: champion,
-        standings: [champion, ...[...eliminatedOrder].reverse()],
-        rounds: round,
-        chips: { ...chips },
-      });
+    // §2.1 输家先报（并握斋权）；输家出局则其下家先报
+    await finishRound(alive(loser) ? loser : nextAlive(loser), winner);
+  }
+
+  // 词条「掐」（Q37 Perudo Calza）：宣布报价恰好为真并开牌。
+  // 掐对＝掐者赢回一颗骰（唯一回骰通道，上限=起始骰数）并收池；掐错＝掐者掉一颗骰、报价者收池。
+  // 被掐的报价者永不掉骰。下一局：掐对→报价者先报；掐错→掐者（输家）先报。
+  async function settleCalza(caller) {
+    const bid = currentBid();
+    const all = aliveList().flatMap((p) => dice[p]);
+    const actual = countBid(bid, all, zhai);
+    const exact = actual === bid.count;
+    const winner = exact ? caller : bid.player;
+    const loser = exact ? null : caller;
+    emit({
+      type: 'reveal',
+      ...revealSnapshot(),
+      bid: { ...bid },
+      challenger: caller,
+      calza: true,
+      exact,
+      actual,
+      zhai,
+      stands: bidStands(bid, all, zhai),
+      loser,
+    });
+    const mult = potMult();
+    const { pay, transfers } = payout(winner);
+    if (exact) {
+      diceCount[caller] = Math.min(cfg.startDice, diceCount[caller] + 1);
     } else {
-      // §2.1 输家先报（并握斋权）；输家出局则其下家先报
-      await startRound(alive(loser) ? loser : nextAlive(loser));
+      diceCount[caller] -= 1;
+      if (diceCount[caller] === 0) eliminatedOrder.push(caller);
     }
+    emit({
+      type: 'roundEnd',
+      round,
+      calza: true,
+      exact,
+      caller,
+      loser,
+      winner,
+      transfer: pay,
+      transfers,
+      mult,
+      chips: { ...chips },
+      diceCount: { ...diceCount },
+    });
+    await finishRound(exact ? bid.player : alive(caller) ? caller : nextAlive(caller), winner);
+  }
+
+  // 词条效果原子（引擎侧预实现，Q38"原子预审预实现"）；参数已在 legal 检查后到达
+  async function applyMod(p, { mod, a }, action, base) {
+    // 参数先验后计数：revealOwnDie 需要 face 且必须真在手里
+    if (a.effect.some((e) => e.op === 'revealOwnDie')) {
+      if (!Number.isInteger(action.face) || !dice[p].includes(action.face))
+        throw new Error('no such die');
+    }
+    usedRound[p][a.type] = (usedRound[p][a.type] ?? 0) + 1;
+    usedMatch[p][a.type] = (usedMatch[p][a.type] ?? 0) + 1;
+    for (const ef of a.effect) {
+      switch (ef.op) {
+        case 'revealOwnDie':
+          shown[p].push(action.face);
+          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, face: action.face, ...base });
+          break;
+        case 'potMult':
+          modPotFactor *= ef.x ?? 2;
+          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, x: ef.x ?? 2, ...base });
+          break;
+        case 'returnBid':
+          turn = currentBid().player;
+          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, to: turn, ...base });
+          break;
+        case 'calzaResolve':
+          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, ...base });
+          await settleCalza(p);
+          break;
+        default:
+          throw new Error(`unknown op ${ef.op}`);
+      }
+    }
+    // keepTurn（声明式动作）：行动权保留；returnBid/calzaResolve 已自行处理 turn/round
   }
 
   // meta.elapsedMs 由宿主提供（决定性回放：引擎不读时钟）；用时是阅读材料（§2.4）
@@ -213,13 +341,19 @@ export async function createMatch({ seed, config = {} } = {}) {
         emit({ type: 'challenge', ...base });
         await settle(p);
         return;
-      default:
-        throw new Error(`unknown action ${action.type}`);
+      default: {
+        const ma = modActs.find((x) => x.a.type === action.type);
+        if (!ma || !legal.some((x) => x.type === action.type))
+          throw new Error(`illegal ${action.type}`);
+        await applyMod(p, ma, action, base);
+        return;
+      }
     }
   }
 
   // 玩家接口（§4.1）：自己的骰子 ＋ 公开事件流，别无其他。
   // diceCount.opp = 场上未知骰总数（他人合计）——概率计算的正确输入，2 人时即对方骰数。
+  // shown = 全桌公开亮出的明骰（公开事实，双方同见）；mods = 本桌词条规则卡（明牌）。
   function observe(p) {
     if (!players.includes(p)) throw new Error(`unknown player ${p}`);
     return structuredClone({
@@ -243,6 +377,20 @@ export async function createMatch({ seed, config = {} } = {}) {
       chips: { you: chips[p], opp: players.length === 2 ? chips[nextAlive(p)] : null },
       currentBid: currentBid(),
       potUnits: 1 + bids.length,
+      shown,
+      mods: mods.map((m) => ({
+        id: m.id,
+        name: m.name,
+        card: m.card,
+        actions: m.actions.map((a) => ({
+          type: a.type,
+          label: a.label,
+          params: a.params ?? null,
+          keepTurn: !!a.keepTurn,
+          terminal: !!a.terminal,
+          ops: a.effect.map((e) => e.op),
+        })),
+      })),
       legal: legalActions(p),
       events,
     });
