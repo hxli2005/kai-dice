@@ -311,7 +311,6 @@ main {
 #bidBig .x { font-size: 1.2rem; color: var(--dim); }
 #bidBig .none { font-size: 1rem; color: var(--dim); letter-spacing: 0.3em; }
 #hint { font-size: 0.8rem; color: var(--dim); min-height: 1.2rem; text-align: center; }
-main #timer { width: 9rem; margin: 0.5rem 0 0.2rem; }
 
 /* ---------- 骰子 ---------- */
 .dicerow { display: flex; gap: 0.45rem; margin-top: 0.3rem; }
@@ -360,14 +359,6 @@ footer {
   padding: 0 1rem calc(env(safe-area-inset-bottom) + 0.9rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
-#timer { height: 2px; background: rgba(242, 232, 213, 0.12); border-radius: 1px; }
-#timer i {
-  display: block; height: 100%;
-  background: var(--lamp);
-  border-radius: 1px;
-  transform-origin: left;
-}
-#timer.low i { background: var(--red-hi); }
 #gauge {
   font-size: 0.82rem; color: var(--dim);
   text-align: center; min-height: 1.3rem; margin-bottom: 0.55rem;

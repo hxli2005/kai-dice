@@ -33,6 +33,28 @@ function narrate(events, you) {
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
 
+// 本场前情（§5.3-bis）：此前各局一句话事实——"第 3 局前引用早期行为"的原料
+function matchRecap(events, you) {
+  const rounds = [];
+  let cur = null;
+  for (const e of events) {
+    if (e.type === 'roundStart') cur = { round: e.round, challenger: null, out: null };
+    else if (!cur) continue;
+    else if (e.type === 'challenge') cur.challenger = e.player;
+    else if (e.type === 'reveal') cur.out = e;
+    else if (e.type === 'roundEnd') rounds.push(cur);
+  }
+  const who = (p) => (p === you ? '你' : '对方');
+  return rounds
+    .map((r) => {
+      if (!r.out) return '';
+      const b = r.out.bid;
+      return `第${r.round}局：${who(b.player)}报${b.count}个${b.face}被${who(r.challenger)}开，${r.out.stands ? '成立' : '不成立'}，${who(r.out.loser)}掉一骰`;
+    })
+    .filter(Boolean)
+    .join('；');
+}
+
 export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
@@ -40,6 +62,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
   const top = [...bids].sort((a, b) => p(b) - p(a)).slice(0, 6);
   const facts = [
     `第 ${ob.round} 局。你 ${ob.diceCount.you} 颗骰：[${ob.yourDice.join(', ')}]，对方 ${ob.diceCount.opp} 颗暗骰。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
+    matchRecap(ob.events, ob.you) ? `本场前情：${matchRecap(ob.events, ob.you)}。` : null,
     `本局进程：${narrate(ob.events, ob.you)}。`,
     ob.currentBid
       ? `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}。`
@@ -55,7 +78,10 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
       .filter(Boolean)
       .join('；')}。`,
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
-  ];
+    ob.round >= 2 && ob.round <= 3
+      ? '【节拍要求】你在第 3 局结束前，至少要有一句台词引用对方本场更早的具体行为（让他知道你在记）。'
+      : null,
+  ].filter(Boolean);
   return { system: personaSystem(persona), user: facts.join('\n') };
 }
 

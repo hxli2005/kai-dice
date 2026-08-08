@@ -16,7 +16,7 @@ document.addEventListener('pointerdown', unlockAudio, { once: true });
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (p) => `${Math.round(p * 100)}%`;
-const TURN_MS = 20_000; // §2.4 软计时
+const IDLE_MS = 30_000; // §2.4（Q19 修订）：无倒计时无超时代报；挂机 >30s 人设催话
 
 const PIPS = {
   1: ['c'], 2: ['tl', 'br'], 3: ['tl', 'c', 'br'], 4: ['tl', 'tr', 'bl', 'br'],
@@ -27,7 +27,7 @@ const dieHtml = (face, cls = '') =>
 const backHtml = (cls = '') => `<span class="die back ${cls}"></span>`;
 
 let profile = loadProfile();
-let match, opponent, myDiceByRound, sel, busy, turnStart, timerRAF, typeTimer;
+let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer, typeTimer;
 
 // 零配置官方通道（§9.2）：只填暗号 → 同域 /api/llm 代理；三格全填 → 自带 API
 function channelOf() {
@@ -367,38 +367,21 @@ function hintFor(o, myTurn) {
 }
 
 // ---------- 计时（§2.4：超时＝最小抬价，本身即信号） ----------
-function startTimer() {
+// §2.4（Q19）：不设钟。turnStart 只做用时记录基准；挂机 >30s 人设催一句（循环换句，无机制后果）
+function armIdle() {
   turnStart = performance.now();
-  cancelAnimationFrame(timerRAF);
-  const bar = $('timer');
-  const tick = () => {
-    const left = 1 - (performance.now() - turnStart) / TURN_MS;
-    bar.firstElementChild.style.transform = `scaleX(${Math.max(0, left)})`;
-    bar.classList.toggle('low', left < 0.25);
-    if (left <= 0) return onTimeout();
-    timerRAF = requestAnimationFrame(tick);
+  clearTimeout(idleTimer);
+  const nag = () => {
+    const o = ob();
+    if (o.turn !== 'A' || o.over || busy) return;
+    const lines = opponent?.persona?.idle ?? [];
+    if (lines.length) speak(lines[Math.floor(Math.random() * lines.length)]);
+    idleTimer = setTimeout(nag, IDLE_MS);
   };
-  tick();
+  idleTimer = setTimeout(nag, IDLE_MS);
 }
-function stopTimer() {
-  cancelAnimationFrame(timerRAF);
-  $('timer').firstElementChild.style.transform = 'scaleX(1)';
-  $('timer').classList.remove('low');
-}
-
-async function onTimeout() {
-  const o = ob();
-  if (o.turn !== 'A' || o.over || busy) return;
-  stopTimer();
-  const bids = allLegalBids(o.currentBid, o.zhai, o.diceCount.you + o.diceCount.opp);
-  if (bids.length) {
-    await match.act('A', { type: 'bid', ...bids[0] }, { elapsedMs: TURN_MS, timeout: true });
-    render();
-    $('hint').textContent = '手停了——替你抬了最小价';
-    aiTurn();
-  } else {
-    doChallenge('A', TURN_MS, true);
-  }
+function disarmIdle() {
+  clearTimeout(idleTimer);
 }
 
 // ---------- 玩家动作 ----------
@@ -419,7 +402,7 @@ async function onDeclare(declaration) {
 }
 
 async function onBid() {
-  stopTimer();
+  disarmIdle();
   await match.act('A', { type: 'bid', ...sel }, { elapsedMs: performance.now() - turnStart });
   sfx.tick();
   render();
@@ -457,13 +440,13 @@ async function aiTurn() {
   busy = false;
   if (d.action.type === 'declare') return aiTurn();
   render();
-  startTimer();
+  armIdle();
 }
 
 // ---------- 开牌演出（juice 预算全在这一拍，§6） ----------
 async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') {
   busy = true;
-  stopTimer();
+  disarmIdle();
   muteBubble();
   if (by === 'A' && elapsedMs === null) elapsedMs = performance.now() - turnStart;
   await match.act(by, { type: 'challenge' }, { elapsedMs, timeout });
@@ -529,7 +512,7 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   showDelta(youLose ? -re.transfer : re.transfer);
   const next = ob();
   myDiceByRound[next.round] = null;
-  if (next.turn === 'A') startTimer();
+  if (next.turn === 'A') armIdle();
   else aiTurn();
 }
 
@@ -599,7 +582,7 @@ async function showReport(end) {
 function openDrawer(section) {
   const d = $('drawer');
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
-  stopTimer(); // 看规矩不吃决策钟；关闭时重开当轮
+  disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <h2>规矩</h2>
@@ -611,7 +594,7 @@ function openDrawer(section) {
       <li>注池：每局双方各押 1 注底，此后每报一次数、双方各自动加 1 注。开牌定归属。</li>
       <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。</li>
       <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
-      <li>每手 20 秒。超时自动替你抬最小价——你的犹豫，他看得见、记得住。</li>
+      <li>不限时。骰子不催人——但你手停多久，他都看着，也记着。</li>
       <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
     <h2 id="profileSec">它眼中的你</h2>
@@ -653,7 +636,7 @@ function openDrawer(section) {
   d.querySelector('#closeDrawer').addEventListener('click', () => {
     d.classList.add('hidden');
     const o = ob();
-    if (o.turn === 'A' && !o.over && !busy) startTimer();
+    if (o.turn === 'A' && !o.over && !busy) armIdle();
   });
   d.querySelector('#saveByok').addEventListener('click', async () => {
     saveByok({
@@ -689,22 +672,37 @@ async function newMatch() {
   busy = false;
   fallbackNoticed = false;
   sfx.shake();
-  speak(
-    profile.matches === 0
-      ? '坐。规矩就一条：只能把话越报越大，不信就开。'
-      : ledger.you <= 0
-        ? `账上你欠着 ${-ledger.you}。先赊着，骰子照摇。`
-        : `又来了。第 ${profile.matches + 1} 场，你账上还剩 ${ledger.you}。摇盅。`,
-  );
+  speak(openerLine(ledger));
   render();
-  startTimer();
+  armIdle();
   showCoach();
+}
+
+// 开场白（§5.3-bis 硬节拍）：回头客第一句必须引用上一场的具体事实——记忆的展示窗
+function openerLine(ledger) {
+  if (profile.matches === 0) return '坐。规矩就一条：只能把话越报越大，不信就开。';
+  const last = profile.stats.at(-1);
+  if (ledger.you <= 0) return `账上你欠着 ${-ledger.you}。先赊着，骰子照摇。`;
+  if ((profile.resets ?? 0) > 0 && ledger.you === 100 && ledger.opp === 100)
+    return `把账翻篇了？新本子，旧毛病。摇盅。`;
+  if (!last) return `又来了。第 ${profile.matches + 1} 场。摇盅。`;
+  const bits = [];
+  if (last.myChallenges > 0 && last.myChallengeHits === 0)
+    bits.push(`上回你开我 ${last.myChallenges} 次，一次没中`);
+  if (last.bluffRate > 0.5) bits.push(`上回你十句里一半是空的`);
+  if (last.timesChallenged >= 2) bits.push(`上回被我掀了 ${last.timesChallenged} 回`);
+  if (last.slowest && last.slowest.ms > 8000)
+    bits.push(`上回第 ${last.slowest.round} 局你手停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
+  if (last.myBlinds >= 2) bits.push(`上回你盲了 ${last.myBlinds} 把，胆子是真肥`);
+  if (!bits.length)
+    bits.push(last.won ? `上回让你赢了一场，我记着` : `上回你输得不难看，但还是输`);
+  return `${bits[0]}——我可没忘。摇盅。`;
 }
 
 // ---------- 新手指引（首次打开一次）：箭头标注三个操作点 ----------
 function showCoach() {
   if (localStorage.getItem('kai.coach.v1') || profile.matches > 0) return;
-  stopTimer();
+  disarmIdle();
   // 标注分道：sxF/exF 指定箭头在文字条与目标上的锚点位，各占横向通道不相交
   const marks = [
     [['myDice'], '① 点骰盅，偷看自己的骰子', 0.30, 0.24, 0.55, 0.5],
@@ -745,7 +743,7 @@ function showCoach() {
     for (const [ids] of marks) for (const id of ids) $(id).classList.remove('coach-glow');
     c.remove();
     const o = ob();
-    if (o.turn === 'A' && !o.over && !busy) startTimer();
+    if (o.turn === 'A' && !o.over && !busy) armIdle();
   });
 }
 
