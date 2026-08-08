@@ -87,6 +87,44 @@ test('createOpponent：LLM 垃圾输出与无通道时降级沉默模式，日�
   assert.equal(noChannel.logs.at(-1).silentFallback, true);
 });
 
+test('自我记忆回灌：同局自己的宣言/台词/心思进下一手提示词，跨调用嘴手不断裂', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'declare', declaration: 'zhai' });
+  const ob = m.observe('A');
+  const { user } = buildPrompts(ob, '', undefined, {
+    ownLog: [{ action: { type: 'declare', declaration: 'zhai' }, say: '斋。两个6等着。', note: '装强，钓他开' }],
+  });
+  assert.match(user, /你自己这局刚做过：宣言了「斋」/);
+  assert.match(user, /嘴上说的是「斋。两个6等着。」/);
+  assert.match(user, /当时心思：装强，钓他开/);
+  assert.match(user, /要么兑现，要么是你有意在诈/);
+  // 输出契约里有嘴手绑定铁律
+  const { system } = buildPrompts(ob, '');
+  assert.match(system, /say 必须贴着你此刻的 action 说/);
+});
+
+test('createOpponent：决策日志自动回灌——第二手调用的提示词含第一手的台词', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  const prompts = [];
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    fetchFn: mockFetch((url, h, body) => {
+      prompts.push(body.messages[1].content);
+      return { choices: [{ message: { content: '{"action":{"type":"declare","declaration":"raise"},"say":"抬了，跑不了","note":"先把池做大"}' } }] };
+    }),
+    persona: { ...(({ id: 'laolitou' }) ), name: '测', identity: '测。', tone: 'mild', style: '', flaws: '', gear: { probInject: 'full', usesBlind: true }, strategy: {} },
+  });
+  await m.act('B', { type: 'peek' });
+  const d1 = await ai.decide(m.observe('B'));
+  assert.equal(d1.action.type, 'declare');
+  await m.act('B', d1.action);
+  await ai.decide(m.observe('B')); // 同局第二手
+  assert.ok(!prompts[0].includes('你自己这局刚做过'), '首手无自我记忆');
+  assert.match(prompts[1], /你自己这局刚做过：宣言了「抬」，嘴上说的是「抬了，跑不了」（当时心思：先把池做大）/);
+});
+
 test('Q28 素颜客席：无人设剧本、保留事实红线与规矩', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });

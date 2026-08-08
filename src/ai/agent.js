@@ -24,7 +24,8 @@ const FACT_LINE =
 const RULES_BRIEF = (three) =>
   `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}
+铁律：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。`;
 
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
 const personaSystem = (p, three, modSpec = '') =>
@@ -102,12 +103,24 @@ function matchRecap(events, you, names) {
 // 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
 const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
 
+// 自己刚才的动作 → 一句话（自我记忆回灌用）
+const ownActDesc = (a) =>
+  a?.type === 'declare'
+    ? `宣言了「${DECL[a.declaration] ?? a.declaration}」`
+    : a?.type === 'bid'
+      ? `报了 ${a.count} 个 ${a.face}`
+      : a?.type === 'peek'
+        ? '掀盅看了骰'
+        : a?.type
+          ? `用了「${a.type}」${a.face ? `（亮出 ${a.face}）` : ''}`
+          : '（无动作）';
+
 // 词条候选动作行：op 驱动的说明（许愿词条同样生效——原子决定语义，不靠 id 白名单）
 function modCandidateLine(meta, ob, fmtP) {
   const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":要亮的点数' : ''}}`;
   let desc = '';
   if (meta.ops.includes('calzaResolve'))
-    desc = `——宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`;
+    desc = `——宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰。方向别搞反：是你主动出手掐对方的报价，台词是"我掐你"，不是"我被掐"`;
   else if (meta.ops.includes('returnBid')) desc = `——把这口价原样推回给报价者，他必须自己接着抬`;
   else if (meta.ops.includes('revealOwnDie'))
     desc = `——亮出自己的一颗骰给全桌看。face 填骰子的点数（1–6，必须真在你手里），不是第几颗；亮出后全桌都看得见这颗骰，台词里若提点数必须就是它，说错当场穿帮`;
@@ -153,6 +166,16 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       : null,
     matchRecap(ob.events, ob.you, names) ? `本场前情：${matchRecap(ob.events, ob.you, names)}。` : null,
     `本局进程：${narrate(ob.events, ob.you, names)}。`,
+    // 自我记忆回灌：每手是独立调用，你自己刚说的话不喂回来就是失忆——
+    // "宣言时放话两个6、报价时报出两个3"这类嘴手断裂的病根在此
+    ctx.ownLog?.length
+      ? `你自己这局刚做过：${ctx.ownLog
+          .map(
+            (l) =>
+              `${ownActDesc(l.action)}${l.say ? `，嘴上说的是「${l.say}」` : ''}${l.note ? `（当时心思：${l.note}）` : ''}`,
+          )
+          .join('；')}。接下来的动作和台词必须接得上这些话——要么兑现，要么是你有意在诈（心里要有数），不许像失忆一样自相矛盾。`
+      : null,
     returned
       ? `注意：你报的「${ob.currentBid.count} 个 ${ob.currentBid.face}」被原样推了回来——你必须自己继续抬，不能开自己的价。`
       : ob.currentBid
@@ -336,7 +359,13 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 提示词拼装也进降级链：任何异常都不许把桌子冻住，最多退成沉默 bot
       let prompts = null;
       try {
-        prompts = buildPrompts(ob, profile, persona, ctx);
+        // 自我记忆回灌：同一局里自己的动作/台词/心思喂回下一手——每手独立调用天然失忆，
+        // 宣言（keepTurn）把一个心理动作拆成两次调用，不回灌就会"说斋两个6、报出两个3"
+        const ownLog = logs
+          .filter((l) => l.round === ob.round && !l.silentFallback && (l.say || l.note))
+          .slice(-4)
+          .map((l) => ({ action: l.action, say: l.say, note: l.note }));
+        prompts = buildPrompts(ob, profile, persona, ownLog.length ? { ...ctx, ownLog } : ctx);
       } catch (e) {
         const decision = { action: silent.decide(ob), say: '', note: '' };
         logs.push({ round: ob.round, facts: null, raw: null, ...decision, silentFallback: true, error: `prompt:${e?.message}` });
