@@ -29,7 +29,7 @@ export const PERSONAS = {
 - 收网才抬：「抬」的章你轻易不拍——只有把人读死、要一口收走的那手才用。所以你一拍抬，等于把"我读死你了"写在脸上。你知道。你不改。`,
     gear: { probInject: 'full', usesBlind: false }, // 装备：每手必算完整概率；不用盲（稳健记仇）
     strategy: { challengeThreshold: 0.25 }, // 沉默模式顶班时沿用的行为参数
-    bankroll: 800, // TODO(Q25) 初始身家占位：酒馆老板三十年家底——玩家的钱从他们身上赢
+    bankroll: 800, // Q25 已裁：三十年家底——玩家的钱从他们身上赢
     // §2.4 催话（2026-08-08 换血：带阴力）
     idle: ['骰子又不咬人。', '茶凉了。第三回。', '我等过十年的账，不差你这一手。', '你这么怕错，怪不得本子上全是你的名字。'],
     pace: 'slow', // 表现层节奏：老李头想得慢
@@ -53,7 +53,7 @@ export const PERSONAS = {
     // 装备（§B.1）：不用计算器（事实粗化注入）、爱盲、决策快
     gear: { probInject: 'coarse', usesBlind: true },
     strategy: { challengeThreshold: 0.35 }, // 沉默顶班：更冲动，容忍度低就开
-    bankroll: 300, // TODO(Q25) 初始身家占位：街口快枪手，家底薄但比客人厚
+    bankroll: 300, // Q25 已裁：街口薄底，仍比客人厚
     // §2.4 催话（2026-08-08 换血：更闹）
     idle: ['喂喂喂，睡了？', '你这一手琢磨出花了？', '开不开报不报，给个响！', '怂就说怂，我不笑你。……噗。'],
     pace: 'fast', // 近乎秒出
@@ -85,7 +85,7 @@ PERSONAS.xiansheng = {
     extra: { thinking: { type: 'disabled' } },
   },
   strategy: { challengeThreshold: 0.2 }, // 精确阈值：沉默顶班也冷
-  bankroll: 500, // TODO(Q25) 初始身家占位：账房的钱不多不少，都在账上
+  bankroll: 500, // 先生数额报设计追认（Q25"后续人设各配各的"）：账房的钱不多不少，都在账上
   idle: ['账不等人。', '（拨了一下算盘）', '客人，钟在走。', '您想。我对账。'],
   pace: 'slow', // 迟，冷——停顿本身是人设
 };

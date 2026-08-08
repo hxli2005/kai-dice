@@ -127,7 +127,7 @@ export function loadLedger(storage = localStorage) {
   return l;
 }
 export function balanceOf(ledger, personaId) {
-  // 客席（model:xxx）默认身家 300——TODO(Q25/Q28④) 占位，与官方人设一并裁
+  // 客席（model:xxx）默认身家 300——Q25 已裁（客席按街口价）
   return (
     ledger.personas[personaId] ??
     PERSONAS[personaId]?.bankroll ??
