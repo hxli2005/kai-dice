@@ -356,7 +356,7 @@ main {
 
 /* ---------- 我的区 ---------- */
 footer {
-  padding: 0 1rem calc(env(safe-area-inset-bottom) + 0.9rem);
+  padding: 0 1rem calc(env(safe-area-inset-bottom) + 1.3rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
 #gauge { font-size: 0.85rem; color: var(--dim); text-align: center; margin-top: 0.35rem; }
@@ -385,11 +385,17 @@ footer {
 #facePick .die.sel { opacity: 1; outline: 2px solid var(--lamp); outline-offset: 1px; }
 #facePick .die:disabled { opacity: 0.12; }
 
-/* 层级：报/开是唯一的全宽主行；盲/斋/抬是三枚搁在桌沿的小圆印（与对面名章同语言）；
-   可点的都抬离屏幕底缘，不可点的筹码垫底当桌边筹码架 */
-#declareRow { display: flex; justify-content: center; gap: 1.4rem; margin: 0.1rem 0 0.75rem; }
+/* 层级：报/开是唯一的全宽主行；盲/斋/抬是三枚拍在桌面下沿的小圆印（与对面名章同语言）——
+   移出高频通道（骰→选→报/开 一气），章归桌面；筹码贴桌心与对面镜像 */
+#declareRow {
+  position: absolute;
+  bottom: 0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 1.4rem;
+}
 #actionRow { display: flex; gap: 0.55rem; }
-footer .meta-line { margin: 0.6rem 0 0; }
+footer .meta-line { margin: 0 0 0.55rem; }
 .stamp {
   flex: none;
   width: 2.7rem; height: 2.7rem; padding: 0;
