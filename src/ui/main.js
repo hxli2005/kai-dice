@@ -779,7 +779,7 @@ async function showReport(end) {
       <button class="ghost" id="lobbyBtn">换桌</button>
       <button class="primary again" id="againBtn">再来一局</button>
     </div>
-    <div class="small-note">截屏即可分享 · 这一场已记进他的本子</div>`;
+    <div class="small-note">截屏即可分享 · 这一场已记进他的本子 · kai-dice.pages.dev</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
     ov.querySelector('#lobbyBtn').addEventListener('click', () => {
       ov.classList.add('hidden');

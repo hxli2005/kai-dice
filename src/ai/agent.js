@@ -206,14 +206,16 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     const raw = await chat(
       channel,
       {
-        system: `你是${persona.name}。你刚在大话骰桌上被打脸了，现在快速修订你对这位客人的判断。规矩：假设必须由给你的事实支撑；证据不足的假设降权；被反例打死的假设保留并记下反例（尸体也是学问）。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        system: `你是${persona.name}。你刚在大话骰桌上被打脸了，现在快速修订你对这位客人的判断。规矩：**假设只写关于客人（人类玩家）的**——其他对手的行为可作背景，不入假设槽；假设必须由给你的事实支撑；证据不足的假设降权；被反例打死的假设保留并记下反例（尸体也是学问）。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
         user: `刚发生的事：${factText}
 你既有的假设：${
           hypotheses.length
             ? hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}${h.misses?.length ? `，反例：${h.misses.join('、')}` : ''}）`).join('；')
             : '（还没有）'
         }`,
-        maxTokens: 300,
+        maxTokens: Math.max(300, persona.gear?.maxTokens ?? 0),
+        timeoutMs: persona.gear?.timeoutMs ?? 10_000,
+        extra: persona.gear?.extra, // 推理型演员（先生）不带这个会烧穿预算回空
       },
       fetchFn,
     );
@@ -234,12 +236,15 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
       channel,
       {
         system: personaSystem(persona).replace(/严格输出一行 JSON[\s\S]*$/, '') +
-          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。顺手全量复盘你对他的规律假设（由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。顺手全量复盘你对他的规律假设（只写关于客人的；由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
           hypotheses.length
             ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`
             : ''
         }`,
+        maxTokens: Math.max(500, persona.gear?.maxTokens ?? 0),
+        timeoutMs: persona.gear?.timeoutMs ?? 10_000,
+        extra: persona.gear?.extra, // 推理型演员（先生）不带这个会烧穿预算回空
       },
       fetchFn,
     );

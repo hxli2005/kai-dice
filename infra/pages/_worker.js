@@ -36,6 +36,10 @@ export default {
         return json({ quota: !!env.QUOTA, secrets: !!(env.FRIEND_PASS && env.DEEPSEEK_KEY), kv, pass });
       }
       if (request.method !== "POST") return json({ error: "POST only" }, 405);
+      // Origin 锁域（§9.7 Q8②）：镜像站在浏览器里带的是自己的 Origin——有 Origin 且非本站即拒。
+      // 无 Origin（curl 等）不拦：威胁模型是"镜像网站白嫖官方通道"，脚本盗刷靠暗号轮换与配额兜底。
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "此暗号只在官方域有效" }, 403);
       if (!env.FRIEND_PASS || !env.DEEPSEEK_KEY) return json({ error: "服务端未配置暗号或 key" }, 503);
       const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
       if (pass !== env.FRIEND_PASS) return json({ error: "暗号不对" }, 401);
