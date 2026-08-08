@@ -4,7 +4,7 @@
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
-import { createOpponent, settleVerdict, reflect } from '../ai/agent.js';
+import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict, condBrief } from './report.js';
@@ -653,8 +653,7 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   cnt.textContent = `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
   ov.querySelector('#rvLine').innerHTML = `${dispName(re.loser)}输了这局，掉一颗骰`;
   sfx.loseDie();
-  const line = sayText ? { text: sayText, seat: by !== 'A' ? by : 'B' } : challengeLine(rv, re);
-  speak(line.text, line.seat);
+  if (sayText) speak(sayText, by !== 'A' ? by : 'B'); // 只有角色自己的话才上屏
   await sleep(600);
   const myDelta = re.transfers?.A ?? 0;
   if (myDelta !== 0) await chipFlight(ov, Math.abs(myDelta), myDelta > 0);
@@ -711,40 +710,8 @@ function roundFactText(rv, re, seat) {
   return `第${re.round}局摊牌：${diceStr}。${who(rv.challenger)}开${who(rv.bid.player)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
 }
 
-// 结算分层话术（§3.5）：全部由摊牌真实数据生成，不许编。返回 {text, seat=说话者}
-function challengeLine(rv, re) {
-  const bidder = rv.bid.player;
-  const challenger = rv.challenger;
-  const winner = re.winner;
-  const say = (seat, text) => ({ seat, text });
-  const pOf = (seat) => {
-    const mine = rv.dice[seat] ?? [];
-    const unknown = Object.entries(rv.dice)
-      .filter(([k]) => k !== seat)
-      .reduce((s, [, d]) => s + d.length, 0);
-    return probBidTrue(rv.bid, mine, unknown, rv.zhai);
-  };
-  // AI 开你
-  if (challenger !== 'A' && bidder === 'A') {
-    const pHis = pOf(challenger);
-    return re.loser === 'A'
-      ? say(challenger, `我算过，你这话只有${pct(pHis)}是真的。骰子替我作证。`)
-      : say(challenger, pHis < 0.4 ? `${pct(pHis)}的话你也敢咬死——这把算你的，记下了。` : '这把是我手快。');
-  }
-  // 你开 AI
-  if (challenger === 'A' && bidder !== 'A') {
-    return re.loser === bidder
-      ? say(bidder, '你赢的这把不是运气，是我本人。已记入档案。')
-      : say(bidder, `我没骗你。${rv.bid.count} 个 ${rv.bid.face}，一个不少。`);
-  }
-  // AI 开 AI（三人桌互咬——赢家说话）
-  if (challenger !== 'A' && bidder !== 'A') {
-    return winner === challenger
-      ? say(challenger, `${NAMES[bidder]}，这种话留着骗客人吧。收钱。`)
-      : say(bidder, `急什么。${rv.bid.count} 个 ${rv.bid.face}，一个不少——${NAMES[challenger]}你付账。`);
-  }
-  return say('B', `${rv.bid.count} 个 ${rv.bid.face}，摊开了。`);
-}
+// 写死的结算话术已废（用户裁决"台词只能出自角色"）：AI 拍开时的台词来自它自己的决策；
+// 玩家开它时，摊牌数据即结论，它的反应留给下一手 LLM（事件流里有完整摊牌）。沉默模式就沉默。
 
 // ---------- 报告卡（§5.2：核心传播物） ----------
 async function showReport(end) {
@@ -1216,32 +1183,42 @@ async function newMatch() {
   busy = false;
   fallbackNoticed = false;
   sfx.shake();
-  speak(openerLine(ledger), 'B');
+  speakOpener(ledger);
   render();
   armIdle();
   showCoach();
 }
 
-// 开场白（§5.3-bis 硬节拍）：回头客第一句必须引用上一场的具体事实——记忆的展示窗
-function openerLine(ledger) {
-  if (profile.matches === 0) return '坐。规矩就一条：只能把话越报越大，不信就开。';
+// 开场白（§5.3-bis 硬节拍）：主家亲口说——LLM 按自己的声口引用旧账；写死的老李头腔已废。
+// 沉默模式不代言（无通道＝无开场白，明显变弱是诚实的）。事实素材全为裁判层中性口径。
+function speakOpener(ledger) {
+  const per = SEAT_PERSONA.B;
+  const ch = chanForPersona(per);
+  if (!ch) return;
+  const gen = matchGen;
   const last = profile.stats.at(-1);
-  if (ledger.you <= 0) return `账上你欠着 ${-ledger.you}。先赊着，骰子照摇。`;
-  if ((profile.resets ?? 0) > 0 && ledger.you === 100 && Object.keys(ledger.personas).length === 0)
-    return `把账翻篇了？新本子，旧毛病。摇盅。`;
-  if (!last) return `又来了。第 ${profile.matches + 1} 场。摇盅。`;
-  // 引用旧账用中性主语：上一场的对手未必是本场主家，"我"字会把别人的账认到自己头上
-  const bits = [];
-  if (last.myChallenges > 0 && last.myChallengeHits === 0)
-    bits.push(`上回你开了 ${last.myChallenges} 次，一次没中`);
-  if (last.bluffRate > 0.5) bits.push(`上回你十句里一半是空的`);
-  if (last.timesChallenged >= 2) bits.push(`上回你被掀了 ${last.timesChallenged} 回`);
-  if (last.slowest && last.slowest.ms > 8000)
-    bits.push(`上回第 ${last.slowest.round} 局你手停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
-  if (last.myBlinds >= 2) bits.push(`上回你盲了 ${last.myBlinds} 把，胆子是真肥`);
-  if (!bits.length)
-    bits.push(last.won ? `上回让你赢了一场，我记着` : `上回你输得不难看，但还是输`);
-  return `${bits[0]}——我可没忘。摇盅。`;
+  const facts = [];
+  facts.push(profile.matches ? `这是他第 ${profile.matches + 1} 场` : '客人是生面孔，第一次上桌');
+  if (ledger.you <= 0) facts.push(`他账上欠着 ${-ledger.you}`);
+  if ((profile.resets ?? 0) > 0) facts.push(`他把账翻篇过 ${profile.resets} 次`);
+  if (last) {
+    if (last.myChallenges > 0) facts.push(`上一场他开了 ${last.myChallenges} 次牌，中了 ${last.myChallengeHits} 次`);
+    if (last.bluffRate > 0.5) facts.push('上一场他一半以上的报价是虚的');
+    if (last.timesChallenged >= 2) facts.push(`上一场他被掀了 ${last.timesChallenged} 回`);
+    if (last.myBlinds >= 2) facts.push(`上一场他盲了 ${last.myBlinds} 把`);
+    if (last.slowest && last.slowest.ms > 8000)
+      facts.push(`上一场第 ${last.slowest.round} 局他停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
+    facts.push(last.won ? '上一场是他赢了' : '上一场他输了');
+  }
+  personaLine(ch, {
+    persona: per,
+    task: profile.matches
+      ? '开场白：老客回来了，开一局。第一句必须引用下面旧账里的一条具体事实——让他知道这儿记着他。'
+      : '开场白：生面孔头回上桌，用你的方式招呼一句、开局。不要讲规则。',
+    facts: facts.join('；'),
+  }).then((line) => {
+    if (line && gen === matchGen && atTable) speak(line, 'B');
+  });
 }
 
 // ---------- 新手指引（首次打开一次）：箭头标注三个操作点 ----------

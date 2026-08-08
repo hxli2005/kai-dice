@@ -177,6 +177,28 @@ export function parseDecision(text, ob) {
   }
 }
 
+// 一句话任务（开场白等）：人设声口、非 JSON、事实锚定——替代写死台词（台词只能出自角色）。
+// 失败返回 null（一句不说；沉默模式不代言）。
+export async function personaLine(channel, { persona, task, facts }, fetchFn) {
+  try {
+    const raw = await chat(
+      channel,
+      {
+        system: `你是${persona.name}，${persona.identity}${TONES[persona.tone] ?? ''}${persona.style ?? ''}${FACT_LINE}`,
+        user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身（一到两句，不要引号、不要解释、不要 JSON）。`,
+        maxTokens: persona.gear?.maxTokens ?? 160,
+        timeoutMs: persona.gear?.timeoutMs ?? 10_000,
+        extra: persona.gear?.extra,
+      },
+      fetchFn,
+    );
+    const line = raw.trim().replace(/^["「『]|["」』]$/g, '');
+    return line ? line.slice(0, 90) : null;
+  } catch {
+    return null;
+  }
+}
+
 // 被打脸即时反思（§3.3 复盘学习触发①）：开错或被反杀的局，当场修订规律假设。
 // 输入全部为已公开信息（开牌即公开，合宪）。失败返回 null（假设不动）。
 export async function reflect(channel, { persona, factText, hypotheses = [] }, fetchFn) {
