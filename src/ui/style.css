@@ -384,9 +384,12 @@ footer {
 #facePick .die.sel { opacity: 1; outline: 2px solid var(--lamp); outline-offset: 1px; }
 #facePick .die:disabled { opacity: 0.12; }
 
+/* 按钮两排对称：宣言章三等分居中，主动作对半镜像 */
+#declareRow { display: flex; gap: 0.55rem; margin-bottom: 0.5rem; }
 #actionRow { display: flex; gap: 0.55rem; }
 .stamp {
-  width: 3.2rem;
+  flex: 1;
+  padding: 0.5rem 0;
   border: 1px solid var(--lamp-dim);
   background: none; color: var(--lamp);
   border-radius: 0.55rem;
@@ -405,7 +408,7 @@ button.primary:disabled { opacity: 0.3; }
 #bidBtn { font-size: 1.05rem; white-space: nowrap; }
 button.primary:active { transform: scale(0.97); }
 button.danger {
-  min-width: 5.6rem;
+  flex: 1;
   padding: 0 0.8rem;
   white-space: nowrap;
   background: var(--red); color: #fff2ea;
