@@ -4,11 +4,11 @@
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
-import { createOpponent, settleVerdict } from '../ai/agent.js';
+import { createOpponent, settleVerdict, reflect } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS, DEFAULT_PERSONA } from '../ai/personas.js';
-import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
+import { computeStats, persona, templateVerdict, condBrief } from './report.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -619,6 +619,22 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   if (myDelta !== 0) await chipFlight(ov, Math.abs(myDelta), myDelta > 0);
   await sleep(1100);
 
+  // §3.3 复盘学习触发①：被打脸的 AI 当场短反思（异步，不挡节拍；输入全为已公开信息）
+  for (const s of seats.slice(1)) {
+    if (re.loser !== s) continue;
+    const ch = channelOf();
+    if (!ch) continue;
+    const ai = opponents[s];
+    const mind = mindOf(profile, ai.persona.id);
+    reflect(ch, { persona: ai.persona, factText: roundFactText(rv, re, s), hypotheses: mind.hypotheses })
+      .then((hyps) => {
+        if (hyps) {
+          mind.hypotheses = hyps;
+          saveProfile(profile);
+        }
+      });
+  }
+
   const end = lastEvent(o, 'matchEnd');
   if (end) return showReport(end);
   ov.classList.add('hidden');
@@ -633,6 +649,15 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   if (re.diceCount.A === 0 && !end)
     $('hint').textContent = '你出局了——坐着看他们收尾';
   driveTurn();
+}
+
+// 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）
+function roundFactText(rv, re, seat) {
+  const who = (p) => (p === seat ? '你' : p === 'A' ? '客人' : NAMES[p]);
+  const diceStr = Object.entries(rv.dice)
+    .map(([q, d]) => `${who(q)}[${d.join(',')}]`)
+    .join('，');
+  return `第${re.round}局摊牌：${diceStr}。${who(rv.challenger)}开${who(rv.bid.player)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
 }
 
 // 结算分层话术（§3.5）：全部由摊牌真实数据生成，不许编。返回 {text, seat=说话者}
@@ -693,7 +718,8 @@ async function showReport(end) {
     `平均思考${(stats.avgTimeMs / 1000).toFixed(1)}秒` +
     (stats.slowest ? `；最久一手：第${stats.slowest.round}局想了${(stats.slowest.ms / 1000).toFixed(0)}秒才报${stats.slowest.bid.count}个${stats.slowest.bid.face}` : '') +
     (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
-    ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '');
+    ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '') +
+    (condBrief(stats) ? `；条件倾向（读心重点）：${condBrief(stats)}` : '');
 
   const ov = $('overlay');
   ov.classList.remove('hidden');
@@ -721,8 +747,18 @@ async function showReport(end) {
   let verdict = null;
   let note = '';
   if (byok) {
-    const r = await settleVerdict(byok, { won, statsText, persona: DEFAULT_PERSONA });
-    if (r) ({ verdict, note } = r);
+    const mindB = mindOf(profile, DEFAULT_PERSONA.id);
+    const r = await settleVerdict(byok, {
+      won,
+      statsText,
+      persona: DEFAULT_PERSONA,
+      hypotheses: mindB.hypotheses,
+    });
+    if (r) {
+      ({ verdict, note } = r);
+      // §3.3 触发②：场终全量复盘——修订后的规律假设入主观层
+      if (r.hypotheses) mindB.hypotheses = r.hypotheses;
+    }
     renderCard(verdict ?? templateVerdict(stats, won));
   }
   // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）
@@ -770,6 +806,7 @@ function openDrawer(section) {
             .join('')}</table>`
         : ''
     }
+    ${mindOf(profile, DEFAULT_PERSONA.id).hypotheses.map((h) => `<p class="note-item">假设：${h.text}（证据${h.hits ?? 0}${h.misses?.length ? `，反例 ${h.misses.join('、')}` : ''}）</p>`).join('')}
     ${mindOf(profile, DEFAULT_PERSONA.id).notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
     <p>身家 ${loadLedger().you}（老李头 ${loadLedger().laolitou} · 阿飞 ${loadLedger().afei}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
     <label>桌型（下一场生效）</label><select id="fTable">
@@ -846,7 +883,7 @@ async function newMatch() {
       channel: channelOf,
       profile: profileBrief(profile, persona.id),
       persona,
-      ctx: { names: NAMES, three: isTrio() },
+      ctx: { names: NAMES, three: isTrio(), hypotheses: mindOf(profile, persona.id).hypotheses },
     });
   }
   opponent = opponents.B; // 老李头：店主、开场白与判词主笔

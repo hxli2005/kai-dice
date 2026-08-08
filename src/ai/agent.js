@@ -112,6 +112,11 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       .filter(Boolean)
       .join('；')}。`,
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
+    ctx.hypotheses?.length
+      ? `你摸出的规律假设（证据不足别硬套）：${ctx.hypotheses
+          .map((h) => `「${h.text}」（证据${h.hits ?? 0}${h.misses?.length ? `，反例：${h.misses.join('、')}` : ''}）`)
+          .join('；')}`
+      : null,
     ob.round >= 2 && ob.round <= 3
       ? '【节拍要求】你在第 3 局结束前，至少要有一句台词引用对方本场更早的具体行为（让他知道你在记）。'
       : null,
@@ -151,21 +156,59 @@ export function parseDecision(text, ob) {
   }
 }
 
-// 结算 1 次调用（§3.1）：场终判词＋档案笔记。失败返回 null，调用方用模板判词。
-export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA }, fetchFn) {
+// 被打脸即时反思（§3.3 复盘学习触发①）：开错或被反杀的局，当场修订规律假设。
+// 输入全部为已公开信息（开牌即公开，合宪）。失败返回 null（假设不动）。
+export async function reflect(channel, { persona, factText, hypotheses = [] }, fetchFn) {
+  try {
+    const raw = await chat(
+      channel,
+      {
+        system: `你是${persona.name}。你刚在大话骰桌上被打脸了，现在快速修订你对这位客人的判断。规矩：假设必须由给你的事实支撑；证据不足的假设降权；被反例打死的假设保留并记下反例（尸体也是学问）。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        user: `刚发生的事：${factText}
+你既有的假设：${
+          hypotheses.length
+            ? hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}${h.misses?.length ? `，反例：${h.misses.join('、')}` : ''}）`).join('；')
+            : '（还没有）'
+        }`,
+        maxTokens: 300,
+      },
+      fetchFn,
+    );
+    const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+    if (!Array.isArray(j.hypotheses)) return null;
+    return j.hypotheses
+      .slice(0, 4)
+      .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }));
+  } catch {
+    return null;
+  }
+}
+
+// 结算 1 次调用（§3.1）：场终判词＋档案笔记＋全量复盘假设（§3.3 触发②）。失败返回 null。
+export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA, hypotheses = [] }, fetchFn) {
   try {
     const raw = await chat(
       channel,
       {
         system: personaSystem(persona).replace(/严格输出一行 JSON[\s\S]*$/, '') +
-          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察"}',
-        user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}`,
+          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。顺手全量复盘你对他的规律假设（由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+        user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
+          hypotheses.length
+            ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`
+            : ''
+        }`,
       },
       fetchFn,
     );
     const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
     if (typeof j.verdict !== 'string') return null;
-    return { verdict: j.verdict.slice(0, 120), note: (j.note ?? '').slice(0, 80) };
+    return {
+      verdict: j.verdict.slice(0, 120),
+      note: (j.note ?? '').slice(0, 80),
+      hypotheses: Array.isArray(j.hypotheses)
+        ? j.hypotheses.slice(0, 4).map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+        : null,
+    };
   } catch {
     return null;
   }

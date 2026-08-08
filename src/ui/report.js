@@ -17,6 +17,15 @@ export function computeStats(events, you, myDiceByRound) {
     myTimes: [],
     slowest: null, // {round, bid, ms}
   };
+  // 条件对比（Q15/T5）：连败后虚报、大池 vs 小池开牌、被开后的首报保守度
+  const cond = {
+    afterLossBids: 0, afterLossBluffs: 0,
+    bigPotOpps: 0, bigPotOpens: 0, smallPotOpps: 0, smallPotOpens: 0,
+    postChalFirstPs: [], allFirstPs: [],
+  };
+  let prevRoundLost = false;
+  let prevRoundChallenged = false;
+  let myFirstBidThisRound = true;
   let round = 0;
   let zhai = false;
   let oppCount = 0;
@@ -27,7 +36,10 @@ export function computeStats(events, you, myDiceByRound) {
       s.rounds = e.round;
       zhai = false;
       depth = 0;
-      oppCount = e.diceCount[you === 'A' ? 'B' : 'A'];
+      myFirstBidThisRound = true;
+      oppCount = Object.entries(e.diceCount)
+        .filter(([k]) => k !== you)
+        .reduce((a, [, v]) => a + v, 0);
     }
     if (e.type === 'declare' && e.declaration === 'zhai') zhai = true;
     if (e.type === 'declare' && e.declaration === 'blind' && e.player === you) s.myBlinds++;
@@ -35,9 +47,23 @@ export function computeStats(events, you, myDiceByRound) {
       depth++;
       if (e.player === you) {
         s.myBids++;
+        // 面对已有报价而选择抬（没开）＝一次放过的开牌机会
+        if (depth > 1) {
+          if (depth >= 4) cond.bigPotOpps++;
+          else cond.smallPotOpps++;
+        }
         const mine = myDiceByRound[round];
-        if (mine && probBidTrue({ count: e.count, face: e.face }, mine, oppCount, zhai) < 0.5)
-          s.myBluffs++;
+        const pv = mine ? probBidTrue({ count: e.count, face: e.face }, mine, oppCount, zhai) : null;
+        if (pv != null && myFirstBidThisRound) {
+          cond.allFirstPs.push(pv);
+          if (prevRoundChallenged) cond.postChalFirstPs.push(pv);
+        }
+        myFirstBidThisRound = false;
+        if (prevRoundLost) {
+          cond.afterLossBids++;
+          if (pv != null && pv < 0.5) cond.afterLossBluffs++;
+        }
+        if (pv != null && pv < 0.5) s.myBluffs++;
         if (e.elapsedMs != null) {
           s.myTimes.push(e.elapsedMs);
           if (!s.slowest || e.elapsedMs > s.slowest.ms)
@@ -47,24 +73,60 @@ export function computeStats(events, you, myDiceByRound) {
     }
     if (e.type === 'reveal') {
       s.ladderDepths.push(depth);
-      const challenger = e.stands ? e.loser : e.loser === 'A' ? 'B' : 'A';
+      const challenger = e.challenger ?? (e.stands ? e.loser : e.loser === 'A' ? 'B' : 'A');
       if (challenger === you) {
         s.myChallenges++;
         if (!e.stands) s.myChallengeHits++;
+        if (depth >= 4) cond.bigPotOpens++;
+        else cond.smallPotOpens++;
+        if (depth >= 4) cond.bigPotOpps++;
+        else cond.smallPotOpps++;
       } else if (e.bid.player === you) {
         s.timesChallenged++;
       }
+      prevRoundLost = e.loser === you;
+      prevRoundChallenged = e.bid.player === you && e.loser === you; // 我被开且输了
     }
   }
   const div = (a, b) => (b ? a / b : 0);
+  const avg = (arr) => (arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : null);
   return {
     ...s,
+    conditional: {
+      afterLossBluffRate: cond.afterLossBids >= 2 ? div(cond.afterLossBluffs, cond.afterLossBids) : null,
+      afterLossBids: cond.afterLossBids,
+      bigPotOpenRate: cond.bigPotOpps >= 2 ? div(cond.bigPotOpens, cond.bigPotOpps) : null,
+      smallPotOpenRate: cond.smallPotOpps >= 2 ? div(cond.smallPotOpens, cond.smallPotOpps) : null,
+      postChalFirstP: avg(cond.postChalFirstPs),
+      baseFirstP: avg(cond.allFirstPs),
+    },
     bluffRate: div(s.myBluffs, s.myBids),
     challengedRate: div(s.timesChallenged, s.myBids),
     hitRate: div(s.myChallengeHits, s.myChallenges),
     avgDepth: div(s.ladderDepths.reduce((a, b) => a + b, 0), s.ladderDepths.length),
     avgTimeMs: div(s.myTimes.reduce((a, b) => a + b, 0), s.myTimes.length),
   };
+}
+
+// 条件倾向 → 人话（Q15：二级证据杀伤力最大；样本不足保持沉默）
+export function condBrief(st) {
+  const c = st.conditional;
+  if (!c) return '';
+  const bits = [];
+  if (c.afterLossBluffRate != null && st.bluffRate != null) {
+    const d = c.afterLossBluffRate - st.bluffRate;
+    if (d > 0.2) bits.push(`输过一局后虚报明显变多（${Math.round(st.bluffRate * 100)}%→${Math.round(c.afterLossBluffRate * 100)}%，上头型）`);
+    else if (d < -0.2) bits.push(`输过一局后明显变老实（虚报${Math.round(st.bluffRate * 100)}%→${Math.round(c.afterLossBluffRate * 100)}%）`);
+  }
+  if (c.bigPotOpenRate != null && c.smallPotOpenRate != null && c.smallPotOpenRate > 0) {
+    if (c.bigPotOpenRate < c.smallPotOpenRate * 0.5)
+      bits.push('池一深就不敢开（大池开牌率不到小池一半）');
+    else if (c.bigPotOpenRate > c.smallPotOpenRate * 1.8)
+      bits.push('池越深越敢开（赌性在大池上）');
+  }
+  if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
+    bits.push('被开过一次，下一局的首报就明显缩');
+  return bits.join('；');
 }
 
 // 酒桌人格（§5.2，附:待定参数表）：按序优先匹配
