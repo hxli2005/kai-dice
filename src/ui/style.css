@@ -503,6 +503,44 @@ button.danger:active { transform: scale(0.95); }
   padding: 0.3rem 0.85rem;
 }
 .mono-sm { font-family: var(--mono); font-size: 0.62rem; word-break: break-all; color: var(--dim); }
+
+/* 他们的本子：每个 AI 一本账——假设、反例、笔记 */
+.book {
+  border: 1px solid rgba(232, 169, 79, 0.18);
+  border-radius: 0.7rem;
+  padding: 0.7rem 0.85rem;
+  margin: 0.7rem 0;
+  background: rgba(242, 232, 213, 0.025);
+}
+.book-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: var(--lamp);
+  letter-spacing: 0.1em;
+  margin-bottom: 0.45rem;
+}
+.hyp {
+  font-size: 0.88rem;
+  color: var(--ink);
+  line-height: 1.65;
+  margin: 0.25rem 0;
+}
+.hyp .tally { color: var(--lamp); font-size: 0.78rem; letter-spacing: 0.1em; }
+.hyp .tally i { font-style: normal; color: var(--red-hi); }
+.insight {
+  border-left: 3px solid var(--red);
+  padding: 0.4rem 0.6rem;
+  margin: 0.6rem 0;
+  font-size: 0.88rem;
+  color: var(--ink);
+  background: rgba(200, 64, 46, 0.07);
+  line-height: 1.6;
+}
+.ledger-line { font-size: 0.85rem; color: var(--dim); margin: 0.3rem 0 0.5rem; }
+.ledger-line b { color: var(--lamp); font-variant-numeric: tabular-nums; font-weight: 400; }
+.dim-line { font-size: 0.82rem; color: var(--dim); }
 #drawer h2 { font-size: 1.1rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.6rem; color: var(--lamp); font-weight: 400; }
 #drawer p, #drawer li { font-size: 0.85rem; color: var(--dim); line-height: 1.7; }
 #drawer ul { padding-left: 1.1rem; }

@@ -782,45 +782,61 @@ function openDrawer(section) {
   disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
   const rsNow = match ? lastEvent(ob(), 'roundStart') : null;
+  const led = loadLedger();
+  const lastStat = profile.stats.at(-1);
+  const insight = lastStat ? condBrief(lastStat) : '';
+  // 每个 AI 一本账：假设（含反例）＋笔记——"它怎么读你"是这一页的主角
+  const bookOf = (per) => {
+    const mind = mindOf(profile, per.id);
+    const hyps = (mind.hypotheses ?? [])
+      .map(
+        (h) =>
+          `<p class="hyp">「${h.text}」<span class="tally">${'✓'.repeat(Math.min(h.hits ?? 0, 5))}${
+            h.misses?.length ? ` <i>✗${h.misses.join(' ✗')}</i>` : ''
+          }</span></p>`,
+      )
+      .join('');
+    const notes = mind.notes.slice(-4).map((n) => `<p class="note-item">${n}</p>`).join('');
+    return `<div class="book">
+      <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}记你</div>
+      ${hyps + notes || '<p class="dim-line">还没记下什么。</p>'}
+    </div>`;
+  };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <nav class="drawer-nav">
-      <a href="#secRules">规矩</a><a href="#profileSec">档案</a><a href="#secSeal">封印</a><a href="#secBrain">接脑子</a>
+      <a href="#profileSec">本子</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a href="#secBrain">脑子</a>
     </nav>
-    <h2 id="secRules">规矩</h2>
-    <ul>
-      <li>你和他各摇五颗暗骰。轮流报数：「桌上至少有 N 个 X 点」——说的是双方合计。</li>
-      <li>报数只能往上抬：数量加大，或数量不变、点数加大。首报至少 2 个。</li>
-      <li>1 点是万能牌，替任何点数凑数。宣过「斋」的局例外。</li>
-      <li>不信他，就拍「开」。数够了，开的人输；不够，报的人输。输家掉一颗骰子，骰子掉光，这场就完了。</li>
-      <li>注池：每局双方各押 1 注底，此后每报一次数、双方各自动加 1 注。开牌定归属。</li>
-      <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。</li>
-      <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
-      <li>三人桌：轮转报数，「开」只能开你上家（上一个报价的人）；开牌局输家掉骰，骰子掉光出局旁观，打到只剩一人。每报一次数全桌各追 1 注，开牌胜者收整池——看客的注也在池里。</li>
-      <li>不限时。骰子不催人——但你手停多久，他都看着，也记着。</li>
-      <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
-    </ul>
-    <h2 id="profileSec">它眼中的你</h2>
-    <p>${profileBrief(profile, DEFAULT_PERSONA.id, false) || '还没有档案。打一场，他就开始记了。'}</p>
+
+    <h2 id="profileSec">他们的本子</h2>
+    <p class="ledger-line">身家　你 <b>${led.you}</b> · 李 <b>${led.laolitou}</b> · 飞 <b>${led.afei}</b>
+      <button id="resetLedger" class="linkish">翻篇</button></p>
+    ${insight ? `<p class="insight">他们盯上的破绽：${insight}</p>` : ''}
     ${
       profile.stats.length
-        ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报率</th><th>开牌</th><th>被开</th><th>均时</th></tr>${profile.stats
-            .slice(-8)
+        ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报</th><th>开牌</th></tr>${profile.stats
+            .slice(-6)
             .map((s, i, arr) => {
               const idx = profile.stats.length - arr.length + i + 1;
-              return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td><td>${s.timesChallenged}</td><td>${(s.avgTimeMs / 1000).toFixed(1)}s</td></tr>`;
+              return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td></tr>`;
             })
             .join('')}</table>`
         : ''
     }
-    ${mindOf(profile, DEFAULT_PERSONA.id).hypotheses.map((h) => `<p class="note-item">假设：${h.text}（证据${h.hits ?? 0}${h.misses?.length ? `，反例 ${h.misses.join('、')}` : ''}）</p>`).join('')}
-    ${mindOf(profile, DEFAULT_PERSONA.id).notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
-    <p>身家 ${loadLedger().you}（老李头 ${loadLedger().laolitou} · 阿飞 ${loadLedger().afei}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
-    <label>桌型（下一场生效）</label><select id="fTable">
-      <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
-      <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
-    </select>
-    <h2 id="secSeal">本局封印</h2>
-    <p>每局开始，各家骰面连同随机数封成哈希先上屏；摊牌时开封可验——谁都不能重掷。</p>
+    ${bookOf(PERSONAS.laolitou)}
+    ${bookOf(PERSONAS.afei)}
+
+    <h2 id="secRules">规矩</h2>
+    <ul>
+      <li>轮流报「桌上共有几个几」，只能往上抬。</li>
+      <li>1 点是万能牌；斋局失效。</li>
+      <li>开只开上家：数够，开的人输；不够，报的人输。输家掉一骰，掉光出局。</li>
+      <li>每报一手，全桌各追 1 注；开牌胜者收整池。</li>
+      <li>盲＝不看骰打全局，池×2　｜　斋＝首报者宣，1 失效，池×1.5。</li>
+      <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
+    </ul>
+
+    <h2 id="secSeal">封印</h2>
+    <p>骰面开局封哈希，摊牌开封可验——谁都不能重掷。你落子前的犹豫不采样。</p>
     ${
       rsNow
         ? Object.entries(rsNow.commits)
@@ -828,19 +844,22 @@ function openDrawer(section) {
             .join('')
         : ''
     }
-    <h2 id="secBrain">接上他们的脑子</h2>
-    <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
+
+    <h2 id="secBrain">脑子</h2>
+    <p>填暗号一格就够；自带 API 则三格全填。空着＝他们只算数，不说话。</p>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
-    <label>API Key</label><input id="fKey" type="password" value="${byok.apiKey}">
+    <label>API Key / 暗号</label><input id="fKey" type="password" value="${byok.apiKey}">
     <label>Model</label><input id="fModel" value="${byok.model}" placeholder="deepseek-chat">
     <label>格式</label><select id="fFmt">
       <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
     </select>
+    <label>桌型（下一场生效）</label><select id="fTable">
+      <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
+      <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
+    </select>
     <div class="btnrow"><button class="primary" id="saveByok">存好，马上生效</button></div>
-    <div id="byokTest" class="test-line"></div>
-    <h2>为什么信它</h2>
-    <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
+    <div id="byokTest" class="test-line"></div>`;
   if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
   else d.scrollTop = 0;
   d.querySelector('#fTable').addEventListener('change', (e) => {
