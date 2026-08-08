@@ -8,10 +8,12 @@ import { probBidTrue } from '../probability.js';
 export function createSilentBot({ challengeThreshold = 0.25 } = {}) {
   return {
     decide(ob) {
-      if (ob.yourDice === null) return { type: 'peek' };
+      if (ob.yourDice === null && ob.legal.some((a) => a.type === 'peek'))
+        return { type: 'peek' };
+      const myDice = ob.yourDice ?? []; // 盲局顶班：按零已见算
       const total = ob.diceCount.you + ob.diceCount.opp;
       const bids = allLegalBids(ob.currentBid, ob.zhai, total);
-      const pTrue = (b) => probBidTrue(b, ob.yourDice, ob.diceCount.opp, ob.zhai);
+      const pTrue = (b) => probBidTrue(b, myDice, ob.diceCount.opp, ob.zhai);
       if (ob.currentBid && (bids.length === 0 || pTrue(ob.currentBid) < challengeThreshold))
         return { type: 'challenge' };
       let best = bids[0];

@@ -14,7 +14,7 @@ const personaSystem = (p) => `你是${p.name}，${p.identity}正和客人玩大�
 ${p.flaws}
 规则提要：双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）；认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。默认 1 点是万能牌（斋局除外）。
 严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"或"blind"},"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"或"blind"}或{"type":"peek"}（未看骰时掀盅），"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 
@@ -55,25 +55,39 @@ function matchRecap(events, you) {
     .join('；');
 }
 
+// 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
+const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
+
 export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
-  const p = (b) => probBidTrue(b, ob.yourDice, ob.diceCount.opp, ob.zhai);
+  const myDice = ob.yourDice ?? []; // 盲局/未看骰：按零已见算——这就是他的真实认知
+  const p = (b) => probBidTrue(b, myDice, ob.diceCount.opp, ob.zhai);
+  const fmtP = persona.gear?.probInject === 'coarse' ? (v) => coarse(v) : (v) => pct(v);
   const top = [...bids].sort((a, b) => p(b) - p(a)).slice(0, 6);
+  const isBlind = ob.blind?.[ob.you];
+  const diceLine = ob.yourDice
+    ? `你 ${ob.diceCount.you} 颗骰：[${ob.yourDice.join(', ')}]`
+    : isBlind
+      ? `你宣了盲——这局不看自己的骰盅（池已翻倍），${ob.diceCount.you} 颗骰蒙着打`
+      : `你还没掀自己的骰盅（${ob.diceCount.you} 颗）`;
   const facts = [
-    `第 ${ob.round} 局。你 ${ob.diceCount.you} 颗骰：[${ob.yourDice.join(', ')}]，对方 ${ob.diceCount.opp} 颗暗骰。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
+    `第 ${ob.round} 局。${diceLine}，对方 ${ob.diceCount.opp} 颗暗骰。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
     matchRecap(ob.events, ob.you) ? `本场前情：${matchRecap(ob.events, ob.you)}。` : null,
     `本局进程：${narrate(ob.events, ob.you)}。`,
     ob.currentBid
-      ? `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}。`
+      ? persona.gear?.probInject === 'coarse'
+        ? `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
+        : `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
       : `你是首报（数量至少 2）。`,
     `可选动作：${[
       ob.currentBid && `开牌`,
       bids.length &&
-        `抬价（高可信候选：${top.map((b) => `${b.count}个${b.face}=${pct(p(b))}`).join('，')}；也可报其他合法阶梯）`,
+        `抬价（候选：${top.map((b) => `${b.count}个${b.face}=${fmtP(p(b))}`).join('，')}；也可报其他合法阶梯）`,
       ...ob.legal
         .filter((a) => a.type === 'declare')
         .map((a) => `宣言「${a.declaration === 'zhai' ? '斋' : '盲'}」后再报`),
+      !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
     ]
       .filter(Boolean)
       .join('；')}。`,
@@ -92,6 +106,7 @@ export function parseDecision(text, ob) {
     const a = j.action;
     const total = ob.diceCount.you + ob.diceCount.opp;
     const ok =
+      (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
       (a.type === 'challenge' && ob.legal.some((x) => x.type === 'challenge')) ||
       (a.type === 'bid' &&
         ob.legal.some((x) => x.type === 'bid') &&
@@ -105,7 +120,9 @@ export function parseDecision(text, ob) {
           ? { type: 'bid', count: a.count, face: a.face }
           : a.type === 'declare'
             ? { type: 'declare', declaration: a.declaration }
-            : { type: 'challenge' },
+            : a.type === 'peek'
+              ? { type: 'peek' }
+              : { type: 'challenge' },
       say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
       note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
     };
@@ -143,7 +160,10 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
     logs,
     persona,
     async decide(ob) {
-      if (ob.yourDice === null) return { action: { type: 'peek' } };
+      const canPeek = ob.legal.some((a) => a.type === 'peek');
+      // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）
+      if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind)
+        return { action: { type: 'peek' } };
       const prompts = buildPrompts(ob, profile, persona);
       const ch = typeof channel === 'function' ? channel() : channel;
       let decision = null;
