@@ -812,6 +812,15 @@ button.danger:active { transform: scale(0.95); }
 .board-row.me { color: var(--lamp); }
 .p-idline { font-size: 0.82rem; color: var(--dim); line-height: 1.75; margin: 0.2rem 0 0.8rem; }
 
+.lobby-note {
+  width: 100%; max-width: 19rem;
+  background: none; border: none;
+  border-left: 2px solid var(--lamp-dim);
+  padding: 0.2rem 0 0.2rem 0.6rem;
+  color: var(--dim); font-family: var(--serif); font-size: 0.76rem;
+  text-align: left; line-height: 1.6; cursor: pointer;
+}
+
 .lobby-links { display: flex; gap: 1.8rem; margin-top: 0.2rem; }
 .lobby-links a {
   color: var(--dim); font-size: 0.8rem; letter-spacing: 0.15em;

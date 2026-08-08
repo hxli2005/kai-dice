@@ -1045,7 +1045,12 @@ function showLobby() {
       )
       .join('');
   const draw = () => {
+    const note =
+      localStorage.getItem('kai.note.v1') === 'byok-moved'
+        ? '<button class="lobby-note" id="lobbyNote">钥匙已分流：你的自带钥匙在「客席」卡上；官方人物（李/飞/账）只认「设置」里的暗号。点此收起</button>'
+        : '';
     lb.innerHTML = `<div class="lobby-title">开！</div>
+      ${note}
       <div class="board">${boardHtml()}</div>
       <div class="mode-row">
         <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" data-m="duo">单挑</button>
@@ -1103,6 +1108,10 @@ function showLobby() {
       el.addEventListener('click', () => openPlayerPage(el.dataset.pg)),
     );
     lb.querySelector('#lobbySettings').addEventListener('click', () => openDrawer('brain', true));
+    lb.querySelector('#lobbyNote')?.addEventListener('click', () => {
+      localStorage.removeItem('kai.note.v1');
+      draw();
+    });
   };
   draw();
   lb.classList.remove('hidden');

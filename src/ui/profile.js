@@ -146,8 +146,10 @@ function migrateByok(storage) {
   try {
     const legacy = JSON.parse(storage.getItem(BYOK_KEY));
     if (legacy?.apiKey) {
-      if (legacy.baseUrl) storage.setItem(GUEST_KEY, JSON.stringify(legacy));
-      else storage.setItem(PASS_KEY, legacy.apiKey);
+      if (legacy.baseUrl) {
+        storage.setItem(GUEST_KEY, JSON.stringify(legacy));
+        storage.setItem('kai.note.v1', 'byok-moved'); // 大厅一次性提示：官方人物从此只认暗号
+      } else storage.setItem(PASS_KEY, legacy.apiKey);
     }
     storage.removeItem(BYOK_KEY);
   } catch {}
