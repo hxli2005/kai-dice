@@ -80,13 +80,13 @@ function loadLineup(mode) {
 
 // 通道分流（Q28 用户裁决）：官方人设只走官方通道（暗号→同域代理，原版演员钉死，可控打磨）；
 // 客席只走自带钥匙（BYOK）。两把钥匙互不越界。
-function officialChannelOf() {
+function officialChannelOf(per) {
   const pass = loadPass();
   if (!pass) return null;
   return {
     baseUrl: `${location.origin}/api/llm`,
     apiKey: pass,
-    model: 'deepseek-chat',
+    model: per?.gear?.model ?? 'deepseek-chat', // Q18 原版演员按人设钉（代理端白名单校验）
     format: 'openai',
     headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
   };
@@ -95,7 +95,7 @@ function guestChannelOf() {
   const g = loadGuest();
   return g?.apiKey && g?.baseUrl ? g : null;
 }
-const chanForPersona = (per) => (per?.bare ? guestChannelOf() : officialChannelOf());
+const chanForPersona = (per) => (per?.bare ? guestChannelOf() : officialChannelOf(per));
 
 // 降级原因 → 人话（连接状态可见性）
 function friendlyError(msg = '') {

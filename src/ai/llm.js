@@ -1,9 +1,10 @@
 // BYOK 模型通道（DESIGN §3.4）：浏览器直连，key 不出设备。
 // 兼容 OpenAI 与 Anthropic 两种消息格式。fetch 可注入以便测试。
 
+// extra：透传进请求体的额外参数（如推理型模型的 reasoning_effort）——人设装备层配置
 export async function chat(
   { baseUrl, apiKey, model, format = 'openai', headers: extraHeaders },
-  { system, user, maxTokens = 500, timeoutMs = 10_000 },
+  { system, user, maxTokens = 500, timeoutMs = 10_000, extra },
   fetchFn = globalThis.fetch,
 ) {
   const ctrl = new AbortController();
@@ -26,6 +27,7 @@ export async function chat(
               max_tokens: maxTokens,
               system,
               messages: [{ role: 'user', content: user }],
+              ...extra,
             },
             text: (j) => j.content?.[0]?.text,
           }
@@ -39,6 +41,7 @@ export async function chat(
                 { role: 'system', content: system },
                 { role: 'user', content: user },
               ],
+              ...extra,
             },
             text: (j) => j.choices?.[0]?.message?.content,
           };

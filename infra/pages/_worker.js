@@ -64,7 +64,9 @@ export default {
 
       let body;
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
-      body.model = "deepseek-chat"; // 模型服务端钉死：暗号持有者也改不了成本档
+      // 模型服务端白名单（Q18 原版演员按人设钉）：名单外一律钉回默认——暗号持有者也改不了成本档
+      const MODEL_ALLOW = ["deepseek-chat", "deepseek-v4-pro"];
+      if (!MODEL_ALLOW.includes(body.model)) body.model = "deepseek-chat";
       const upstream = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_KEY}` },

@@ -255,8 +255,18 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       let error = null;
       if (ch) {
         try {
-          // maxTokens 压低：动作 JSON＋一句台词用不了多少，生成时长是节拍主项（T4 ≤4s）
-          raw = await chat(ch, { ...prompts, maxTokens: 320 }, fetchFn);
+          // maxTokens/timeout 默认压低（动作 JSON＋一句台词，节拍 ≤4s）；推理型演员按人设放宽——
+          // 思维链吃 token 也吃钟：预算太紧 JSON 被截断成 bad-output，钟太紧直接 abort
+          raw = await chat(
+            ch,
+            {
+              ...prompts,
+              maxTokens: persona.gear?.maxTokens ?? 320,
+              timeoutMs: persona.gear?.timeoutMs ?? 10_000,
+              extra: persona.gear?.extra,
+            },
+            fetchFn,
+          );
           decision = parseDecision(raw, ob);
           if (decision === null) error = 'bad-output';
         } catch (e) {
