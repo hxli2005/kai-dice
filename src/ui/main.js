@@ -8,7 +8,7 @@ import { createOpponent, settleVerdict } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -575,7 +575,7 @@ async function showReport(end) {
     renderCard(verdict ?? templateVerdict(stats, won));
   }
   const aiNotes = opponent.logs.map((l) => l.note).filter(Boolean).slice(-2);
-  profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note] });
+  profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note], personaId: opponent.persona.id });
 }
 
 // ---------- 抽屉：规矩 / 档案 / BYOK / 公平说明（统一入口，桌面不放说明） ----------
@@ -598,7 +598,7 @@ function openDrawer(section) {
       <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
     <h2 id="profileSec">它眼中的你</h2>
-    <p>${profileBrief(profile, false) || '还没有档案。打一场，他就开始记了。'}</p>
+    <p>${profileBrief(profile, DEFAULT_PERSONA.id, false) || '还没有档案。打一场，他就开始记了。'}</p>
     ${
       profile.stats.length
         ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报率</th><th>开牌</th><th>被开</th><th>均时</th></tr>${profile.stats
@@ -610,7 +610,7 @@ function openDrawer(section) {
             .join('')}</table>`
         : ''
     }
-    ${profile.notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
+    ${mindOf(profile, DEFAULT_PERSONA.id).notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
     <p>身家 ${loadLedger().you}（他 ${loadLedger().opp}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
     <h2>接上他的脑子</h2>
     <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
@@ -666,7 +666,7 @@ async function newMatch() {
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   const ledger = loadLedger();
   match = await createMatch({ seed, config: { startChips: { A: ledger.you, B: ledger.opp } } });
-  opponent = createOpponent({ channel: channelOf, profile: profileBrief(profile), persona: DEFAULT_PERSONA });
+  opponent = createOpponent({ channel: channelOf, profile: profileBrief(profile, DEFAULT_PERSONA.id), persona: DEFAULT_PERSONA });
   myDiceByRound = {};
   sel = null;
   busy = false;
