@@ -422,17 +422,12 @@ function render() {
         }),
       );
     const myP = o.yourDice ? ` · ${pct(probBidTrue(sel, o.yourDice, o.diceCount.opp, o.zhai))}` : '';
-    $('bidBtn').textContent = `报 ${sel.count} 个 ${sel.face}${myP}`;
+    $('bidBtn').textContent = `报${myP}`;
   } else {
     $('bidBtn').textContent = '—';
   }
   $('bidBtn').disabled = !myTurn || !bids;
-  // 赌注焊在扳机上：拍开就是这个数；三人桌写明开谁（§2.5 开只开上家）
-  const openWho =
-    o.currentBid && isTrio() ? `开·${SEAT_PERSONA[o.currentBid.player]?.seal ?? ''}` : '开';
-  $('openBtn').innerHTML = o.currentBid
-    ? `${openWho}<small>±${Math.round(o.potUnits * mult)}</small>`
-    : '开';
+  $('openBtn').textContent = '开！'; // 开谁由报价行具名（开只开上家）；juice 归拍桌那一拍
   $('openBtn').disabled = !myTurn || !o.currentBid;
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');

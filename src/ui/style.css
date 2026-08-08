@@ -405,14 +405,17 @@ button.primary:disabled { opacity: 0.3; }
 #bidBtn { font-size: 1.05rem; white-space: nowrap; }
 button.primary:active { transform: scale(0.97); }
 button.danger {
-  min-width: 4.6rem;
-  padding: 0 0.7rem;
+  min-width: 5.6rem;
+  padding: 0 0.8rem;
   white-space: nowrap;
   background: var(--red); color: #fff2ea;
   border: none; border-radius: 0.55rem;
-  font-family: var(--serif); font-size: 1.05rem;
-  letter-spacing: 0.08em;
-  line-height: 1.15;
+  font-family: var(--serif); font-size: 1.45rem; font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+}
+button.danger:not(:disabled) {
+  box-shadow: 0 0 16px rgba(200, 64, 46, 0.35);
 }
 button.danger small {
   display: block;
