@@ -333,7 +333,15 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）
       if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind)
         return { action: { type: 'peek' } };
-      const prompts = buildPrompts(ob, profile, persona, ctx);
+      // 提示词拼装也进降级链：任何异常都不许把桌子冻住，最多退成沉默 bot
+      let prompts = null;
+      try {
+        prompts = buildPrompts(ob, profile, persona, ctx);
+      } catch (e) {
+        const decision = { action: silent.decide(ob), say: '', note: '' };
+        logs.push({ round: ob.round, facts: null, raw: null, ...decision, silentFallback: true, error: `prompt:${e?.message}` });
+        return { ...decision, silentFallback: true, error: `prompt:${e?.message}` };
+      }
       const ch = typeof channel === 'function' ? channel() : channel;
       let decision = null;
       let raw = null;

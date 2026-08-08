@@ -669,7 +669,13 @@ async function aiTurnFor(seat) {
   render();
   const t0 = performance.now();
   const ai = opponents[seat];
-  const d = await ai.decide(o);
+  let d;
+  try {
+    d = await ai.decide(o);
+  } catch (e) {
+    // 决策链任何漏网异常都不许冻桌：退沉默 bot 行棋，桌子继续转
+    d = { action: createSilentBot(ai.persona.strategy).decide(o), say: '', silentFallback: true, error: e?.message ?? 'decide-crash' };
+  }
   if (gen !== matchGen) return; // 已离桌/换场：在途决策作废
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
@@ -685,7 +691,8 @@ async function aiTurnFor(seat) {
   }
   if (d.silentFallback && d.error && chanForPersona(ai.persona) && !fallbackNoticed) {
     fallbackNoticed = true;
-    $('hint').textContent = `${NAMES[seat]}未连接（${friendlyError(d.error)}）`;
+    // 用 toast 而非 hint：hint 会被下一帧 render 抹掉——"额度用完"曾因此看起来像"AI 挂了"
+    toastFx(`${NAMES[seat]}降级沉默（${friendlyError(d.error)}）`);
   }
   // 人设节奏：阿飞近乎秒出，老李头想得慢
   const floor = ai.persona.pace === 'fast' ? 350 + Math.random() * 350 : 900 + Math.random() * 800;
