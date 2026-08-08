@@ -779,7 +779,8 @@ button.danger:active { transform: scale(0.95); }
 }
 .board-row .rank { width: 1.1rem; color: var(--dim); font-variant-numeric: tabular-nums; text-align: center; }
 .board-row .board-name { flex: 1; text-align: left; letter-spacing: 0.12em; }
-.board-row b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.board-row .rate { min-width: 2.6rem; text-align: right; color: var(--dim); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.board-row b { min-width: 2.4rem; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
 .board-row b.debt { color: var(--red-hi); }
 .board-row.me { color: var(--lamp); }
 .p-idline { font-size: 0.82rem; color: var(--dim); line-height: 1.75; margin: 0.2rem 0 0.8rem; }

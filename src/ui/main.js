@@ -735,6 +735,7 @@ async function showReport(end) {
       },
     ].slice(-10);
     mind.record.plays += 1;
+    if (end.winner === s) mind.record.wins += 1; // 场胜：榜的胜率列
     if (end.standings && end.standings.indexOf(s) < end.standings.indexOf('A')) mind.record.beat += 1;
   }
   const stats = computeStats(o.events, 'A', myDiceByRound);
@@ -967,16 +968,20 @@ function showLobby() {
     const rec = mindOf(profile, per.id).record;
     return rec.plays ? `对你 ${rec.plays} 战 ${rec.beat} 胜` : '生面孔';
   };
-  // 榜（平等公民）：你和他们同一种行，身家即座次；点行翻开玩家页
+  // 榜（平等公民）：你和他们同一种行——胜率＋身家，身家即座次；点行翻开玩家页
+  const rateOf = (wins, plays) => (plays ? `${Math.round((wins / plays) * 100)}%` : '—');
   const boardHtml = () =>
     [
-      { id: 'you', seal: '客', name: '你', bal: led.you },
-      ...Object.values(PERSONAS).map((per) => ({ id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id) })),
+      { id: 'you', seal: '客', name: '你', bal: led.you, rate: rateOf(profile.wins, profile.matches) },
+      ...Object.values(PERSONAS).map((per) => {
+        const rec = mindOf(profile, per.id).record;
+        return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays) };
+      }),
     ]
       .sort((a, b) => b.bal - a.bal)
       .map(
         (r, i) => `<button class="board-row ${r.id === 'you' ? 'me' : ''}" data-pg="${r.id}">
-          <span class="rank">${i + 1}</span><span class="seal mini">${r.seal}</span><span class="board-name">${r.name}</span><b${r.bal < 0 ? ' class="debt"' : ''}>${r.bal}</b>
+          <span class="rank">${i + 1}</span><span class="seal mini">${r.seal}</span><span class="board-name">${r.name}</span><span class="rate">${r.rate}</span><b${r.bal < 0 ? ' class="debt"' : ''}>${r.bal}</b>
         </button>`,
       )
       .join('');

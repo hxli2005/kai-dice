@@ -11,7 +11,7 @@ const PROFILE_KEY = 'kai.profile.v1';
 const BYOK_KEY = 'kai.byok.v1';
 
 function emptyMind() {
-  return { notes: [], hypotheses: [], stats: [], record: { plays: 0, beat: 0 } };
+  return { notes: [], hypotheses: [], stats: [], record: { plays: 0, beat: 0, wins: 0 } };
 }
 
 function emptyProfile() {
@@ -44,7 +44,8 @@ export function mindOf(profile, personaId) {
   profile.minds[personaId] ??= emptyMind();
   const m = profile.minds[personaId];
   m.stats ??= [];
-  m.record ??= { plays: 0, beat: 0 };
+  m.record ??= { plays: 0, beat: 0, wins: 0 };
+  m.record.wins ??= 0; // 旧档补位：场胜数（榜的胜率列）
   return m;
 }
 

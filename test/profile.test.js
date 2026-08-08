@@ -69,3 +69,10 @@ test('账本 v4：旧账补差额——你已赢走的净额不变，且二次�
   const again = loadLedger(s);
   assert.equal(again.personas.laolitou, PERSONAS.laolitou.bankroll - 30);
 });
+
+test('mindOf 补齐 record.wins（旧档无损，胜率列可用）', () => {
+  const p = { matches: 0, wins: 0, resets: 0, stats: [], minds: { laolitou: { notes: [], hypotheses: [], stats: [], record: { plays: 3, beat: 1 } } } };
+  const m = mindOf(p, 'laolitou');
+  assert.equal(m.record.wins, 0);
+  assert.equal(m.record.plays, 3);
+});
