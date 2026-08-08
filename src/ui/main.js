@@ -28,6 +28,9 @@ const backHtml = (cls = '') => `<span class="die back ${cls}"></span>`;
 
 let profile = loadProfile();
 let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer;
+// 离桌守卫：atTable 拦新回合，matchGen 作废在途异步（旧局的 LLM 决策不许落到新局上）
+let atTable = false;
+let matchGen = 0;
 let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
@@ -461,6 +464,7 @@ function armIdle() {
   turnStart = performance.now();
   clearTimeout(idleTimer);
   const nag = () => {
+    if (!atTable) return;
     const o = ob();
     if (o.turn !== 'A' || o.over || busy) return;
     const lines = opponent?.persona?.idle ?? [];
@@ -500,6 +504,7 @@ async function onBid() {
 
 // ---------- 回合调度（§2.5）：轮到谁驱动谁；AI 台词打字与下一位的网络请求并行（节拍 ≤4s） ----------
 function driveTurn() {
+  if (!atTable) return;
   const o = ob();
   if (o.over) return;
   if (o.turn === 'A') {
@@ -511,6 +516,8 @@ function driveTurn() {
 }
 
 async function aiTurnFor(seat) {
+  if (!atTable) return;
+  const gen = matchGen;
   const o = match.observe(seat);
   if (o.over || o.turn !== seat) return;
   busy = true;
@@ -518,9 +525,11 @@ async function aiTurnFor(seat) {
   const t0 = performance.now();
   const ai = opponents[seat];
   const d = await ai.decide(o);
+  if (gen !== matchGen) return; // 已离桌/换场：在途决策作废
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
     await match.act(seat, d.action);
+    if (gen !== matchGen) return;
     sfx.land();
     (isTrio()
       ? document.querySelectorAll(`#strip-${seat} .die`)
@@ -536,6 +545,7 @@ async function aiTurnFor(seat) {
   // 人设节奏：阿飞近乎秒出，老李头想得慢
   const floor = ai.persona.pace === 'fast' ? 350 + Math.random() * 350 : 900 + Math.random() * 800;
   await sleep(Math.max(0, floor - (performance.now() - t0)));
+  if (gen !== matchGen) return;
   const elapsedMs = performance.now() - t0;
   if (d.action.type === 'challenge') return doChallenge(seat, elapsedMs, false, d.say);
   await match.act(seat, d.action, { elapsedMs });
@@ -804,13 +814,13 @@ async function showReport(end) {
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note], personaId: opponent.persona.id });
 }
 
-// ---------- 抽屉：规矩 / 档案 / BYOK / 公平说明（统一入口，桌面不放说明） ----------
-function openDrawer(section) {
+// ---------- 抽屉（大厅：档案/规矩/设置；局内：档案/规矩/封印/离桌——设置归大厅） ----------
+function openDrawer(section, inLobby = false) {
   const d = $('drawer');
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
-  disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
+  if (!inLobby) disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
-  const rsNow = match ? lastEvent(ob(), 'roundStart') : null;
+  const rsNow = !inLobby && match ? lastEvent(ob(), 'roundStart') : null;
   const led = loadLedger();
   const lastStat = profile.stats.at(-1);
   const insight = lastStat ? condBrief(lastStat) : '';
@@ -853,13 +863,16 @@ function openDrawer(section) {
     </div>`;
   };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
-    <nav class="drawer-nav">
-      <a href="#profileSec">本子</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a href="#secBrain">设置</a>
-    </nav>
+    <nav class="drawer-nav">${
+      inLobby
+        ? '<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secBrain">设置</a>'
+        : '<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a class="leave" id="leaveBtn">离桌</a>'
+    }</nav>
 
-    <h2 id="profileSec">他们的本子</h2>
+    <h2 id="profileSec">你的账</h2>
     <p class="ledger-line">身家　${ledgerLine}
       <button id="resetLedger" class="linkish">翻篇</button></p>
+    ${profile.matches ? `<p class="book-stats">${profile.matches} 场${(profile.resets ?? 0) > 0 ? ` · 翻篇 ${profile.resets} 次` : ''}</p>` : ''}
     ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
     ${
       profile.stats.length
@@ -872,6 +885,8 @@ function openDrawer(section) {
             .join('')}</table>`
         : ''
     }
+
+    <h2>他们的本子</h2>
     ${Object.values(PERSONAS).map(bookOf).join('')}
 
     <h2 id="secRules">规矩</h2>
@@ -884,16 +899,20 @@ function openDrawer(section) {
       <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
-    <h2 id="secSeal">封印</h2>
     ${
-      rsNow
-        ? Object.entries(rsNow.commits)
-            .map(([s, c]) => `<p class="note-item"><b>${dispName(s)}</b>　<span class="mono-sm">${c}</span></p>`)
-            .join('')
-        : ''
+      inLobby
+        ? ''
+        : `<h2 id="secSeal">封印</h2>` +
+          (rsNow
+            ? Object.entries(rsNow.commits)
+                .map(([s, c]) => `<p class="note-item"><b>${dispName(s)}</b>　<span class="mono-sm">${c}</span></p>`)
+                .join('')
+            : '')
     }
-
-    <h2 id="secBrain">设置</h2>
+    ${
+      !inLobby
+        ? ''
+        : `<h2 id="secBrain">设置</h2>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <label>API Key / 暗号</label><input id="fKey" type="password" value="${byok.apiKey}">
     <label>Model</label><input id="fModel" value="${byok.model}" placeholder="deepseek-chat">
@@ -902,22 +921,27 @@ function openDrawer(section) {
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
     </select>
     <div class="btnrow"><button class="primary" id="saveByok">保存</button></div>
-    <div id="byokTest" class="test-line"></div>
+    <div id="byokTest" class="test-line"></div>`
+    }
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
   if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
+  else if (section === 'brain') d.querySelector('#secBrain')?.scrollIntoView();
   else d.scrollTop = 0;
+  d.querySelector('#leaveBtn')?.addEventListener('click', leaveTable);
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
     saveLedger({ you: 100, personas: {} });
     profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
     e.target.textContent = '已翻篇 · 下一场生效';
     e.target.disabled = true;
+    if (inLobby) showLobby(); // 大厅卡片上的身家跟着刷新
   });
   d.querySelector('#closeDrawer').addEventListener('click', () => {
     d.classList.add('hidden');
+    if (inLobby) return;
     const o = ob();
     if (o.turn === 'A' && !o.over && !busy) armIdle();
   });
-  d.querySelector('#saveByok').addEventListener('click', async () => {
+  d.querySelector('#saveByok')?.addEventListener('click', async () => {
     saveByok({
       baseUrl: d.querySelector('#fBase').value.trim(),
       apiKey: d.querySelector('#fKey').value.trim(),
@@ -933,7 +957,7 @@ function openDrawer(section) {
     btn.disabled = false;
     out.textContent = (r.ok ? '✓ ' : '✗ ') + r.msg;
     out.className = 'test-line ' + (r.ok ? 'ok' : 'bad');
-    render();
+    if (match) render(); // 大厅里开局前没有牌局可刷
     if (r.ok) setTimeout(() => d.classList.add('hidden'), 1200);
   });
 }
@@ -969,7 +993,7 @@ function showLobby() {
         )
         .join('')}</div>
       <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>开局</button>
-      <a class="lobby-about" href="about.html">说明 →</a>`;
+      <div class="lobby-links"><a id="lobbyProfile">档案</a><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
         mode = el.dataset.m;
@@ -991,13 +1015,28 @@ function showLobby() {
       lb.classList.add('hidden');
       newMatch();
     });
+    lb.querySelector('#lobbyProfile').addEventListener('click', () => openDrawer('profile', true));
+    lb.querySelector('#lobbySettings').addEventListener('click', () => openDrawer('brain', true));
   };
   draw();
   lb.classList.remove('hidden');
 }
 
+// 离桌（局内→大厅）：本场不记档——账本只在场终写回，中途走人等于这场没发生
+function leaveTable() {
+  atTable = false;
+  matchGen++;
+  disarmIdle();
+  muteBubble();
+  $('drawer').classList.add('hidden');
+  $('overlay').classList.add('hidden');
+  showLobby();
+}
+
 // ---------- 开场 ----------
 async function newMatch() {
+  atTable = true;
+  matchGen++;
   $('overlay').classList.add('hidden');
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;

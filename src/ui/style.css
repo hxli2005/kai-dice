@@ -487,7 +487,7 @@ button.danger:active { transform: scale(0.95); }
 
 /* ---------- 抽屉：设置与档案 ---------- */
 #drawer {
-  position: absolute; inset: 0; z-index: 30;
+  position: absolute; inset: 0; z-index: 55; /* 大厅(50)之上：档案/设置从大厅也能开 */
   background: #0d0a08;
   padding: calc(env(safe-area-inset-top) + 1.2rem) 1.4rem 2rem;
   overflow-y: auto;
@@ -768,10 +768,12 @@ button.danger:active { transform: scale(0.95); }
   font-size: 1.15rem; letter-spacing: 0.45em; text-indent: 0.45em;
   margin-top: 0.4rem;
 }
-.lobby-about {
-  color: var(--dim); font-size: 0.75rem; letter-spacing: 0.15em;
-  text-decoration: none; margin-top: 0.2rem;
+.lobby-links { display: flex; gap: 1.8rem; margin-top: 0.2rem; }
+.lobby-links a {
+  color: var(--dim); font-size: 0.8rem; letter-spacing: 0.15em;
+  text-decoration: none; cursor: pointer;
 }
+.drawer-nav .leave { color: var(--red-hi); cursor: pointer; }
 
 /* 报告卡按钮行：换桌（幽灵）＋再来一局 */
 #overlay .again-row { display: flex; gap: 0.55rem; width: 100%; max-width: 21rem; margin-top: 0.4rem; }
