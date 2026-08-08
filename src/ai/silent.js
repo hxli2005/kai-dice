@@ -21,7 +21,11 @@ export function createSilentBot({ challengeThreshold = 0.25 } = {}) {
         (bids.length === 0 || obProb(ob, ob.currentBid) < challengeThreshold)
       )
         return { type: 'challenge' };
-      if (!bids.length) return canChallenge ? { type: 'challenge' } : ob.legal.at(-1); // 防御性兜底
+      // 防御性兜底（让报把路堵死的边角）：兜底也不拨算盘——它的数一直在心里（Q45 沉默 bot 豁免）
+      if (!bids.length)
+        return canChallenge
+          ? { type: 'challenge' }
+          : (ob.legal.filter((a) => a.type !== 'calc').at(-1) ?? ob.legal.at(-1));
       let best = bids[0];
       for (const b of bids) if (obProb(ob, b) > obProb(ob, best) + 1e-12) best = b;
       return { type: 'bid', ...best };

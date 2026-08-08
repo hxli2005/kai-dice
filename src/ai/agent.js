@@ -5,7 +5,7 @@
 // 词条（§8 实验桌）：规则卡明牌注入、动作 schema 动态扩展——LLM 读规则即生效（Q24 规则流动性）。
 
 import { allLegalBids, isLegalBid } from '../rules.js';
-import { obProb } from '../probability.js';
+import { obProb, coarseWord } from '../probability.js';
 import { OPS } from '../mods/catalog.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
@@ -25,8 +25,9 @@ const FACT_LINE =
 const RULES_BRIEF = (three) =>
   `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}
-铁律：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}
+铁律一：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。
+铁律二（准数）：这一局没当众拨过算盘，就不许说出任何精确概率（"三成""37%"都算）——你算不出来的数说出口就是编。发给你的档案数字（虚报率、开牌命中之类）照引不误，那是真数据。粗话不要钱："基本稳""五五开""悬""纯扯"都是你的手感，随便说。`;
 
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
 const personaSystem = (p, three, modSpec = '') =>
@@ -60,6 +61,8 @@ function narrate(events, you, names) {
   for (const e of events.slice(start + 1)) {
     const t = hesi(e);
     if (e.type === 'peek' && e.player !== you) lines.push(`${who(e.player)}掀盅看了骰`);
+    // 拨算盘是公开动作（Q45）：何时算＝新的读心材料，必须进叙事
+    if (e.type === 'calc') lines.push(`${who(e.player)}当众拨了算盘${t}`);
     if (e.type === 'bid') lines.push(`${who(e.player)}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')
       lines.push(`${who(e.player)}宣言「${DECL[e.declaration] ?? e.declaration}」${t}`);
@@ -93,14 +96,32 @@ function matchRecap(events, you, names) {
     .join('；');
 }
 
-// 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
-const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
+// 算频（Q45，软倾向：只染色不扣扳机——扣扳机的必须是模型）。'never' 是身份锚点：
+// 不给他这个动作（阿飞从不算，和老李头不用盲同级）。
+const CALC_HABIT = {
+  often: '你习惯算：多数手你会当众把算盘拨一下——但数是数、人是人，你照样可能逆着数开。',
+  key: '你只在关键手才算：平常凭经验走，真到要紧处才把算盘拿出来（算这个动作本身就在告诉别人这手要紧）。',
+  never: '你从不碰算盘：全凭手感，所以你嘴里永远没有准数——你也不觉得那玩意儿有用。',
+};
+
+// 引用校验（Q45）：没当众拨算盘就说出准数＝编数字。判据是"这个数在给你的事实里吗"——
+// 档案数字（虚报率 43%）照样能引（那是发给他的真数据，也正是被读感的来源）；
+// 凭空长出来的概率一律掐掉。「三成」这类中文说法是本桌概率的成语，未算即视为编。
+// 粗话（基本稳/五五开/悬/纯扯）永远免检。
+export function hasFakePrecision(text, allowedFrom = '') {
+  const s = String(text ?? '');
+  if (/[一二两三四五六七八九]\s*成(?!立|不|功|交|群)/.test(s) || /百分之/.test(s)) return true;
+  return [...s.matchAll(/(\d+)\s*[%％]/g)].some(
+    (m) => !new RegExp(`${m[1]}\\s*[%％]`).test(String(allowedFrom)),
+  );
+}
 
 // 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
 const ownActDesc = (a, ob) => {
   if (a?.type === 'declare') return `宣言了「${DECL[a.declaration] ?? a.declaration}」`;
   if (a?.type === 'bid') return `报了 ${a.count} 个 ${a.face}`;
   if (a?.type === 'peek') return '掀盅看了骰';
+  if (a?.type === 'calc') return '当众拨了算盘（这局你手上有准数了）';
   if (!a?.type) return '（无动作）';
   const meta = modActionMeta(ob, a.type);
   if (!meta) return `用了「${a.type}」`;
@@ -124,7 +145,11 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
   const p = (b) => obProb(ob, b); // 已知骰＝自见骰＋他人亮出的明骰（词条「亮」）
-  const fmtP = persona.gear?.probInject === 'coarse' ? (v) => coarse(v) : (v) => pct(v);
+  // Q45：精确概率不再预注入——本局当众拨过算盘才给准数，否则只有粗档手感（与玩家同规则）
+  const calced = !!ob.calced?.[ob.you];
+  const fmtP = calced ? (v) => pct(v) : (v) => coarseWord(v);
+  const calcHabit = persona.gear?.calc ?? 'key';
+  const canCalc = calcHabit !== 'never' && ob.legal.some((a) => a.type === 'calc');
   const top = [...bids].sort((a, b) => p(b) - p(a)).slice(0, 6);
   const isBlind = ob.blind?.[ob.you];
   const myShown = ob.shown?.[ob.you] ?? [];
@@ -168,9 +193,9 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
     returned
       ? `注意：你报的「${ob.currentBid.count} 个 ${ob.currentBid.face}」被原样推了回来——你必须自己继续抬，不能开自己的价。`
       : ob.currentBid
-        ? persona.gear?.probInject === 'coarse'
-          ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
-          : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
+        ? calced
+          ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你这局拨过算盘：按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}（只算骰面，不算人——他是不是在诈，算盘不管）。`
+          : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你没拨算盘，只有手感：这话${coarseWord(p(ob.currentBid))}。`
         : `你是首报（数量至少 2）。`,
     `可选动作：${[
       ob.legal.some((a) => a.type === 'challenge') && `开牌`,
@@ -184,10 +209,14 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
             : `宣言「${DECL[a.declaration]}」后再报`,
         ),
       ...legalMods.map((meta) => modCandidateLine(meta, ob, fmtP)),
+      canCalc &&
+        `当众拨算盘（{"type":"calc"}）——算完这一局你都有准数，算盘拨在明处：全桌都看得见你在算，何时算本身就是话（算完你继续行动）`,
       !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
     ]
       .filter(Boolean)
       .join('；')}。`,
+    // 算频是人设的可见装备（Q45）：只染色候选，不替模型扣扳机。素颜客席不发这行——它没有性格剧本
+    (!persona.bare && CALC_HABIT[calcHabit]) || null,
     // 软倾向（Q22-补：只染色不扣扳机）：宣言与词条是决策动词，不是摆设
     ob.legal.some((a) => a.type === 'declare' || !!modActionMeta(ob, a.type))
       ? '提醒：宣言和词条都是真招——虚实、时机、赔率都在里面，该出手就出手；一个只会抬价和开牌的人，是桌上最好读的人。'
@@ -218,6 +247,7 @@ export function parseDecision(text, ob) {
     const modMeta = modActionMeta(ob, a.type);
     const ok =
       (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
+      (a.type === 'calc' && ob.legal.some((x) => x.type === 'calc')) ||
       (a.type === 'challenge' && ob.legal.some((x) => x.type === 'challenge')) ||
       (a.type === 'bid' &&
         ob.legal.some((x) => x.type === 'bid') &&
@@ -236,8 +266,8 @@ export function parseDecision(text, ob) {
             ? { type: 'declare', declaration: a.declaration }
             : modMeta
               ? { type: a.type, ...(modMeta.params === 'face' ? { face: a.face } : {}) }
-              : a.type === 'peek'
-                ? { type: 'peek' }
+              : a.type === 'peek' || a.type === 'calc'
+                ? { type: a.type }
                 : { type: 'challenge' },
       say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
       note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
@@ -306,7 +336,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
       channel,
       {
         system: personaSystem(persona).replace(/严格输出一行 JSON[\s\S]*$/, '') +
-          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编。顺手全量复盘你对他的规律假设（只写关于客人的；由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编——只许用下面数据里出现过的数字，牌桌上没拨算盘算过的概率不许当准数说。顺手全量复盘你对他的规律假设（只写关于客人的；由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
           hypotheses.length
             ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`
@@ -386,8 +416,18 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       }
       const silentFallback = decision === null;
       if (silentFallback) decision = { action: silent.decide(ob), say: '', note: '' };
-      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error });
-      return { ...decision, silentFallback, error };
+      // Q45 引用校验：这一局没当众拨过算盘，说出来的准数就是编的——当场掐掉（宿主会用事实模板顶上）。
+      // 决定去拨算盘的那一手同样管：那时数还没出来，说出口的准数只能是编的（算完的下一次调用才有）。
+      let dropped = null;
+      if (!ob.calced?.[ob.you]) {
+        for (const k of ['say', 'note'])
+          if (hasFakePrecision(decision[k], prompts.user)) {
+            dropped = `${dropped ? `${dropped},` : ''}${k}`;
+            decision = { ...decision, [k]: '' };
+          }
+      }
+      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error, dropped });
+      return { ...decision, silentFallback, error, dropped };
     },
   };
 }

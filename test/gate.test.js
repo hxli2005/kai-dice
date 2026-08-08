@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { allLegalBids, countBid } from '../src/rules.js';
-import { probBidTrue } from '../src/probability.js';
+import { probBidTrue, obKnown, coarseWord } from '../src/probability.js';
 import { createMatch, mulberry32, PLAYERS } from '../src/engine.js';
 import { createSilentBot } from '../src/ai/silent.js';
 
@@ -88,4 +88,24 @@ test('概率计算器：边界与已知值', () => {
   // 斋局报 1 单颗匹配率 1/6
   const p1 = probBidTrue({ count: 1, face: 1 }, [], 1, true);
   assert.ok(Math.abs(p1 - 1 / 6) < 1e-12);
+});
+
+test('obKnown：没看骰时自己的骰子也算未知（盲局不许把总骰数算漏）', async () => {
+  const m = await createMatch({ seed: 4 });
+  await m.act('A', { type: 'declare', declaration: 'blind' });
+  const blind = obKnown(m.observe('A'));
+  assert.deepEqual(blind.known, []);
+  assert.equal(blind.unknown, 10, '盲局：场上十颗骰全未知，不是只有对方那五颗');
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  const seen = obKnown(m.observe('B'));
+  assert.equal(seen.known.length, 5);
+  assert.equal(seen.unknown, 5);
+});
+
+test('粗档词：AI 与训练轮共用同一套（双发同粒度）', () => {
+  assert.equal(coarseWord(0.9), '基本稳');
+  assert.equal(coarseWord(0.5), '五五开');
+  assert.equal(coarseWord(0.2), '悬');
+  assert.equal(coarseWord(0.05), '纯扯');
 });

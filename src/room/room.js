@@ -5,6 +5,7 @@
 
 import { createMatch } from '../engine.js';
 import { createOpponent, personaLine } from '../ai/agent.js';
+import { silentSay } from '../ai/voice.js';
 import { PERSONAS } from '../ai/personas.js';
 import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
 import { viewFor, mapFor } from './rename.js';
@@ -243,7 +244,9 @@ export function createRoomCore({
         } catch {
           break; // 引擎拒绝（不应发生；沉默 bot 兜底本身合法）——停泵防死循环
         }
-        if (d.say) say(seat === 'B' ? d.say : `（代打${sealName(seat)}）${d.say}`);
+        // F2 沉默模式的"被读"底线：没暗号的房间（沉默主持）开牌时也得说出为什么——事实模板，零编造
+        const line = d.say || (d.action.type === 'challenge' ? silentSay(PERSONAS.laolitou, ob) : '');
+        if (line) say(seat === 'B' ? line : `（代打${sealName(seat)}）${line}`);
         pushObs();
         drainEvents();
       }

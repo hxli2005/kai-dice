@@ -66,6 +66,9 @@ export async function createMatch({ seed, config = {} } = {}) {
   let blind = null;
   let zhai = false;
   let raises = null; // Q22「抬」：{p: bool}，每人每局限一次，全桌对等生效
+  // Q45「算」：拨算盘是公开动作（何时算＝tell），结果私有（客户端各算各的，引擎不发数）。
+  // 每人每局一次——算盘一旦摆上桌，这一局都在桌上；也天然挡住"算→算→算"的空转。
+  let calced = null;
   let shown = {}; // 词条「亮」：{p: [faces]} 本局公开亮出的自骰（公开事实，仍算手里的骰）
   let usedRound = {}; // 词条限次（每局）
   let modPotFactor = 1; // 词条 potMult 原子的本局倍率
@@ -99,6 +102,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     blind = {};
     const commits = {};
     raises = {};
+    calced = {};
     shown = {};
     usedRound = {};
     modPotFactor = 1;
@@ -109,6 +113,7 @@ export async function createMatch({ seed, config = {} } = {}) {
       peeked[p] = false;
       blind[p] = false;
       raises[p] = false;
+      calced[p] = false;
       shown[p] = [];
       usedRound[p] = {};
     }
@@ -130,6 +135,8 @@ export async function createMatch({ seed, config = {} } = {}) {
     if (p === firstBidder && bids.length === 0 && !zhai)
       acts.push({ type: 'declare', declaration: 'zhai' });
     if (!raises[p]) acts.push({ type: 'declare', declaration: 'raise' });
+    // Q45「算」：轮到你时可拨一次算盘（本局限一次，算完行动权仍在你）
+    if (!calced[p]) acts.push({ type: 'calc' });
     if (allLegalBids(currentBid(), zhai, totalDice()).length > 0) acts.push({ type: 'bid' });
     // §2.5：开只能开上家——轮转报数下当前报价者必为你的上家。
     // 「让报」词条可把报价推回报价者本人，故须挡"开自己的价"（基础局中此条件恒真）。
@@ -319,6 +326,12 @@ export async function createMatch({ seed, config = {} } = {}) {
         peeked[p] = true;
         emit({ type: 'peek', ...base });
         return;
+      case 'calc':
+        // 只落一条公开事实"他算了"，不落结果——精确数字由各自客户端用自己的骰算（§B.1 双发）
+        if (!legal.some((a) => a.type === 'calc')) throw new Error('illegal calc');
+        calced[p] = true;
+        emit({ type: 'calc', ...base });
+        return;
       case 'declare':
         if (!legal.some((a) => a.type === 'declare' && a.declaration === action.declaration))
           throw new Error(`illegal declare ${action.declaration}`);
@@ -364,6 +377,7 @@ export async function createMatch({ seed, config = {} } = {}) {
       zhai,
       blind: { ...blind },
       raises: { ...raises },
+      calced: { ...calced }, // 谁拨过算盘＝公开事实（Q45）；算出来的数各自私有
       potMult: potMult(),
       players: players.map((q) => ({
         id: q,

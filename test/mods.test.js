@@ -198,7 +198,14 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.match(user, /本桌实验词条（明牌，全桌同权）：「亮一颗」/);
   assert.match(user, /「掐」/);
   assert.match(user, new RegExp(`对方.*亮出.*${faceA}`), '明骰进叙事');
-  assert.match(user, /恰好的概率按你的骰子算是 \d+%/, '掐的表盘双发进提示词');
+  // Q45：没拨算盘只有粗档；拨了才给准数（掐的"恰好"双发同规矩）
+  assert.match(user, /恰好的概率按你的骰子算是 (基本稳|五五开|悬|纯扯)/, '未算＝粗档');
+  await m.act('B', { type: 'calc' });
+  assert.match(
+    buildPrompts(m.observe('B'), '').user,
+    /恰好的概率按你的骰子算是 \d+%/,
+    '拨过算盘＝准数',
+  );
   assert.match(user, /把这口价原样推回/);
   assert.match(system, /{"type":"qia"}/);
   assert.match(system, /{"type":"liang","face":点数1到6}/);

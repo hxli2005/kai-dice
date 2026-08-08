@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadProfile, appendMatch, profileBrief, mindOf } from '../src/ui/profile.js';
+import { loadProfile, appendMatch, profileBrief, mindOf, openerFacts } from '../src/ui/profile.js';
 
 const memStorage = (init = {}) => {
   const m = new Map(Object.entries(init));
@@ -24,6 +24,40 @@ test('旧档迁移：顶层 notes 无损归入老李头主观层', () => {
   assert.equal(p.notes, undefined);
   assert.deepEqual(p.minds.laolitou.notes, ['他手抖', '秒点真话']);
   assert.deepEqual(p.minds.laolitou.hypotheses, []);
+});
+
+// Q14 显形节拍的编码侧自查（Q43 要求补报）：次场开场白必须拿得到上一场的具体事实
+test('Q14 自查：生面孔只有招呼素材，回头客的开场白素材必含上一场具体事实', () => {
+  const fresh = openerFacts({ matches: 0, wins: 0, resets: 0, stats: [] }, { you: 100 });
+  assert.deepEqual(fresh, ['客人是生面孔，第一次上桌']);
+  const back = openerFacts(
+    {
+      matches: 2,
+      wins: 1,
+      resets: 1,
+      stats: [
+        {
+          ...STATS,
+          won: false,
+          timesChallenged: 3,
+          myCalcs: 4,
+          bigPots: [{ round: 4, mult: 8, won: false, transfer: 24 }],
+          slowest: { round: 3, bid: { count: 4, face: 5 }, ms: 12000 },
+        },
+      ],
+    },
+    { you: -30 },
+  );
+  const text = back.join('；');
+  assert.match(text, /这是他第 3 场/);
+  assert.match(text, /他账上欠着 30/);
+  assert.match(text, /他把账翻篇过 1 次/);
+  assert.match(text, /上一场他开了 2 次牌，中了 1 次/);
+  assert.match(text, /上一场他被掀了 3 回/);
+  assert.match(text, /上一场他拨了 4 次算盘/); // F6 依赖度进开场白素材
+  assert.match(text, /×8 的池/); // F5 高倍局记忆加权
+  assert.match(text, /第 3 局他停了半天才报 4 个 5/);
+  assert.match(text, /上一场他输了/);
 });
 
 test('双层：客观统计全人设共享，笔记各记各的', () => {

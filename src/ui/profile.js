@@ -2,6 +2,7 @@
 // 全部 localStorage，无账号（§7.2）。key 不出设备。
 
 import { PERSONAS } from '../ai/personas.js';
+import { bigPotBrief } from './report.js';
 //
 // 档案双层（Q19）：
 // - 客观层（全人设共享）：matches/wins/resets/stats——酒馆的公共账本，换人设不冷启动。
@@ -74,9 +75,41 @@ export function profileBrief(p, personaId = 'laolitou', withNotes = true) {
   const habits = last
     ? `上一场客人虚报率${Math.round(last.bluffRate * 100)}%，开牌${last.myChallenges}次命中${last.myChallengeHits}次，平均思考${(last.avgTimeMs / 1000).toFixed(1)}秒。`
     : '';
+  // F6 算盘依赖度：他信数还是信人——AI 的剥削通道（"你只信档位，我把谎放在'大概'里"）
+  const calc =
+    last && last.myCalcs != null
+      ? last.myCalcs === 0
+        ? '上一场他一次算盘都没拨（要么心里有数，要么根本不算）。'
+        : `上一场他拨了${last.myCalcs}次算盘${
+            last.calcFollowRate != null ? `，其中${Math.round(last.calcFollowRate * 100)}%照着数走` : ''
+          }。`
+      : '';
+  const bigPot = last && bigPotBrief(last) ? `上一场最肥的一池：${bigPotBrief(last)}。` : ''; // F5 记忆加权
   const mind = p.minds?.[personaId];
   const notes = withNotes && mind ? mind.notes.slice(-5).join('；') : '';
-  return head + habits + (notes ? `你的旧笔记：${notes}` : '');
+  return head + habits + calc + bigPot + (notes ? `你的旧笔记：${notes}` : '');
+}
+
+// 次场开场白的事实素材（§5.3-bis／Q14 硬节拍）：全部裁判层中性口径，主家 LLM 亲口引用。
+// 抽成纯函数是为了可测（Q43 编码侧自查项：这条节拍到底有没有真落地）。
+export function openerFacts(profile, ledger) {
+  const facts = [];
+  const last = profile.stats.at(-1);
+  facts.push(profile.matches ? `这是他第 ${profile.matches + 1} 场` : '客人是生面孔，第一次上桌');
+  if (ledger.you <= 0) facts.push(`他账上欠着 ${-ledger.you}`);
+  if ((profile.resets ?? 0) > 0) facts.push(`他把账翻篇过 ${profile.resets} 次`);
+  if (!last) return facts;
+  if (last.myChallenges > 0) facts.push(`上一场他开了 ${last.myChallenges} 次牌，中了 ${last.myChallengeHits} 次`);
+  if (last.bluffRate > 0.5) facts.push('上一场他一半以上的报价是虚的');
+  if (last.timesChallenged >= 2) facts.push(`上一场他被掀了 ${last.timesChallenged} 回`);
+  if (last.myBlinds >= 2) facts.push(`上一场他盲了 ${last.myBlinds} 把`);
+  if (last.myCalcs === 0) facts.push('上一场他一次算盘都没拨');
+  else if (last.myCalcs >= 2) facts.push(`上一场他拨了 ${last.myCalcs} 次算盘`);
+  if (bigPotBrief(last)) facts.push(`上一场${bigPotBrief(last)}`); // F5：×4 以上的池必须被记住
+  if (last.slowest && last.slowest.ms > 8000)
+    facts.push(`上一场第 ${last.slowest.round} 局他停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
+  facts.push(last.won ? '上一场是他赢了' : '上一场他输了');
+  return facts;
 }
 
 // Q12：翻篇免费，但记进档案——名声是唯一的利息

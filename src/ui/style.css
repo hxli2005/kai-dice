@@ -359,8 +359,26 @@ footer {
   padding: 0 1rem calc(env(safe-area-inset-bottom) + 2.4rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
-#gauge { font-size: 0.85rem; color: var(--dim); text-align: center; margin-top: 0.35rem; }
+/* 算盘位（Q45）：桌面平时不显示概率——这块地方平时只放一个"拨算盘"，
+   拨了才有数，且数只有你看得见。註脚一行小字说清代价与口径。 */
+#gauge {
+  font-size: 0.85rem; color: var(--dim); text-align: center; margin-top: 0.35rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+}
 #gauge b { color: var(--lamp); font-weight: 400; font-variant-numeric: tabular-nums; }
+.gauge-note { font-style: normal; font-size: 0.66rem; color: var(--dim); opacity: 0.75; letter-spacing: 0.06em; }
+.calc-btn {
+  background: none;
+  border: 1px dashed var(--lamp-dim);
+  color: var(--lamp);
+  font-family: var(--serif);
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.8rem;
+  border-radius: 1rem;
+}
+.calc-btn:active { background: rgba(232, 169, 79, 0.16); }
+.mark.calc { border-color: var(--lamp-dim); color: var(--lamp-dim); transform: rotate(3deg); }
 #myDice { justify-content: center; margin-bottom: 0.8rem; }
 #myDice .die.back { cursor: pointer; }
 
@@ -713,6 +731,26 @@ button.danger:active { transform: scale(0.95); }
   white-space: nowrap;
 }
 #coach .tip small { display: block; font-size: 0.72rem; color: var(--dim); margin-top: 0.1rem; }
+/* F3 教学补课：三条底规（癞子/阶梯/三印代价）＋算盘，箭头之外的静态一栏 */
+#coach .coach-rules {
+  position: absolute;
+  left: 50%;
+  top: 0.5rem; /* 顶部空档：底部全是被高亮的操作件，规则栏摆下面会被戳穿 */
+  transform: translateX(-50%);
+  width: min(21rem, 92vw);
+  background: rgba(8, 6, 5, 0.9);
+  border: 1px solid var(--wood-hi);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+}
+#coach .coach-rules p {
+  color: var(--ink);
+  font-size: 0.76rem;
+  line-height: 1.65;
+  opacity: 0.9;
+}
+#coach .coach-rules p + p { margin-top: 0.28rem; }
 #coach .anywhere {
   position: absolute;
   top: 24.5%;
@@ -767,6 +805,8 @@ button.danger:active { transform: scale(0.95); }
   padding: 0.6rem 0;
 }
 .mode-btn.sel { border-color: var(--lamp-dim); color: var(--lamp); }
+/* F1：单挑是正门，三人桌是副门——选了副门就把代价写在下面 */
+.mode-note { font-size: 0.72rem; color: var(--dim); max-width: 19rem; text-align: center; line-height: 1.6; }
 .roster { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; max-width: 19rem; }
 .p-card {
   display: flex; align-items: center; gap: 0.9rem;
@@ -949,6 +989,19 @@ button.ghost {
   font-size: 0.82rem; color: var(--dim);
   z-index: 54;
 }
+/* F1 观战条：出局后这桌不是你的戏了——标明倍速，给一条直达战报的路 */
+#watchBar {
+  position: absolute; left: 50%; bottom: 11.6rem;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(15, 12, 10, 0.92);
+  border: 1px solid var(--wood-hi);
+  border-radius: 1rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem; color: var(--dim);
+  z-index: 54;
+}
+#watchBar.hidden { display: none; }
 .stat-table.duel { width: 100%; }
 .stat-table.duel th { color: var(--lamp); font-weight: 400; }
 

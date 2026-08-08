@@ -37,15 +37,14 @@ export function probBidExact(bid, knownDice, unknownCount, zhai) {
 }
 
 // 从 observe() 折算已知/未知：自见骰＋他人亮出的明骰为已知，其余为未知。
-// 盲局/未看骰时 yourDice 为 null——按零已见算，这就是他的真实认知。
+// 盲局/未看骰时 yourDice 为 null——自己那几颗也是未知（它们仍在桌上参与清点，
+// 漏算会把盲局的概率系统性算低）。未知数一律 = 场上总骰 − 已知骰。
 export function obKnown(ob) {
   const othersShown = Object.entries(ob.shown ?? {})
     .filter(([q]) => q !== ob.you)
     .flatMap(([, faces]) => faces);
-  return {
-    known: [...(ob.yourDice ?? []), ...othersShown],
-    unknown: ob.diceCount.opp - othersShown.length,
-  };
+  const known = [...(ob.yourDice ?? []), ...othersShown];
+  return { known, unknown: ob.diceCount.you + ob.diceCount.opp - known.length };
 }
 
 export function obProb(ob, bid) {
@@ -56,4 +55,10 @@ export function obProb(ob, bid) {
 export function obProbExact(ob, bid) {
   const { known, unknown } = obKnown(ob);
   return probBidExact(bid, known, unknown, ob.zhai);
+}
+
+// 粗档（Q45）：没拨算盘时谁都只有手感——AI 与玩家训练轮共用同一套词，
+// 保证"双方同粗"（附B.1 双发红线：同一事实，同一粒度）。
+export function coarseWord(p) {
+  return p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯';
 }

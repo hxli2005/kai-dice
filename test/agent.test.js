@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
 import { chat } from '../src/ai/llm.js';
-import { buildPrompts, parseDecision, createOpponent } from '../src/ai/agent.js';
+import { buildPrompts, parseDecision, createOpponent, hasFakePrecision } from '../src/ai/agent.js';
+import { PERSONAS } from '../src/ai/personas.js';
 
 const mockFetch = (handler) => async (url, init) => {
   const body = JSON.parse(init.body);
@@ -47,8 +48,65 @@ test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   // Q15 证据分级：极端犹豫只给现象学标注，秒数不进提示词
   assert.match(user, /对方报 2 个 4（这手前停了很久）/);
   assert.ok(!/用时|\d秒/.test(user));
-  assert.match(user, /2 个 4」。按你的骰子算，此话为真的概率 \d+%/);
+  // Q45：预注入的精确概率已退役——没拨算盘就只有粗档手感
+  assert.match(user, /2 个 4」。你没拨算盘，只有手感：这话(基本稳|五五开|悬|纯扯)/);
   assert.match(user, /爱虚张/);
+});
+
+test('Q45 算盘：拨过才给准数，且"算"进得了叙事（何时算＝新 tell）', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  await m.act('B', { type: 'calc' });
+  const ob = m.observe('B');
+  const { user, system } = buildPrompts(ob, '');
+  assert.match(user, /你这局拨过算盘：按你的骰子算，此话为真的概率 \d+%/);
+  assert.match(user, /只算骰面，不算人/);
+  assert.match(system, /没当众拨过算盘，就不许说出任何精确概率/);
+  // 对手侧：拨算盘是公开动作，必须进局面叙事
+  const { user: userA } = buildPrompts(m.observe('A'), '');
+  assert.match(userA, /对方当众拨了算盘/);
+  // 本局限一次
+  assert.ok(!ob.legal.some((a) => a.type === 'calc'), '算过就没得再算');
+  await assert.rejects(() => m.act('B', { type: 'calc' }), /illegal calc/);
+});
+
+test('Q45 算频：老李头常算给候选、阿飞从不碰算盘（身份锚点）', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  const ob = m.observe('B');
+  const often = buildPrompts(ob, '', PERSONAS.laolitou).user;
+  assert.match(often, /当众拨算盘（\{"type":"calc"\}）/);
+  assert.match(often, /你习惯算/);
+  const never = buildPrompts(ob, '', PERSONAS.afei).user;
+  assert.ok(!never.includes('当众拨算盘（{"type":"calc"}）'), '阿飞不给算的候选');
+  assert.match(never, /你从不碰算盘/);
+});
+
+test('Q45 引用校验：没算过就报准数＝编，当场掐掉；档案里给过的数照引不误', async () => {
+  const m = await createMatch({ seed: 9 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  // 未算却报出准数 → say/note 被掐掉
+  const liar = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    persona: { ...PERSONAS.laolitou, gear: { ...PERSONAS.laolitou.gear, usesBlind: true } },
+    fetchFn: mockFetch(() => ({
+      choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"三成。开。","note":"只有 12% 真"}' } }],
+    })),
+  });
+  const d = await liar.decide(m.observe('B'));
+  assert.equal(d.action.type, 'challenge');
+  assert.equal(d.say, '');
+  assert.equal(d.note, '');
+  assert.match(d.dropped ?? '', /say/);
+  // 档案里发给他的数字（虚报率 43%）不算编——引用校验只掐凭空长出来的数
+  assert.equal(hasFakePrecision('你虚报率 43%，还敢报', '上一场客人虚报率43%，开牌2次'), false);
+  assert.equal(hasFakePrecision('这话 87% 真', '上一场客人虚报率43%'), true);
+  assert.equal(hasFakePrecision('这话很悬，我不接', ''), false, '粗话免检');
 });
 
 test('parseDecision：合法动作通过，非法与坏输出拒绝', async () => {
@@ -114,7 +172,7 @@ test('createOpponent：决策日志自动回灌——第二手调用的提示词
       prompts.push(body.messages[1].content);
       return { choices: [{ message: { content: '{"action":{"type":"declare","declaration":"raise"},"say":"抬了，跑不了","note":"先把池做大"}' } }] };
     }),
-    persona: { ...(({ id: 'laolitou' }) ), name: '测', identity: '测。', tone: 'mild', style: '', flaws: '', gear: { probInject: 'full', usesBlind: true }, strategy: {} },
+    persona: { ...(({ id: 'laolitou' }) ), name: '测', identity: '测。', tone: 'mild', style: '', flaws: '', gear: { calc: 'often', usesBlind: true }, strategy: {} },
   });
   await m.act('B', { type: 'peek' });
   const d1 = await ai.decide(m.observe('B'));
@@ -131,7 +189,7 @@ test('Q28 素颜客席：无人设剧本、保留事实红线与规矩', async (
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
-  const bare = { id: 'model:test-model', name: 'test-model', bare: true, gear: { probInject: 'full', usesBlind: true } };
+  const bare = { id: 'model:test-model', name: 'test-model', bare: true, gear: { calc: 'often', usesBlind: true } };
   const { system } = buildPrompts(ob, '', bare);
   assert.match(system, /以本名上桌/);
   assert.match(system, /test-model/);
