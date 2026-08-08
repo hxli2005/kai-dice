@@ -1,5 +1,7 @@
 // 本地档案（DESIGN §3.3 双层制、§5.1 明牌档案）与 BYOK 配置（§3.4）。
 // 全部 localStorage，无账号（§7.2）。key 不出设备。
+
+import { PERSONAS } from '../ai/personas.js';
 //
 // 档案双层（Q19）：
 // - 客观层（全人设共享）：matches/wins/resets/stats——酒馆的公共账本，换人设不冷启动。
@@ -84,24 +86,47 @@ export function bumpResets(profile, storage = localStorage) {
 }
 
 // 跨场账本（Q12）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）。
-// v3：{you, personas:{id:n}} 按人设开户，人设可增不改结构；兼容旧平铺结构迁移
+// v3：{you, personas:{id:n}} 按人设开户，人设可增不改结构；兼容旧平铺结构迁移。
+// v4（TODO(Q25) 数值占位）：AI 是独立玩家，各有初始身家 bankroll（比客人厚——客人的钱从他们身上赢）；
+// bankrollApplied 记录每个户头按哪个基准入的账，基准变了给存量户头补差额（你已赢走的净额不动）——自愈式迁移。
 const LEDGER_KEY = 'kai.ledger.v1';
 export function loadLedger(storage = localStorage) {
+  let raw = null;
   try {
-    const l = JSON.parse(storage.getItem(LEDGER_KEY));
-    if (l && Number.isFinite(l.you)) {
-      if (l.personas) return { you: l.you, personas: { ...l.personas } };
-      const personas = {};
-      if (Number.isFinite(l.laolitou)) personas.laolitou = l.laolitou;
-      else if (Number.isFinite(l.opp)) personas.laolitou = l.opp;
-      if (Number.isFinite(l.afei)) personas.afei = l.afei;
-      return { you: l.you, personas };
-    }
+    raw = JSON.parse(storage.getItem(LEDGER_KEY));
   } catch {}
-  return { you: 100, personas: {} };
+  let l = { you: 100, personas: {}, bankrollApplied: {} };
+  let had = false;
+  if (raw && Number.isFinite(raw.you)) {
+    had = true;
+    if (raw.personas) {
+      l = { you: raw.you, personas: { ...raw.personas }, bankrollApplied: { ...(raw.bankrollApplied ?? {}) } };
+    } else {
+      const personas = {};
+      if (Number.isFinite(raw.laolitou)) personas.laolitou = raw.laolitou;
+      else if (Number.isFinite(raw.opp)) personas.laolitou = raw.opp;
+      if (Number.isFinite(raw.afei)) personas.afei = raw.afei;
+      l = { you: raw.you, personas, bankrollApplied: {} };
+    }
+  }
+  let shifted = false;
+  for (const [id, per] of Object.entries(PERSONAS)) {
+    const bank = per.bankroll ?? 100;
+    const base = l.bankrollApplied[id] ?? 100;
+    if (l.personas[id] != null && base !== bank) {
+      l.personas[id] += bank - base;
+      shifted = true;
+    }
+    if (l.bankrollApplied[id] !== bank) {
+      l.bankrollApplied[id] = bank;
+      shifted = true;
+    }
+  }
+  if (had && shifted) storage.setItem(LEDGER_KEY, JSON.stringify(l)); // 立即落盘防重复补差
+  return l;
 }
 export function balanceOf(ledger, personaId) {
-  return ledger.personas[personaId] ?? 100;
+  return ledger.personas[personaId] ?? PERSONAS[personaId]?.bankroll ?? 100;
 }
 export function saveLedger(l, storage = localStorage) {
   storage.setItem(LEDGER_KEY, JSON.stringify(l));

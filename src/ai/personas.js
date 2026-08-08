@@ -26,6 +26,7 @@ export const PERSONAS = {
 - 自负：你算得准，所以偶尔明知概率不利也要逆着来——你不信他这种人能压住你。`,
     gear: { probInject: 'full', usesBlind: false }, // 装备：每手必算完整概率；不用盲（稳健记仇）
     strategy: { challengeThreshold: 0.25 }, // 沉默模式顶班时沿用的行为参数
+    bankroll: 800, // TODO(Q25) 初始身家占位：酒馆老板三十年家底——玩家的钱从他们身上赢
     // §2.4：挂机 >30s 的催话（纯氛围，无机制后果）
     idle: ['睡着了？', '骰子不烫手，你怕什么。', '想是好事，就是别想到打烊。', '我这盅茶都凉第二回了。'],
     pace: 'slow', // 表现层节奏：老李头想得慢
@@ -47,6 +48,7 @@ export const PERSONAS = {
     // 装备（§B.1）：不用计算器（事实粗化注入）、爱盲、决策快
     gear: { probInject: 'coarse', usesBlind: true },
     strategy: { challengeThreshold: 0.35 }, // 沉默顶班：更冲动，容忍度低就开
+    bankroll: 300, // TODO(Q25) 初始身家占位：街口快枪手，家底薄但比客人厚
     idle: ['喂，下班了啊？', '你这一手棋琢磨出花了？', '手机没电了就说一声。', '开不开报不报，给个响。'],
     pace: 'fast', // 近乎秒出
   },

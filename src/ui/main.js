@@ -814,80 +814,80 @@ async function showReport(end) {
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note], personaId: opponent.persona.id });
 }
 
-// ---------- 抽屉（大厅：档案/规矩/设置；局内：档案/规矩/封印/离桌——设置归大厅） ----------
+// ---------- 档案渲染件（玩家页与局内抽屉共用） ----------
+const statTableHtml = () =>
+  profile.stats.length
+    ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报</th><th>开牌</th></tr>${profile.stats
+        .slice(-6)
+        .map((s, i, arr) => {
+          const idx = profile.stats.length - arr.length + i + 1;
+          return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td></tr>`;
+        })
+        .join('')}</table>`
+    : '';
+
+// 每个 AI 一本账（遍历花名册，人设可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
+const bookHtml = (per, extraBits = []) => {
+  const mind = mindOf(profile, per.id);
+  const agg = mind.stats.reduce(
+    (a, s) => ({
+      bids: a.bids + 1,
+      bluff: a.bluff + (s.bluffRate ?? 0),
+      hits: a.hits + (s.hits ?? 0),
+      opens: a.opens + (s.opens ?? 0),
+      blinds: a.blinds + (s.blinds ?? 0),
+    }),
+    { bids: 0, bluff: 0, hits: 0, opens: 0, blinds: 0 },
+  );
+  const dataBits = [...extraBits];
+  if (mind.record.plays) dataBits.push(`对你 ${mind.record.plays} 战 ${mind.record.beat} 胜`);
+  if (agg.bids) {
+    dataBits.push(`虚报 ${Math.round((agg.bluff / agg.bids) * 100)}%`);
+    dataBits.push(`开牌 ${agg.hits}/${agg.opens}`);
+    dataBits.push(agg.blinds ? `盲 ${agg.blinds} 次` : '不盲');
+  }
+  const hyps = (mind.hypotheses ?? [])
+    .map(
+      (h) =>
+        `<p class="hyp">「${h.text}」<span class="tally">${'✓'.repeat(Math.min(h.hits ?? 0, 5))}${
+          h.misses?.length ? ` <i>✗${h.misses.join(' ✗')}</i>` : ''
+        }</span></p>`,
+    )
+    .join('');
+  const notes = mind.notes.slice(-4).map((n) => `<p class="note-item">${n}</p>`).join('');
+  return `<div class="book">
+    <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}<span class="book-tag">${per.tag ?? ''}</span></div>
+    ${dataBits.length ? `<p class="book-stats">${dataBits.join(' · ')}</p>` : ''}
+    ${hyps + notes || '<p class="dim-line">暂无记录</p>'}
+  </div>`;
+};
+
+// ---------- 抽屉（大厅：规矩/设置；局内：档案/规矩/封印/离桌——身家与玩家页在大厅的榜上） ----------
 function openDrawer(section, inLobby = false) {
   const d = $('drawer');
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
   if (!inLobby) disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
   const rsNow = !inLobby && match ? lastEvent(ob(), 'roundStart') : null;
-  const led = loadLedger();
   const lastStat = profile.stats.at(-1);
   const insight = lastStat ? condBrief(lastStat) : '';
-  const ledgerLine = ['你 <b>' + led.you + '</b>']
-    .concat(Object.values(PERSONAS).map((per) => `${per.seal} <b>${balanceOf(led, per.id)}</b>`))
-    .join(' · ');
-  // 每个 AI 一本账（遍历花名册，人设可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
-  const bookOf = (per) => {
-    const mind = mindOf(profile, per.id);
-    const agg = mind.stats.reduce(
-      (a, s) => ({
-        bids: a.bids + 1,
-        bluff: a.bluff + (s.bluffRate ?? 0),
-        hits: a.hits + (s.hits ?? 0),
-        opens: a.opens + (s.opens ?? 0),
-        blinds: a.blinds + (s.blinds ?? 0),
-      }),
-      { bids: 0, bluff: 0, hits: 0, opens: 0, blinds: 0 },
-    );
-    const dataBits = [];
-    if (mind.record.plays) dataBits.push(`对你 ${mind.record.plays} 战 ${mind.record.beat} 胜`);
-    if (agg.bids) {
-      dataBits.push(`虚报 ${Math.round((agg.bluff / agg.bids) * 100)}%`);
-      dataBits.push(`开牌 ${agg.hits}/${agg.opens}`);
-      dataBits.push(agg.blinds ? `盲 ${agg.blinds} 次` : '不盲');
-    }
-    const hyps = (mind.hypotheses ?? [])
-      .map(
-        (h) =>
-          `<p class="hyp">「${h.text}」<span class="tally">${'✓'.repeat(Math.min(h.hits ?? 0, 5))}${
-            h.misses?.length ? ` <i>✗${h.misses.join(' ✗')}</i>` : ''
-          }</span></p>`,
-      )
-      .join('');
-    const notes = mind.notes.slice(-4).map((n) => `<p class="note-item">${n}</p>`).join('');
-    return `<div class="book">
-      <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}<span class="book-tag">${per.tag ?? ''}</span></div>
-      ${dataBits.length ? `<p class="book-stats">${dataBits.join(' · ')}</p>` : ''}
-      ${hyps + notes || '<p class="dim-line">暂无记录</p>'}
-    </div>`;
-  };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <nav class="drawer-nav">${
       inLobby
-        ? '<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secBrain">设置</a>'
+        ? '<a href="#secRules">规矩</a><a href="#secBrain">设置</a>'
         : '<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a class="leave" id="leaveBtn">离桌</a>'
     }</nav>
-
-    <h2 id="profileSec">你的账</h2>
-    <p class="ledger-line">身家　${ledgerLine}
-      <button id="resetLedger" class="linkish">翻篇</button></p>
-    ${profile.matches ? `<p class="book-stats">${profile.matches} 场${(profile.resets ?? 0) > 0 ? ` · 翻篇 ${profile.resets} 次` : ''}</p>` : ''}
-    ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
     ${
-      profile.stats.length
-        ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报</th><th>开牌</th></tr>${profile.stats
-            .slice(-6)
-            .map((s, i, arr) => {
-              const idx = profile.stats.length - arr.length + i + 1;
-              return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td></tr>`;
-            })
-            .join('')}</table>`
-        : ''
-    }
+      inLobby
+        ? ''
+        : `<h2 id="profileSec">你的账</h2>
+    ${profile.matches ? `<p class="book-stats">${profile.matches} 场 ${profile.wins} 胜${(profile.resets ?? 0) > 0 ? ` · 翻篇 ${profile.resets} 次` : ''}</p>` : ''}
+    ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
+    ${statTableHtml()}
 
     <h2>他们的本子</h2>
-    ${Object.values(PERSONAS).map(bookOf).join('')}
+    ${Object.values(PERSONAS).map((per) => bookHtml(per)).join('')}`
+    }
 
     <h2 id="secRules">规矩</h2>
     <ul>
@@ -924,17 +924,10 @@ function openDrawer(section, inLobby = false) {
     <div id="byokTest" class="test-line"></div>`
     }
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
-  if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
+  if (section === 'profile') d.querySelector('#profileSec')?.scrollIntoView();
   else if (section === 'brain') d.querySelector('#secBrain')?.scrollIntoView();
   else d.scrollTop = 0;
   d.querySelector('#leaveBtn')?.addEventListener('click', leaveTable);
-  d.querySelector('#resetLedger').addEventListener('click', (e) => {
-    saveLedger({ you: 100, personas: {} });
-    profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
-    e.target.textContent = '已翻篇 · 下一场生效';
-    e.target.disabled = true;
-    if (inLobby) showLobby(); // 大厅卡片上的身家跟着刷新
-  });
   d.querySelector('#closeDrawer').addEventListener('click', () => {
     d.classList.add('hidden');
     if (inLobby) return;
@@ -969,13 +962,27 @@ function showLobby() {
   let mode = loadTable();
   let picked = loadLineup(mode);
   const need = () => (mode === 'duo' ? 1 : 2);
-  // 卡上只放数据：对你战绩＋身家；没打过＝生面孔
+  // 卡上只放对局数据：对你战绩；没打过＝生面孔（身家在榜上）
   const dataOf = (per) => {
     const rec = mindOf(profile, per.id).record;
-    return rec.plays ? `对你 ${rec.plays} 战 ${rec.beat} 胜 · 身家 ${balanceOf(led, per.id)}` : '生面孔';
+    return rec.plays ? `对你 ${rec.plays} 战 ${rec.beat} 胜` : '生面孔';
   };
+  // 榜（平等公民）：你和他们同一种行，身家即座次；点行翻开玩家页
+  const boardHtml = () =>
+    [
+      { id: 'you', seal: '客', name: '你', bal: led.you },
+      ...Object.values(PERSONAS).map((per) => ({ id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id) })),
+    ]
+      .sort((a, b) => b.bal - a.bal)
+      .map(
+        (r, i) => `<button class="board-row ${r.id === 'you' ? 'me' : ''}" data-pg="${r.id}">
+          <span class="rank">${i + 1}</span><span class="seal mini">${r.seal}</span><span class="board-name">${r.name}</span><b${r.bal < 0 ? ' class="debt"' : ''}>${r.bal}</b>
+        </button>`,
+      )
+      .join('');
   const draw = () => {
     lb.innerHTML = `<div class="lobby-title">开！</div>
+      <div class="board">${boardHtml()}</div>
       <div class="mode-row">
         <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" data-m="duo">单挑</button>
         <button class="mode-btn ${mode === 'trio' ? 'sel' : ''}" data-m="trio">三人桌</button>
@@ -993,7 +1000,7 @@ function showLobby() {
         )
         .join('')}</div>
       <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>开局</button>
-      <div class="lobby-links"><a id="lobbyProfile">档案</a><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
+      <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
         mode = el.dataset.m;
@@ -1015,11 +1022,50 @@ function showLobby() {
       lb.classList.add('hidden');
       newMatch();
     });
-    lb.querySelector('#lobbyProfile').addEventListener('click', () => openDrawer('profile', true));
+    lb.querySelectorAll('.board-row').forEach((el) =>
+      el.addEventListener('click', () => openPlayerPage(el.dataset.pg)),
+    );
     lb.querySelector('#lobbySettings').addEventListener('click', () => openDrawer('brain', true));
   };
   draw();
   lb.classList.remove('hidden');
+}
+
+// ---------- 玩家页（榜上每行翻开一页；你和他们同一种书卡语法——平等公民） ----------
+function openPlayerPage(id) {
+  const d = $('drawer');
+  d.classList.remove('hidden');
+  d.scrollTop = 0;
+  const led = loadLedger();
+  let body;
+  if (id === 'you') {
+    const lastStat = profile.stats.at(-1);
+    const insight = lastStat ? condBrief(lastStat) : '';
+    const bits = [
+      `身家 ${led.you}${led.you <= 0 ? '（赊着）' : ''}`,
+      profile.matches ? `${profile.matches} 场 ${profile.wins} 胜` : '',
+      (profile.resets ?? 0) > 0 ? `翻篇 ${profile.resets} 次` : '',
+    ].filter(Boolean);
+    body = `<div class="book">
+      <div class="book-head"><span class="seal mini">客</span>你<span class="book-tag">酒馆的客人</span></div>
+      <p class="book-stats">${bits.join(' · ')}</p>
+      ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
+      ${statTableHtml()}
+      <p style="margin-top:0.8rem"><button id="resetLedger" class="linkish">翻篇</button></p>
+    </div>`;
+  } else {
+    const per = PERSONAS[id];
+    body = `<p class="p-idline">${per.identity}</p>` + bookHtml(per, [`身家 ${balanceOf(led, id)}`]);
+  }
+  d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>${body}`;
+  d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
+  d.querySelector('#resetLedger')?.addEventListener('click', (e) => {
+    saveLedger({ you: 100, personas: {} }); // 全馆回到初始身家（你 100，他们各自的家底）
+    profile = bumpResets(profile); // Q12：翻篇免费，但记进档案
+    e.target.textContent = '已翻篇';
+    e.target.disabled = true;
+    showLobby(); // 榜与卡跟着刷新
+  });
 }
 
 // 离桌（局内→大厅）：本场不记档——账本只在场终写回，中途走人等于这场没发生

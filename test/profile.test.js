@@ -46,3 +46,26 @@ test('双层：客观统计全人设共享，笔记各记各的', () => {
   const p2 = loadProfile(s);
   assert.deepEqual(mindOf(p2, 'afei').notes, ['飞记：这人稳']);
 });
+
+// 账本 v4（TODO(Q25) 占位数值）：AI 是独立玩家，各有初始身家；旧账自愈迁移
+import { loadLedger, balanceOf } from '../src/ui/profile.js';
+import { PERSONAS } from '../src/ai/personas.js';
+
+test('账本 v4：新户头按人设 bankroll 起步，客人 100', () => {
+  const s = memStorage();
+  const led = loadLedger(s);
+  assert.equal(led.you, 100);
+  assert.equal(balanceOf(led, 'laolitou'), PERSONAS.laolitou.bankroll);
+  assert.equal(balanceOf(led, 'afei'), PERSONAS.afei.bankroll);
+});
+
+test('账本 v4：旧账补差额——你已赢走的净额不变，且二次读取不重复补', () => {
+  const s = memStorage({
+    'kai.ledger.v1': JSON.stringify({ you: 130, personas: { laolitou: 70 } }), // 你从老李头赢走 30
+  });
+  const led = loadLedger(s);
+  assert.equal(led.you, 130);
+  assert.equal(led.personas.laolitou, PERSONAS.laolitou.bankroll - 30);
+  const again = loadLedger(s);
+  assert.equal(again.personas.laolitou, PERSONAS.laolitou.bankroll - 30);
+});

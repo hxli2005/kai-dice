@@ -729,8 +729,9 @@ button.danger:active { transform: scale(0.95); }
     radial-gradient(ellipse 90% 55% at 50% 32%, #33261c 0%, #1c1512 55%, #0f0c0a 100%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 1rem;
-  padding: 2rem 1.6rem calc(env(safe-area-inset-bottom) + 2rem);
+  gap: 0.9rem;
+  padding: 1.6rem 1.6rem calc(env(safe-area-inset-bottom) + 1.6rem);
+  overflow-y: auto;
 }
 .lobby-title {
   font-size: 3.4rem; color: var(--lamp);
@@ -768,6 +769,21 @@ button.danger:active { transform: scale(0.95); }
   font-size: 1.15rem; letter-spacing: 0.45em; text-indent: 0.45em;
   margin-top: 0.4rem;
 }
+/* 榜：平等公民——你和 AI 同一种行，身家即座次；点行翻开玩家页 */
+.board { width: 100%; max-width: 19rem; margin-bottom: 0.2rem; }
+.board-row {
+  width: 100%; display: flex; align-items: center; gap: 0.75rem;
+  background: none; border: none; padding: 0.36rem 0.5rem;
+  color: var(--ink); font-family: var(--serif); font-size: 0.95rem;
+  border-radius: 0.4rem; cursor: pointer;
+}
+.board-row .rank { width: 1.1rem; color: var(--dim); font-variant-numeric: tabular-nums; text-align: center; }
+.board-row .board-name { flex: 1; text-align: left; letter-spacing: 0.12em; }
+.board-row b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.board-row b.debt { color: var(--red-hi); }
+.board-row.me { color: var(--lamp); }
+.p-idline { font-size: 0.82rem; color: var(--dim); line-height: 1.75; margin: 0.2rem 0 0.8rem; }
+
 .lobby-links { display: flex; gap: 1.8rem; margin-top: 0.2rem; }
 .lobby-links a {
   color: var(--dim); font-size: 0.8rem; letter-spacing: 0.15em;
