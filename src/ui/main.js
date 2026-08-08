@@ -308,7 +308,7 @@ function buildOppArea() {
           <span class="thinking"><i></i><i></i><i></i></span>
         </div>
         <div class="dicerow strip-dice" id="dice-${s}"></div>
-        <div class="strip-meta" id="meta-${s}"></div>
+        <div class="chips strip-chips" id="meta-${s}"></div>
         <div class="strip-bubble hidden"></div>
       </div>`;
     })
@@ -323,7 +323,7 @@ function renderTrio(o) {
     strip.classList.toggle('out', !ps.alive);
     strip.classList.toggle('turn', o.turn === s && !o.over);
     $(`dice-${s}`).innerHTML = ps.alive ? backHtml('mini').repeat(ps.diceCount) : '<i class="out-mark">出局</i>';
-    $(`meta-${s}`).textContent = `筹 ${ps.chips}`;
+    renderChips(`meta-${s}`, ps.chips);
     const dot = $(`brain-${s}`);
     if (!channelOf()) dot.className = 'brain hidden';
     else {
@@ -354,7 +354,7 @@ function render() {
   const mult =
     seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
   const aliveN = o.players.filter((q) => q.alive).length;
-  $('roundTag').textContent = `第 ${o.round} 局 · ${o.diceCount.you + o.diceCount.opp} 骰`;
+  $('roundTag').textContent = `第 ${o.round} 局`;
   $('pot').innerHTML = marks;
   renderPotChips(o.potUnits * aliveN, mult > 1);
 
@@ -427,7 +427,7 @@ function render() {
     $('bidBtn').textContent = '—';
   }
   $('bidBtn').disabled = !myTurn || !bids;
-  $('openBtn').textContent = '开！'; // 开谁由报价行具名（开只开上家）；juice 归拍桌那一拍
+  $('openBtn').innerHTML = '开<span class="bang">!</span>'; // 开谁由报价行具名；半角叹号手控间距防歪
   $('openBtn').disabled = !myTurn || !o.currentBid;
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');

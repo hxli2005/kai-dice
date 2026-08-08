@@ -411,9 +411,12 @@ button.danger {
   background: var(--red); color: #fff2ea;
   border: none; border-radius: 0.55rem;
   font-family: var(--serif); font-size: 1.45rem; font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1.1;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+button.danger .bang { margin-left: 0.06em; }
 button.danger:not(:disabled) {
   box-shadow: 0 0 16px rgba(200, 64, 46, 0.35);
 }
@@ -607,6 +610,9 @@ button.danger:active { transform: scale(0.95); }
   width: 1.15rem; height: 1.15rem;
   border-radius: 0.28rem;
 }
+.strip-chips { margin-top: 0.1rem; }
+.strip-chips .hand .chip-dot { width: 0.85rem; height: 0.85rem; }
+.strip-chips b { font-size: 0.95rem; }
 .strip-meta {
   font-family: var(--mono);
   font-size: 0.62rem;
