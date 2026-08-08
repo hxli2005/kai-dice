@@ -9,7 +9,7 @@ const PROFILE_KEY = 'kai.profile.v1';
 const BYOK_KEY = 'kai.byok.v1';
 
 function emptyMind() {
-  return { notes: [], hypotheses: [] };
+  return { notes: [], hypotheses: [], stats: [], record: { plays: 0, beat: 0 } };
 }
 
 function emptyProfile() {
@@ -40,7 +40,10 @@ export function loadProfile(storage = localStorage) {
 
 export function mindOf(profile, personaId) {
   profile.minds[personaId] ??= emptyMind();
-  return profile.minds[personaId];
+  const m = profile.minds[personaId];
+  m.stats ??= [];
+  m.record ??= { plays: 0, beat: 0 };
+  return m;
 }
 
 export function saveProfile(profile, storage = localStorage) {
@@ -81,19 +84,24 @@ export function bumpResets(profile, storage = localStorage) {
 }
 
 // 跨场账本（Q12）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）。
-// v2：按人设分户头（三人桌各记各的）；旧 {you,opp} 迁移为 opp→laolitou
+// v3：{you, personas:{id:n}} 按人设开户，人设可增不改结构；兼容旧平铺结构迁移
 const LEDGER_KEY = 'kai.ledger.v1';
 export function loadLedger(storage = localStorage) {
   try {
     const l = JSON.parse(storage.getItem(LEDGER_KEY));
     if (l && Number.isFinite(l.you)) {
-      if (Number.isFinite(l.opp) && !Number.isFinite(l.laolitou)) {
-        return { you: l.you, laolitou: l.opp, afei: 100 };
-      }
-      return { you: l.you, laolitou: l.laolitou ?? 100, afei: l.afei ?? 100 };
+      if (l.personas) return { you: l.you, personas: { ...l.personas } };
+      const personas = {};
+      if (Number.isFinite(l.laolitou)) personas.laolitou = l.laolitou;
+      else if (Number.isFinite(l.opp)) personas.laolitou = l.opp;
+      if (Number.isFinite(l.afei)) personas.afei = l.afei;
+      return { you: l.you, personas };
     }
   } catch {}
-  return { you: 100, laolitou: 100, afei: 100 };
+  return { you: 100, personas: {} };
+}
+export function balanceOf(ledger, personaId) {
+  return ledger.personas[personaId] ?? 100;
 }
 export function saveLedger(l, storage = localStorage) {
   storage.setItem(LEDGER_KEY, JSON.stringify(l));

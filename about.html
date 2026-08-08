@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0c0a">
+<title>开！· 说明</title>
+<link rel="stylesheet" href="src/ui/style.css">
+<style>
+  body { overflow: auto; }
+  .page {
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: 2rem 1.4rem 4rem;
+  }
+  .page h1 { font-size: 1.5rem; letter-spacing: 0.3em; color: var(--lamp); font-weight: 400; margin-bottom: 0.3rem; }
+  .page h2 { font-size: 1.05rem; letter-spacing: 0.2em; margin: 1.6rem 0 0.6rem; color: var(--lamp); font-weight: 400; }
+  .page p, .page li { font-size: 0.88rem; color: var(--dim); line-height: 1.8; }
+  .page ul { padding-left: 1.1rem; }
+  .page li { margin-bottom: 0.4rem; }
+  .page b { color: var(--ink); font-weight: 400; }
+  .back { color: var(--lamp); text-decoration: none; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="page">
+  <a class="back" href="index.html">← 回牌桌</a>
+  <h1>开！</h1>
+  <p>大话骰。对面坐着会算、会记仇、开你之前把推理念出来的对手。</p>
+
+  <h2>玩法</h2>
+  <ul>
+    <li>每人五颗暗骰，各自摇各自的。轮流报数：「桌上（全桌合计）至少有 N 个 X 点」。</li>
+    <li>报数只能往上抬：数量加大，或数量不变、点数加大。首报至少 2 个。</li>
+    <li><b>1 点是万能牌</b>，替任何点数凑数。宣过「斋」的那一局除外。</li>
+    <li>不信就拍「开」——三人桌上只能开你上家（上一个报价的人）。清点全桌：数够了，开的人输；不够，报的人输。</li>
+    <li>输家掉一颗骰子。骰子掉光出局旁观，打到只剩一人。</li>
+    <li>注池：每局全桌各押 1 注底；每报一次数，全桌各自动加 1 注。开牌局胜者收整池——看客的注也在池里。</li>
+    <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。身家跨场连续，输光了赊账继续打，也可随时「翻篇」清账——但翻篇会被记进档案。</li>
+    <li>不限时。你手停多久，他们看得见，也记得住。</li>
+  </ul>
+
+  <h2>宣言</h2>
+  <ul>
+    <li><b>盲</b>：整局不看自己的骰子，本局池 ×2。轮到你、还没看骰也没报过数时可宣。</li>
+    <li><b>斋</b>：本局 1 点不作万能，池 ×1.5。只有一局的首报者能宣。</li>
+    <li>两者可叠加，赔率相乘。</li>
+  </ul>
+
+  <h2>表盘</h2>
+  <p>屏幕上的概率只按你手里的骰子和纯运气算，不猜人心。对面敢不敢这么报、是不是在钓你开——得你自己读。他们那边的表盘和你的是同一个算法。</p>
+
+  <h2>为什么信它</h2>
+  <ul>
+    <li>每局开始，各家骰面连同随机数封成哈希先上屏（菜单「封印」可查全文）；摊牌时开封可验——谁都不能重掷。</li>
+    <li>AI 和你走同一套接口、拿同构的字节：接口里没有你的骰面这个字段。公平由架构保证，不靠承诺。</li>
+    <li>你落子之前的犹豫、悬停，一概不采样。</li>
+    <li>台词由 AI 生成，引用的全部是真实对局数据。</li>
+  </ul>
+
+  <h2>接入</h2>
+  <ul>
+    <li><b>拿到暗号的</b>：菜单「设置」里 API Key 一格填暗号，其余留空，走官方通道。</li>
+    <li><b>自带 API 的</b>：Base URL / API Key / Model 三格全填，兼容 OpenAI 格式（DeepSeek、Kimi、Qwen、OpenRouter、本地 Ollama 等）与 Anthropic 格式。钥匙只存这台设备，浏览器直连模型商，不经任何中间服务器。</li>
+    <li>全空：对手不说话，只按数学行棋。</li>
+  </ul>
+
+  <h2>桌上的人</h2>
+  <p>每个对手是一个完整人设：性格、嘴、打法、装备、缺陷——缺陷是真的，能被你读出来、利用掉。他们各自记你的账，跨场不忘。花名册会慢慢加人。</p>
+
+  <p style="margin-top:2.5rem"><a class="back" href="index.html">← 回牌桌</a></p>
+</div>
+</body>
+</html>

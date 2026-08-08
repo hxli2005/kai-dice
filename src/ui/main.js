@@ -8,7 +8,7 @@ import { createOpponent, settleVerdict, reflect } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS, DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict, condBrief } from './report.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadByok, saveByok, loadLedger, saveLedger, balanceOf } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -32,9 +32,11 @@ let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
 
-// 座次表（§2.5 三人桌）：A=你，B=老李头，C=阿飞
-const SEAT_PERSONA = { B: PERSONAS.laolitou, C: PERSONAS.afei };
-const NAMES = { A: '客人', B: PERSONAS.laolitou.name, C: PERSONAS.afei.name };
+// 座次（§2.5）：阵容表驱动——人设只增不改代码。A=玩家，其余按序入座
+const SEAT_IDS = ['B', 'C', 'D', 'E'];
+const TABLE_LINEUP = { duo: ['laolitou'], trio: ['laolitou', 'afei'] };
+let SEAT_PERSONA = {}; // seat -> persona（newMatch 构建）
+let NAMES = { A: '客人' };
 const isTrio = () => seats.length > 2;
 const dispName = (s) => (s === 'A' ? '你' : NAMES[s]);
 // 桌型（本批默认三人；1v1 读心核保留为可选）
@@ -72,7 +74,7 @@ let fallbackNoticed = false;
 // 保存即测试：官方通道走 ping 免费校验暗号；自带 API 打一次最小真调用
 async function testChannel() {
   const ch = channelOf();
-  if (!ch) return { ok: false, msg: '没填钥匙——他保持沉默' };
+  if (!ch) return { ok: false, msg: '未填钥匙' };
   if (ch.baseUrl.endsWith('/api/llm')) {
     try {
       const r = await fetch(`${location.origin}/api/llm/ping`, {
@@ -81,14 +83,14 @@ async function testChannel() {
       const j = await r.json();
       if (!j.secrets) return { ok: false, msg: '官方通道未开（服务端没配 key）' };
       if (j.pass !== true) return { ok: false, msg: '暗号不对' };
-      return { ok: true, msg: '暗号对上了——他的嘴已归位' };
+      return { ok: true, msg: '已连通' };
     } catch {
       return { ok: false, msg: '这个域名没有官方通道' };
     }
   }
   try {
     await chat(ch, { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
-    return { ok: true, msg: '接上了——他的嘴已归位' };
+    return { ok: true, msg: '已连通' };
   } catch (e) {
     return { ok: false, msg: friendlyError(e?.message ?? '') };
   }
@@ -354,7 +356,7 @@ function render() {
   const mult =
     seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
   const aliveN = o.players.filter((q) => q.alive).length;
-  $('roundTag').textContent = `第 ${o.round} 局`;
+  $('roundTag').textContent = `第 ${o.round} 局 · ${o.diceCount.you + o.diceCount.opp} 骰`;
   $('pot').innerHTML = `池 <b>${o.potUnits * aliveN}</b> 注${marks}`;
   renderPotChips(o.potUnits * aliveN, mult > 1);
 
@@ -388,13 +390,13 @@ function render() {
   const g = $('gauge');
   if (o.currentBid && o.yourDice) {
     const p = probBidTrue(o.currentBid, o.yourDice, o.diceCount.opp, o.zhai);
-    g.innerHTML = `按你的骰子算，「${o.currentBid.count} 个 ${o.currentBid.face}」为真 <b>${pct(p)}</b>`;
-  } else if (o.currentBid) {
-    g.textContent = o.blind.A ? '盲局——你选的路' : '看了骰才有数';
+    g.innerHTML = `「${o.currentBid.count} 个 ${o.currentBid.face}」真 <b>${pct(p)}</b>`;
+  } else if (o.currentBid && o.blind.A) {
+    g.textContent = '盲局';
   } else if (!meAlive) {
-    g.textContent = '观战中——他们打完这场才算完';
+    g.textContent = '出局 · 观战';
   } else {
-    g.textContent = myTurn ? `桌上共 ${o.diceCount.you + o.diceCount.opp} 颗骰，你先报` : '';
+    g.textContent = '';
   }
 
   // 报数控件
@@ -453,10 +455,8 @@ function render() {
 function hintFor(o, myTurn) {
   if (o.over || !myTurn) return '';
   if (!o.yourDice && !o.blind.A) return '点骰盅看牌';
-  if (isTrio() && o.round === 1 && o.currentBid)
-    return `开牌只能开上家——现在能开的是${NAMES[o.currentBid.player]}`;
-  if (profile.matches === 0 && o.round === 1)
-    return o.currentBid ? '抬价，或拍「开」' : '报：桌上至少有几个几点';
+  if (isTrio() && o.round === 1 && o.currentBid) return '开＝开上家';
+  if (profile.matches === 0 && o.round === 1 && !o.currentBid) return '报数＝全桌总数';
   return '';
 }
 
@@ -536,7 +536,7 @@ async function aiTurnFor(seat) {
   }
   if (d.silentFallback && d.error && channelOf() && !fallbackNoticed) {
     fallbackNoticed = true;
-    $('hint').textContent = `接不上${NAMES[seat]}的脑子（${friendlyError(d.error)}），先闭嘴算账`;
+    $('hint').textContent = `${NAMES[seat]}未连接（${friendlyError(d.error)}）`;
   }
   // 人设节奏：阿飞近乎秒出，老李头想得慢
   const floor = ai.persona.pace === 'fast' ? 350 + Math.random() * 350 : 900 + Math.random() * 800;
@@ -648,9 +648,19 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   const next = ob();
   myDiceByRound[next.round] = null;
   // 玩家刚出局 → 观战提示（§2.5 淘汰观战：看他们收尾）
-  if (re.diceCount.A === 0 && !end)
-    $('hint').textContent = '你出局了——坐着看他们收尾';
+  if (re.diceCount.A === 0 && !end) $('hint').textContent = '出局 · 观战';
   driveTurn();
+}
+
+// 从摊牌事件回溯某席位每局骰面（公开信息）——供 AI 行为统计复算
+function diceByRoundOf(events, seat) {
+  const map = {};
+  let round = 0;
+  for (const e of events) {
+    if (e.type === 'roundStart') round = e.round;
+    if (e.type === 'reveal' && e.dice[seat]) map[round] = e.dice[seat];
+  }
+  return map;
 }
 
 // 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）
@@ -703,11 +713,25 @@ async function showReport(end) {
   const won = end.winner === 'A';
   // 账本落袋（按人设分户头），下一场带着走
   const led = loadLedger();
-  saveLedger({
-    you: end.chips.A,
-    laolitou: end.chips.B ?? led.laolitou,
-    afei: end.chips.C ?? led.afei,
-  });
+  for (const s of seats.slice(1)) led.personas[SEAT_PERSONA[s].id] = end.chips[s];
+  led.you = end.chips.A;
+  saveLedger(led);
+  // 每个在场 AI：本场行为统计＋对你战绩入其账（AI 的刻画数据，菜单展示）
+  for (const s of seats.slice(1)) {
+    const mind = mindOf(profile, SEAT_PERSONA[s].id);
+    const aiStats = computeStats(o.events, s, diceByRoundOf(o.events, s));
+    mind.stats = [
+      ...mind.stats,
+      {
+        bluffRate: aiStats.bluffRate,
+        hits: aiStats.myChallengeHits,
+        opens: aiStats.myChallenges,
+        blinds: aiStats.myBlinds,
+      },
+    ].slice(-10);
+    mind.record.plays += 1;
+    if (end.standings && end.standings.indexOf(s) < end.standings.indexOf('A')) mind.record.beat += 1;
+  }
   const stats = computeStats(o.events, 'A', myDiceByRound);
   const byok = channelOf();
   const standingsLine = end.standings
@@ -785,9 +809,29 @@ function openDrawer(section) {
   const led = loadLedger();
   const lastStat = profile.stats.at(-1);
   const insight = lastStat ? condBrief(lastStat) : '';
-  // 每个 AI 一本账：假设（含反例）＋笔记——"它怎么读你"是这一页的主角
+  const ledgerLine = ['你 <b>' + led.you + '</b>']
+    .concat(Object.values(PERSONAS).map((per) => `${per.seal} <b>${balanceOf(led, per.id)}</b>`))
+    .join(' · ');
+  // 每个 AI 一本账（遍历花名册，人设可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
   const bookOf = (per) => {
     const mind = mindOf(profile, per.id);
+    const agg = mind.stats.reduce(
+      (a, s) => ({
+        bids: a.bids + 1,
+        bluff: a.bluff + (s.bluffRate ?? 0),
+        hits: a.hits + (s.hits ?? 0),
+        opens: a.opens + (s.opens ?? 0),
+        blinds: a.blinds + (s.blinds ?? 0),
+      }),
+      { bids: 0, bluff: 0, hits: 0, opens: 0, blinds: 0 },
+    );
+    const dataBits = [];
+    if (mind.record.plays) dataBits.push(`对你 ${mind.record.plays} 战 ${mind.record.beat} 胜`);
+    if (agg.bids) {
+      dataBits.push(`虚报 ${Math.round((agg.bluff / agg.bids) * 100)}%`);
+      dataBits.push(`开牌 ${agg.hits}/${agg.opens}`);
+      dataBits.push(agg.blinds ? `盲 ${agg.blinds} 次` : '不盲');
+    }
     const hyps = (mind.hypotheses ?? [])
       .map(
         (h) =>
@@ -798,19 +842,20 @@ function openDrawer(section) {
       .join('');
     const notes = mind.notes.slice(-4).map((n) => `<p class="note-item">${n}</p>`).join('');
     return `<div class="book">
-      <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}记你</div>
-      ${hyps + notes || '<p class="dim-line">还没记下什么。</p>'}
+      <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}<span class="book-tag">${per.tag ?? ''}</span></div>
+      ${dataBits.length ? `<p class="book-stats">${dataBits.join(' · ')}</p>` : ''}
+      ${hyps + notes || '<p class="dim-line">暂无记录</p>'}
     </div>`;
   };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <nav class="drawer-nav">
-      <a href="#profileSec">本子</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a href="#secBrain">脑子</a>
+      <a href="#profileSec">本子</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a href="#secBrain">设置</a>
     </nav>
 
     <h2 id="profileSec">他们的本子</h2>
-    <p class="ledger-line">身家　你 <b>${led.you}</b> · 李 <b>${led.laolitou}</b> · 飞 <b>${led.afei}</b>
+    <p class="ledger-line">身家　${ledgerLine}
       <button id="resetLedger" class="linkish">翻篇</button></p>
-    ${insight ? `<p class="insight">他们盯上的破绽：${insight}</p>` : ''}
+    ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
     ${
       profile.stats.length
         ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报</th><th>开牌</th></tr>${profile.stats
@@ -822,8 +867,7 @@ function openDrawer(section) {
             .join('')}</table>`
         : ''
     }
-    ${bookOf(PERSONAS.laolitou)}
-    ${bookOf(PERSONAS.afei)}
+    ${Object.values(PERSONAS).map(bookOf).join('')}
 
     <h2 id="secRules">规矩</h2>
     <ul>
@@ -836,7 +880,6 @@ function openDrawer(section) {
     </ul>
 
     <h2 id="secSeal">封印</h2>
-    <p>骰面开局封哈希，摊牌开封可验——谁都不能重掷。你落子前的犹豫不采样。</p>
     ${
       rsNow
         ? Object.entries(rsNow.commits)
@@ -845,8 +888,7 @@ function openDrawer(section) {
         : ''
     }
 
-    <h2 id="secBrain">脑子</h2>
-    <p>填暗号一格就够；自带 API 则三格全填。空着＝他们只算数，不说话。</p>
+    <h2 id="secBrain">设置</h2>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <label>API Key / 暗号</label><input id="fKey" type="password" value="${byok.apiKey}">
     <label>Model</label><input id="fModel" value="${byok.model}" placeholder="deepseek-chat">
@@ -858,17 +900,18 @@ function openDrawer(section) {
       <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
       <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
     </select>
-    <div class="btnrow"><button class="primary" id="saveByok">存好，马上生效</button></div>
-    <div id="byokTest" class="test-line"></div>`;
+    <div class="btnrow"><button class="primary" id="saveByok">保存</button></div>
+    <div id="byokTest" class="test-line"></div>
+    <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
   if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
   else d.scrollTop = 0;
   d.querySelector('#fTable').addEventListener('change', (e) => {
     localStorage.setItem('kai.table.v1', e.target.value);
   });
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
-    saveLedger({ you: 100, laolitou: 100, afei: 100 });
+    saveLedger({ you: 100, personas: {} });
     profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
-    e.target.textContent = '翻篇了，下一场生效（他记下了）';
+    e.target.textContent = '已翻篇 · 下一场生效';
     e.target.disabled = true;
   });
   d.querySelector('#closeDrawer').addEventListener('click', () => {
@@ -887,7 +930,7 @@ function openDrawer(section) {
     const out = d.querySelector('#byokTest');
     btn.disabled = true;
     out.className = 'test-line';
-    out.textContent = '试他的脑子……';
+    out.textContent = '验证中…';
     const r = await testChannel();
     btn.disabled = false;
     out.textContent = (r.ok ? '✓ ' : '✗ ') + r.msg;
@@ -904,11 +947,17 @@ async function newMatch() {
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   const ledger = loadLedger();
   const table = loadTable();
-  seats = table === 'trio' ? ['A', 'B', 'C'] : ['A', 'B'];
-  const startChips =
-    table === 'trio'
-      ? { A: ledger.you, B: ledger.laolitou, C: ledger.afei }
-      : { A: ledger.you, B: ledger.laolitou };
+  const lineup = TABLE_LINEUP[table] ?? TABLE_LINEUP.trio;
+  seats = ['A', ...lineup.map((_, i) => SEAT_IDS[i])];
+  SEAT_PERSONA = {};
+  NAMES = { A: '客人' };
+  const startChips = { A: ledger.you };
+  lineup.forEach((pid, i) => {
+    const seat = SEAT_IDS[i];
+    SEAT_PERSONA[seat] = PERSONAS[pid];
+    NAMES[seat] = PERSONAS[pid].name;
+    startChips[seat] = balanceOf(ledger, pid);
+  });
   match = await createMatch({ seed, config: { players: seats, startChips } });
   opponents = {};
   for (const s of seats.slice(1)) {
@@ -938,7 +987,7 @@ function openerLine(ledger) {
   if (profile.matches === 0) return '坐。规矩就一条：只能把话越报越大，不信就开。';
   const last = profile.stats.at(-1);
   if (ledger.you <= 0) return `账上你欠着 ${-ledger.you}。先赊着，骰子照摇。`;
-  if ((profile.resets ?? 0) > 0 && ledger.you === 100 && ledger.opp === 100)
+  if ((profile.resets ?? 0) > 0 && ledger.you === 100 && Object.keys(ledger.personas).length === 0)
     return `把账翻篇了？新本子，旧毛病。摇盅。`;
   if (!last) return `又来了。第 ${profile.matches + 1} 场。摇盅。`;
   const bits = [];
