@@ -1159,18 +1159,26 @@ function openGuestConfig() {
 
 const myStoredSeal = () => localStorage.getItem('kai.seal.v1');
 
-// 名章挑选（裁决②：零自由文本下的命名）——一次挑定，跨房复用
+// 名章挑选（裁决②：零自由文本下的命名）——一次挑定，跨房复用。
+// 大厅还开着时弹（z-index 50），弹层必须临时置顶，否则被大厅盖住＝"按钮点了没反应"
 function pickSeal(cb) {
   if (myStoredSeal()) return cb();
   const ov = $('overlay');
   ov.classList.remove('hidden');
+  ov.classList.add('ontop');
   ov.innerHTML = `<div class="card fade-in"><h2>挑一枚名章</h2>
     <p class="p-idline">好友房里没有名字，只有章——桌上喊你就喊这个字。</p>
-    <div class="seal-pick">${SEALS.map((s) => `<button class="seal" data-s="${s}">${s}</button>`).join('')}</div></div>`;
+    <div class="seal-pick">${SEALS.map((s) => `<button class="seal" data-s="${s}">${s}</button>`).join('')}</div>
+    <p class="dim-line" style="margin-top:0.8rem"><button class="linkish" id="sealCancel">先不了</button></p></div>`;
+  const done = () => {
+    ov.classList.add('hidden');
+    ov.classList.remove('ontop');
+  };
+  ov.querySelector('#sealCancel').addEventListener('click', done);
   ov.querySelectorAll('[data-s]').forEach((el) =>
     el.addEventListener('click', () => {
       localStorage.setItem('kai.seal.v1', el.dataset.s);
-      ov.classList.add('hidden');
+      done();
       cb();
     }),
   );

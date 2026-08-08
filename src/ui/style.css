@@ -951,3 +951,6 @@ button.ghost {
 }
 .stat-table.duel { width: 100%; }
 .stat-table.duel th { color: var(--lamp); font-weight: 400; }
+
+/* 大厅之上的弹层（挑名章）：大厅 z-index 50 且背景不透明，不置顶就看不见 */
+#overlay.ontop { z-index: 70; }
