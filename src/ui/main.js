@@ -919,7 +919,8 @@ function openDrawer(section, inLobby = false) {
     <label>暗号（官方通道——只喂官方人物）</label><input id="fPass" type="password" value="${loadPass()}">
     <div class="btnrow"><button class="primary" id="savePassBtn">保存</button></div>
     <div id="passTest" class="test-line"></div>
-    <p class="dim-line">自带 API？在大厅的「客席」卡上填钥匙，你的模型以本名上桌。</p>`
+    <p class="dim-line">自带 API？在大厅的「客席」卡上填钥匙，你的模型以本名上桌。</p>
+    <p class="dim-line" style="margin-top:1.4rem"><button id="wipeBtn" class="linkish">清空本地记录（档案·账本·战绩）</button></p>`
     }
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
   if (section === 'profile') d.querySelector('#profileSec')?.scrollIntoView();
@@ -931,6 +932,18 @@ function openDrawer(section, inLobby = false) {
     if (inLobby) return;
     const o = ob();
     if (o.turn === 'A' && !o.over && !busy) armIdle();
+  });
+  // 清档重开：两段式确认；只清游戏记录，暗号/客席钥匙/设备号保留
+  d.querySelector('#wipeBtn')?.addEventListener('click', (e) => {
+    if (e.target.dataset.armed) {
+      for (const k of ['kai.profile.v1', 'kai.ledger.v1', 'kai.lineup.v1', 'kai.table.v1', 'kai.coach.v1'])
+        localStorage.removeItem(k);
+      location.reload();
+    } else {
+      e.target.dataset.armed = '1';
+      e.target.textContent = '再点一次确认——档案、账本、战绩将全部清空（钥匙保留）';
+      e.target.classList.add('wipe-armed');
+    }
   });
   d.querySelector('#savePassBtn')?.addEventListener('click', async () => {
     savePass(d.querySelector('#fPass').value.trim());
