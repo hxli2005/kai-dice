@@ -1,3 +1,7 @@
 node_modules/
 .DS_Store
 dist/
+
+# wrangler 本地开发缓存
+.wrangler/
+**/.wrangler/
