@@ -368,11 +368,12 @@ footer {
 .stepper { display: flex; align-items: center; gap: 0.1rem; }
 .stepper button {
   width: 2rem; height: 2rem;
-  font-size: 1.1rem;
-  background: none; border: 1px solid rgba(242, 232, 213, 0.22);
-  color: var(--ink); border-radius: 0.5rem;
+  font-size: 1.25rem;
+  background: none; border: none; /* 去框：满屏方框是脏感来源，符号本身就是按钮 */
+  color: var(--dim);
   font-family: var(--serif);
 }
+.stepper button:active { color: var(--lamp); }
 .stepper button:disabled { opacity: 0.25; }
 .stepper .val {
   min-width: 1.8rem; text-align: center;
@@ -384,20 +385,24 @@ footer {
 #facePick .die.sel { opacity: 1; outline: 2px solid var(--lamp); outline-offset: 1px; }
 #facePick .die:disabled { opacity: 0.12; }
 
-/* 按钮两排对称：宣言章三等分居中，主动作对半镜像；
+/* 层级：报/开是唯一的全宽主行；盲/斋/抬是三枚搁在桌沿的小圆印（与对面名章同语言）；
    可点的都抬离屏幕底缘，不可点的筹码垫底当桌边筹码架 */
-#declareRow { display: flex; gap: 0.55rem; margin-bottom: 0.5rem; }
+#declareRow { display: flex; justify-content: center; gap: 1.4rem; margin: 0.1rem 0 0.75rem; }
 #actionRow { display: flex; gap: 0.55rem; }
 footer .meta-line { margin: 0.6rem 0 0; }
 .stamp {
-  flex: 1;
-  padding: 0.5rem 0;
+  flex: none;
+  width: 2.7rem; height: 2.7rem; padding: 0;
   border: 1px solid var(--lamp-dim);
-  background: none; color: var(--lamp);
-  border-radius: 0.55rem;
-  font-family: var(--serif); font-size: 1.05rem;
+  border-radius: 50%;
+  background: rgba(232, 169, 79, 0.05);
+  color: var(--lamp);
+  font-family: var(--serif); font-size: 1rem;
 }
-.stamp:disabled { opacity: 0.22; }
+.stamp:nth-child(1) { transform: rotate(-6deg); }
+.stamp:nth-child(2) { transform: rotate(3deg); }
+.stamp:nth-child(3) { transform: rotate(-2deg); }
+.stamp:disabled { opacity: 0.18; }
 button.primary {
   flex: 1;
   background: var(--lamp); color: #201607;
