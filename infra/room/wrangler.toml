@@ -1,0 +1,15 @@
+# 好友房服务端（Q29）：Durable Object 提供方 Worker。
+# 不占 workers.dev 路由（workers_dev=false）——生产流量从 Pages 站的 /api/room/* 经 DO 绑定进来（同域零 CORS）；
+# 本文件的 default export 只服务本地开发（wrangler dev -c infra/room/wrangler.toml --port 8787）。
+# 部署：npx wrangler deploy -c infra/room/wrangler.toml
+name = "kai-room"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+workers_dev = false
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO"]
+
+[durable_objects]
+bindings = [{ name = "ROOMS", class_name = "RoomDO" }]

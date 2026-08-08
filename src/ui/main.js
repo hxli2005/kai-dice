@@ -8,6 +8,8 @@ import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
 import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
+import { joinRoom, createRemoteRoom } from './net.js';
+import { SEALS, PHRASES } from '../room/protocol.js';
 import { compileWish } from '../mods/compiler.js';
 import { examMod } from '../mods/exam.js';
 import { smokeMods } from '../mods/smoke.js';
@@ -40,6 +42,8 @@ let labMods = [];
 let sandbox = false;
 let pickPending = null; // 词条参数拾取（亮一颗：先拍章再点自己一颗骰）
 const modMetaOf = (o, type) => o.mods?.flatMap((m) => m.actions).find((a) => a.type === type);
+// 好友房（Q29）：room 非空即远程模式——本地不驱动 AI，一切演出由事件重放驱动
+let room = null;
 let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
@@ -345,7 +349,7 @@ function buildOppArea() {
   duo.classList.add('hidden');
   trio.classList.remove('hidden');
   $('seal').classList.add('hidden');
-  $('oppName').textContent = '三人桌';
+  $('oppName').textContent = room ? '好友房' : '三人桌';
   trio.innerHTML = seats
     .slice(1)
     .map((s) => {
@@ -378,7 +382,15 @@ function renderTrio(o) {
       : '<i class="out-mark">出局</i>';
     renderChips(`meta-${s}`, ps.chips);
     const dot = $(`brain-${s}`);
-    if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
+    if (room) {
+      // 好友房：状态由 roster 数据承载（代打/掉线标注在名字上），不摆 LLM 灯
+      dot.className = 'brain hidden';
+      const info = room.roster?.seats?.find((x) => x.seat === s);
+      const nameEl = strip.querySelector('.strip-head b');
+      if (info && nameEl)
+        nameEl.textContent =
+          info.name + (info.substituted ? '（老李头代打）' : info.kind === 'human' && !info.connected ? '（掉线）' : '');
+    } else if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
     else {
       const last = opponents[s]?.logs.at(-1);
       dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
@@ -388,6 +400,7 @@ function renderTrio(o) {
 
 function render() {
   const o = ob();
+  if (!o) return; // 好友房：首个 observe 未到
   const meAlive = o.players.find((q) => q.id === 'A').alive;
   const myTurn = o.turn === 'A' && !o.over && !busy && meAlive;
 
@@ -511,6 +524,7 @@ function render() {
     btn.disabled = !myTurn || !o.legal.some((x) => x.type === a.type);
     btn.classList.toggle('armed', pickPending?.type === a.type);
   }
+  renderBetBar(o, meAlive); // 好友房：出局观战时的旁注条
 
   $('hint').textContent = hintFor(o, myTurn);
 
@@ -532,6 +546,7 @@ function hintFor() {
 // §2.4（Q19）：不设钟。turnStart 只做用时记录基准；挂机 >30s 人设催一句（循环换句，无机制后果）
 function armIdle() {
   turnStart = performance.now();
+  if (room) return; // 好友房：催话在服务端（老李头本人催）
   clearTimeout(idleTimer);
   const nag = () => {
     if (!atTable) return;
@@ -551,6 +566,7 @@ function disarmIdle() {
 async function onPeek() {
   if (busy) return;
   await match.act('A', { type: 'peek' });
+  if (room) return; // 好友房：演出交给事件重放
   sfx.land();
   render();
   $('myDice').querySelectorAll('.die').forEach((el) => el.classList.add('reveal'));
@@ -562,6 +578,7 @@ const stampText = (d) => (d === 'blind' ? '盲 ×2' : d === 'zhai' ? '斋 ×1.5'
 
 async function onDeclare(declaration) {
   await match.act('A', { type: 'declare', declaration }, { elapsedMs: performance.now() - turnStart });
+  if (room) return;
   stampFx(stampText(declaration));
   render();
 }
@@ -570,6 +587,7 @@ async function onBid() {
   disarmIdle();
   pickPending = null;
   await match.act('A', { type: 'bid', ...sel }, { elapsedMs: performance.now() - turnStart });
+  if (room) return;
   sfx.tick();
   render();
   driveTurn();
@@ -630,6 +648,7 @@ async function onPickDie(face) {
 // ---------- 回合调度（§2.5）：轮到谁驱动谁；AI 台词打字与下一位的网络请求并行（节拍 ≤4s） ----------
 function driveTurn() {
   if (!atTable) return;
+  if (room) return render(); // 好友房：服务端驱动一切，本地只渲染
   const o = ob();
   if (o.over) return;
   if (o.turn === 'A') {
@@ -687,6 +706,8 @@ async function aiTurnFor(seat) {
 }
 
 // ---------- 开牌演出（juice 预算全在这一拍，§6）：开与掐共用摊牌，判定行分道 ----------
+// 演出与流程解耦：presentShowdown 只管摊牌那一拍（本地局与好友房事件重放共用），
+// doShowdown 是本地局的完整流程（act→演出→反思→报告/下一局）。
 async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '', actionType = 'challenge' } = {}) {
   busy = true;
   disarmIdle();
@@ -697,9 +718,35 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
   const o = ob();
   const rv = lastEvent(o, 'reveal');
   const re = lastEvent(o, 'roundEnd');
+  await presentShowdown(rv, re, by, sayText);
+
+  // §3.3 复盘学习触发①：被打脸的 AI 当场短反思（异步，不挡节拍；输入全为已公开信息）
+  // 沙盒（获批反驳④）：实验局不喂档案——实验规则下的行为模式会污染对正常打法的读心
+  for (const s of sandbox ? [] : seats.slice(1)) {
+    if (re.loser !== s) continue;
+    const ai = opponents[s];
+    const ch = chanForPersona(ai.persona);
+    if (!ch) continue;
+    const mind = mindOf(profile, ai.persona.id);
+    reflect(ch, { persona: ai.persona, factText: roundFactText(rv, re, s), hypotheses: mind.hypotheses })
+      .then((hyps) => {
+        if (hyps) {
+          mind.hypotheses = hyps;
+          saveProfile(profile);
+        }
+      });
+  }
+
+  const end = lastEvent(o, 'matchEnd');
+  if (end) return showReport(end);
+  finishShowdown(re);
+  driveTurn();
+}
+
+async function presentShowdown(rv, re, by, sayText = '') {
+  busy = true;
   const calza = !!rv.calza;
   const isMatch = (f) => f === rv.bid.face || (!rv.zhai && f === 1);
-
   sfx.slam();
   $('app').classList.add('shake');
   setTimeout(() => $('app').classList.remove('shake'), 400);
@@ -759,37 +806,22 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
   const myDelta = re.transfers?.A ?? 0;
   if (myDelta !== 0) await chipFlight(ov, Math.abs(myDelta), myDelta > 0);
   await sleep(1100);
+}
 
-  // §3.3 复盘学习触发①：被打脸的 AI 当场短反思（异步，不挡节拍；输入全为已公开信息）
-  // 沙盒（获批反驳④）：实验局不喂档案——实验规则下的行为模式会污染对正常打法的读心
-  for (const s of sandbox ? [] : seats.slice(1)) {
-    if (re.loser !== s) continue;
-    const ai = opponents[s];
-    const ch = chanForPersona(ai.persona);
-    if (!ch) continue;
-    const mind = mindOf(profile, ai.persona.id);
-    reflect(ch, { persona: ai.persona, factText: roundFactText(rv, re, s), hypotheses: mind.hypotheses })
-      .then((hyps) => {
-        if (hyps) {
-          mind.hypotheses = hyps;
-          saveProfile(profile);
-        }
-      });
-  }
-
-  const end = lastEvent(o, 'matchEnd');
-  if (end) return showReport(end);
+// 摊牌后清场（非终局）：收 overlay、重置选择、观战提示
+function finishShowdown(re) {
+  const ov = $('overlay');
   ov.classList.add('hidden');
   sfx.shake();
   busy = false;
   sel = null; // 新局重置报价选择
   render();
+  const myDelta = re.transfers?.A ?? 0;
   if (myDelta !== 0) showDelta(myDelta);
   const next = ob();
   myDiceByRound[next.round] = null;
   // 玩家刚出局 → 观战提示（§2.5 淘汰观战：看他们收尾）
-  if (re.diceCount.A === 0 && !end) $('hint').textContent = '出局 · 观战';
-  driveTurn();
+  if (re.diceCount.A === 0) $('hint').textContent = '出局 · 观战';
 }
 
 // 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）
@@ -1121,6 +1153,351 @@ function openGuestConfig() {
   });
 }
 
+// ==================== 好友房（Q29）：远程房间驱动 ====================
+// 服务端权威＋座位重映射（自己恒为 A）之后，本节只做四件事：
+// 入房流程、事件重放（把服务端事件译成既有演出）、等位/报告界面、短语盘与旁注。
+
+const myStoredSeal = () => localStorage.getItem('kai.seal.v1');
+
+// 名章挑选（裁决②：零自由文本下的命名）——一次挑定，跨房复用
+function pickSeal(cb) {
+  if (myStoredSeal()) return cb();
+  const ov = $('overlay');
+  ov.classList.remove('hidden');
+  ov.innerHTML = `<div class="card fade-in"><h2>挑一枚名章</h2>
+    <p class="p-idline">好友房里没有名字，只有章——桌上喊你就喊这个字。</p>
+    <div class="seal-pick">${SEALS.map((s) => `<button class="seal" data-s="${s}">${s}</button>`).join('')}</div></div>`;
+  ov.querySelectorAll('[data-s]').forEach((el) =>
+    el.addEventListener('click', () => {
+      localStorage.setItem('kai.seal.v1', el.dataset.s);
+      ov.classList.add('hidden');
+      cb();
+    }),
+  );
+}
+
+function toastFx(text) {
+  const t = document.createElement('div');
+  t.className = 'toast-fx';
+  t.textContent = text;
+  $('app').appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+function enterRoom({ roomId, hostKey = null }) {
+  atTable = true;
+  matchGen++;
+  muteBubble();
+  labMods = [];
+  sandbox = false;
+  $('lobby').classList.add('hidden');
+  seats = ['A', 'B', 'C'];
+  SEAT_PERSONA = { B: PERSONAS.laolitou, C: { seal: '客', name: '朋友', idle: [], pace: 'fast' } };
+  NAMES = { A: '客人', B: '老李头', C: '朋友' };
+  document.documentElement.style.setProperty('--persona-verdict', "'老李头批：'");
+  myDiceByRound = {};
+  sel = null;
+  busy = false;
+  pickPending = null;
+  room = {
+    id: roomId,
+    isHost: !!hostKey,
+    roster: null,
+    lastPhase: null,
+    replayed: 0,
+    lastChallenger: null,
+    pendingReport: null,
+    matchEnded: false,
+    queue: Promise.resolve(),
+    pendingSays: [],
+  };
+  const myRoom = room;
+  const guard = (fn) => (...a) => {
+    if (room === myRoom) fn(...a);
+  };
+  room.net = joinRoom({
+    room: roomId,
+    hostKey,
+    device: deviceId(),
+    seal: myStoredSeal() ?? undefined,
+    pass: hostKey ? loadPass() : null, // AI 调用计房主配额（暗号只从主家带上桌）
+    handlers: {
+      onRoom: guard(onRoomRoster),
+      onOb: guard(queueReplay),
+      onSay: guard((m) => {
+        if (busy) room.pendingSays.push(m);
+        else speak(m.text, m.seat);
+      }),
+      onPhrase: guard((m) => showPhrase(m.seat, m.id)),
+      onBet: guard((m) => toastFx(`${dispName(m.bettor)}押${dispName(m.on)}赢这拍 · ${m.amount} 注`)),
+      onBetResult: guard((m) =>
+        toastFx(
+          m.bettor === 'A'
+            ? m.hit
+              ? `旁注押中 ＋${m.amount}`
+              : `旁注押空 −${m.amount}`
+            : `${dispName(m.bettor)}的旁注${m.hit ? '押中了' : '押空了'}`,
+        ),
+      ),
+      onReport: guard((m) => {
+        room.pendingReport = m;
+        tryShowRoomReport();
+      }),
+      onErr: guard((msg) => toastFx(msg)),
+      onDown: guard(() => toastFx('连接断了，重连中…')),
+      onUp: guard(() => {}),
+    },
+  });
+  match = room.net.matchLike;
+  buildOppArea();
+  buildModRow(); // 好友房 v1 不带词条（裁决④）：清空词条章
+  buildPhraseUI();
+  render();
+  showRoomWait();
+}
+
+function onRoomRoster(m) {
+  const wasPlaying = room.lastPhase === 'playing';
+  room.roster = m;
+  room.lastPhase = m.phase;
+  const c = m.seats.find((x) => x.seat === 'C');
+  if (c?.occupied) {
+    SEAT_PERSONA.C = { seal: c.seal, name: c.name, idle: [], pace: 'fast' };
+    NAMES.C = c.name;
+    buildOppArea();
+  }
+  if (m.phase === 'waiting') showRoomWait();
+  else if (m.phase === 'playing' && !wasPlaying && !busy) $('overlay').classList.add('hidden');
+  render();
+}
+
+// ---------- 事件重放：服务端事件 → 既有演出（一次一个，摊牌动画期间排队） ----------
+function queueReplay() {
+  const myRoom = room;
+  room.queue = room.queue
+    .then(() => (room === myRoom ? replayRoomEvents() : null))
+    .catch(() => {});
+}
+
+async function replayRoomEvents() {
+  const o = ob();
+  if (!o) return;
+  if (o.events.length < room.replayed) {
+    // 新的一场（事件流从头来）：重置重放游标与局部状态
+    room.replayed = 0;
+    room.matchEnded = false;
+    room.pendingReport = null;
+    room.lastChallenger = null;
+    myDiceByRound = {};
+    sel = null;
+    busy = false;
+  }
+  for (;;) {
+    const cur = ob();
+    if (!cur || cur.events.length < room.replayed) return;
+    if (room.replayed >= cur.events.length) break;
+    const e = cur.events[room.replayed++];
+    await presentRoomEvent(e);
+  }
+  render();
+  flushSays();
+  tryShowRoomReport();
+}
+
+async function presentRoomEvent(e) {
+  switch (e.type) {
+    case 'roundStart':
+      sel = null;
+      render();
+      return;
+    case 'peek':
+      if (e.player !== 'A') {
+        sfx.land();
+        document.querySelectorAll(`#strip-${e.player} .die`).forEach((el) => el.classList.add('reveal'));
+      } else render();
+      return;
+    case 'bid':
+      sfx.tick();
+      render();
+      return;
+    case 'declare':
+      stampFx(stampText(e.declaration));
+      render();
+      return;
+    case 'challenge':
+      room.lastChallenger = e.player;
+      return;
+    case 'reveal': {
+      const o = ob();
+      const next = o.events[room.replayed];
+      const re = next?.type === 'roundEnd' ? (room.replayed++, next) : { transfers: {}, diceCount: {} };
+      muteBubble();
+      await presentShowdown(e, re, e.challenger ?? room.lastChallenger ?? 'B');
+      const ended = ob()?.over || ob()?.events.slice(0, room.replayed + 1).some((x) => x.type === 'matchEnd');
+      if (!ended) finishShowdown(re);
+      flushSays();
+      return;
+    }
+    case 'roundEnd':
+      return; // 已随 reveal 同拍消费
+    case 'matchEnd':
+      room.matchEnded = true;
+      busy = false;
+      return;
+    default:
+      return;
+  }
+}
+
+function flushSays() {
+  if (!room || busy) return;
+  for (const m of room.pendingSays.splice(0)) speak(m.text, m.seat);
+}
+
+function showPhrase(seat, id) {
+  const text = PHRASES[id];
+  if (text == null) return;
+  if (seat === 'A') toastFx(`你拍了「${text}」`);
+  else speak(`「${text}」`, seat);
+}
+
+// 短语盘（裁决③）：人类间唯一社交动词——「话」章开面板，拍一句全桌可见
+function buildPhraseUI() {
+  $('phrasePanel')?.remove();
+  const btn = document.createElement('button');
+  btn.className = 'stamp mod';
+  btn.id = 'phraseBtn';
+  btn.textContent = '话';
+  const panel = document.createElement('div');
+  panel.id = 'phrasePanel';
+  panel.className = 'hidden';
+  panel.innerHTML = PHRASES.map((p, i) => `<button class="phrase-chip" data-i="${i}">${p}</button>`).join('');
+  panel.addEventListener('click', (e) => {
+    const i = e.target.dataset?.i;
+    if (i != null) {
+      room?.net.phrase(+i);
+      panel.classList.add('hidden');
+    }
+  });
+  btn.addEventListener('click', () => panel.classList.toggle('hidden'));
+  $('modRow').appendChild(btn);
+  $('app').appendChild(panel);
+}
+
+// 观战旁注（Q37）：出局才有的按钮——押下一拍开牌谁赢（服务端管帽与结算）
+function renderBetBar(o, meAlive) {
+  let bar = $('betBar');
+  if (!room) {
+    bar?.classList.add('hidden');
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'betBar';
+    $('app').appendChild(bar);
+  }
+  const show = !meAlive && !o.over;
+  bar.classList.toggle('hidden', !show);
+  if (!show) return;
+  const alive = o.players.filter((q) => q.alive && q.id !== 'A');
+  bar.innerHTML =
+    `<span>旁注 · 押下一拍谁赢：</span>` +
+    alive.map((q) => `<button class="phrase-chip" data-bet="${q.id}">${dispName(q.id)}</button>`).join('');
+  bar.querySelectorAll('[data-bet]').forEach((el) =>
+    el.addEventListener('click', () => room.net.bet(el.dataset.bet)),
+  );
+}
+
+// ---------- 等位与报告 ----------
+function showRoomWait() {
+  if (!room || room.roster?.phase === 'playing') return;
+  const ov = $('overlay');
+  ov.classList.remove('hidden');
+  const r = room.roster;
+  const me = r?.seats.find((x) => x.seat === 'A');
+  const c = r?.seats.find((x) => x.seat === 'C');
+  const guestReady = c?.occupied && c?.connected;
+  const link = `${location.origin}${location.pathname.replace(/index\.html$/, '')}#room=${room.id}`;
+  ov.innerHTML = `<div class="card fade-in"><h2>好友房</h2>
+    ${
+      room.isHost
+        ? `<p class="p-idline">链接甩给朋友，人到即坐。老李头占第三席当主持——他两个都读。</p>
+    <p class="note-item mono-sm">${link}</p>
+    <div class="btnrow"><button class="ghost" id="copyLink">复制链接</button></div>`
+        : `<p class="p-idline">你在桌边坐下了。等主家开局。</p>`
+    }
+    <div class="wait-seats">
+      <p class="note-item">「${me?.seal ?? myStoredSeal() ?? '主'}」你 · 已就座</p>
+      <p class="note-item">「李」老李头 · 主持${room.isHost && !loadPass() ? '（无暗号：只行棋不说话）' : ''}</p>
+      <p class="note-item">${c?.occupied ? `「${c.seal}」${c.name} · ${c.connected ? '已就座' : '掉线'}` : '空位 · 等好友点链接进来…'}</p>
+    </div>
+    ${room.isHost ? `<div class="btnrow"><button class="primary" id="roomStart" ${guestReady ? '' : 'disabled'}>开局</button></div>` : ''}
+    <p class="dim-line" style="margin-top:0.8rem"><button class="linkish" id="roomLeaveWait">离开房间</button></p>
+  </div>`;
+  ov.querySelector('#copyLink')?.addEventListener('click', async (e) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      e.target.textContent = '已复制';
+    } catch {
+      prompt('手动复制：', link);
+    }
+  });
+  ov.querySelector('#roomStart')?.addEventListener('click', () => room.net.start());
+  ov.querySelector('#roomLeaveWait')?.addEventListener('click', leaveRoom);
+}
+
+// 双人对比报告卡（Q29 新分享物）：服务端算数、两端同卡
+function tryShowRoomReport() {
+  if (!room?.pendingReport || !room.matchEnded || busy) return;
+  const m = room.pendingReport;
+  const me = m.packs.A;
+  const fr = m.packs.C;
+  const pctf = (v) => `${Math.round((v ?? 0) * 100)}%`;
+  const rows = [
+    ['虚报率', pctf(me.bluffRate), pctf(fr.bluffRate)],
+    ['开牌命中', `${me.challengeHits}/${me.challenges}`, `${fr.challengeHits}/${fr.challenges}`],
+    ['被开', `${me.timesChallenged}`, `${fr.timesChallenged}`],
+    ['盲 / 抬', `${me.blinds} / ${me.raises}`, `${fr.blinds} / ${fr.raises}`],
+    ['身家', `${me.chips}`, `${fr.chips}`],
+  ];
+  const ov = $('overlay');
+  ov.classList.remove('hidden');
+  ov.innerHTML = `<div class="card fade-in">
+    <h2>好友房 · 第 ${m.matchNo} 场</h2>
+    <div class="persona">${m.standings.map((s) => dispName(s)).join(' ＞ ')}</div>
+    <table class="stat-table duel"><tr><th></th><th>你「${me.seal}」</th><th>「${fr.seal}」</th></tr>
+      ${rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}
+    </table>
+    ${me.insight ? `<p class="insight">你的破绽：${me.insight}</p>` : ''}
+    ${fr.insight ? `<p class="insight">「${fr.seal}」的破绽：${fr.insight}</p>` : ''}
+    <p class="book-stats">老李头身家 ${m.ai.chips}</p>
+    ${m.verdict ? `<div class="verdict">${m.verdict}</div>` : ''}
+  </div>
+  <div class="again-row">
+    <button class="ghost" id="roomLeaveBtn">散伙</button>
+    ${room.isHost ? '<button class="primary again" id="roomAgain">再来一局</button>' : '<span class="wait-note">等主家再开一局…</span>'}
+  </div>
+  <div class="small-note">截屏即可分享 · 好友房记房内账，不动各自本地账本 · kai-dice.pages.dev</div>`;
+  ov.querySelector('#roomAgain')?.addEventListener('click', () => room.net.again());
+  ov.querySelector('#roomLeaveBtn').addEventListener('click', leaveRoom);
+}
+
+function leaveRoom() {
+  room?.net.close();
+  room = null;
+  match = null;
+  atTable = false;
+  matchGen++;
+  muteBubble();
+  disarmIdle();
+  $('phrasePanel')?.remove();
+  $('betBar')?.remove();
+  $('overlay').classList.add('hidden');
+  $('drawer').classList.add('hidden');
+  if (location.hash.startsWith('#room=')) history.replaceState(null, '', location.pathname);
+  showLobby();
+}
+
 // ---------- 许愿台（Q39 愿望编译器）：人话 → AST → 引擎回译确认 → 200 场冒烟 → 上桌 ----------
 const wishChannel = () => guestChannelOf() ?? officialChannelOf(); // 编译调用 BYOK 优先（Q39）
 
@@ -1324,6 +1701,7 @@ function showLobby() {
       </div>`;
       })()}
       <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>${loadLab().on && pickedMods().length ? '开实验局' : '开局'}</button>
+      <button class="mode-btn room-line" id="roomBtn">好友房 · 邀朋友同桌</button>
       <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
@@ -1347,6 +1725,21 @@ function showLobby() {
       }),
     );
     lb.querySelector('#wishBtn')?.addEventListener('click', openWishPanel);
+    lb.querySelector('#roomBtn').addEventListener('click', () => {
+      pickSeal(async () => {
+        const btn = lb.querySelector('#roomBtn');
+        btn.disabled = true;
+        btn.textContent = '开房中…';
+        try {
+          const { room: rid, hostKey } = await createRemoteRoom();
+          lb.classList.add('hidden');
+          enterRoom({ roomId: rid, hostKey });
+        } catch {
+          btn.disabled = false;
+          btn.textContent = '房间服务没应——稍后再试';
+        }
+      });
+    });
     lb.querySelector('#addGuest')?.addEventListener('click', openGuestConfig);
     lb.querySelectorAll('.p-card[data-p]').forEach((el) =>
       el.addEventListener('click', (e) => {
@@ -1415,6 +1808,7 @@ function openPlayerPage(id) {
 
 // 离桌（局内→大厅）：本场不记档——账本只在场终写回，中途走人等于这场没发生
 function leaveTable() {
+  if (room) return leaveRoom();
   atTable = false;
   matchGen++;
   disarmIdle();
@@ -1565,7 +1959,10 @@ function showCoach() {
 }
 
 $('bidBtn').addEventListener('click', onBid);
-$('openBtn').addEventListener('click', () => doShowdown('A'));
+$('openBtn').addEventListener('click', () => {
+  if (room) return void match.act('A', { type: 'challenge' }, { elapsedMs: performance.now() - turnStart });
+  doShowdown('A');
+});
 $('blindBtn').addEventListener('click', () => onDeclare('blind'));
 $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
 $('raiseBtn').addEventListener('click', () => onDeclare('raise'));
@@ -1573,4 +1970,7 @@ $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('menuBtn').addEventListener('click', () => openDrawer());
 
-showLobby();
+// 启动：好友房邀请链接直入（#room=xxx），否则进大厅
+const roomHash = location.hash.match(/^#room=([a-z0-9]{10})$/);
+if (roomHash) pickSeal(() => enterRoom({ roomId: roomHash[1] }));
+else showLobby();

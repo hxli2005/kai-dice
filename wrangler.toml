@@ -7,3 +7,9 @@ compatibility_date = "2025-08-01"
 [[kv_namespaces]]
 binding = "QUOTA"
 id = "082e1ba75a3e41de9066e53c04e7f94b"
+
+# 好友房（Q29）：房间 DO 由 kai-room worker 提供，Pages 站从 /api/room/* 路由进去（同域零 CORS）
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDO"
+script_name = "kai-room"

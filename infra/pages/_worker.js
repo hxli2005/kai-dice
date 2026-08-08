@@ -9,6 +9,27 @@ const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低�
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // 好友房（Q29）：/api/room/* → 房间 DO（kai-room worker 提供，同域零 CORS）
+    if (url.pathname.startsWith("/api/room")) {
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "forbidden" }, 403);
+      if (!env.ROOMS) return json({ error: "房间服务未接（DO 绑定缺失）" }, 503);
+      if (url.pathname === "/api/room/new" && request.method === "POST") {
+        const rid = (n) =>
+          Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+        const room = rid(10);
+        const hostKey = rid(16);
+        const stub = env.ROOMS.get(env.ROOMS.idFromName(room));
+        await stub.fetch("https://do/init", { method: "POST", body: JSON.stringify({ hostKey }) });
+        return json({ room, hostKey });
+      }
+      const m = url.pathname.match(/^\/api\/room\/ws\/([a-z0-9]{10})$/);
+      if (m && request.headers.get("Upgrade") === "websocket") {
+        const stub = env.ROOMS.get(env.ROOMS.idFromName(m[1]));
+        return stub.fetch(request);
+      }
+      return json({ error: "not found" }, 404);
+    }
     if (url.pathname.startsWith("/api/llm")) {
       if (request.method === "OPTIONS") {
         return new Response(null, {

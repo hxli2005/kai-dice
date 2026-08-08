@@ -12,6 +12,3 @@ export const BET_CAP = 5;
 
 // 开牌演出的服务端让拍：客户端摊牌动画期间，AI 不抢跑
 export const SHOWDOWN_MS = 6500;
-
-// 房间服务端（独立 Worker，与静态站分离；本地开发可用 localStorage kai.roomurl 覆盖）
-export const DEFAULT_ROOM_URL = 'https://kai-room.kai-dice.workers.dev';
