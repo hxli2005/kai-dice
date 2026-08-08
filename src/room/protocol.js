@@ -1,0 +1,17 @@
+// 好友房协议常量（Q29）：客户端与房间服务端共用。
+// 人类间零自由文本（零 UGC 红线）：短语盘按 id 传输、名章从预设池挑——服务器只认编号。
+
+// 名章池（裁决②）：入座时挑一枚，AI 台词按章称呼
+export const SEALS = ['虎', '雀', '斧', '伞', '钟', '灯', '井', '柴'];
+
+// 短语盘首批词表（裁决③）：人类间唯一社交动词，AI 读得到谁在什么局面拍了哪句
+export const PHRASES = ['开他', '我不信', '稳得很', '别怂', '哈哈哈哈', '好牌', '你完了', '借你吉言', '等着', '大的来了', '就这?', '服了'];
+
+// 观战旁注（Q37）：出局者押下次开牌胜方，小额帽
+export const BET_CAP = 5;
+
+// 开牌演出的服务端让拍：客户端摊牌动画期间，AI 不抢跑
+export const SHOWDOWN_MS = 6500;
+
+// 房间服务端（独立 Worker，与静态站分离；本地开发可用 localStorage kai.roomurl 覆盖）
+export const DEFAULT_ROOM_URL = 'https://kai-room.kai-dice.workers.dev';

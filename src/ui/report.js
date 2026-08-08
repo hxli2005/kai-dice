@@ -3,6 +3,18 @@
 
 import { probBidTrue } from '../probability.js';
 
+// 从摊牌事件回溯某席位每局骰面（公开信息）——行为统计复算的输入；
+// UI 侧给 AI 席用，好友房服务端给双人对比卡用
+export function diceByRoundOf(events, seat) {
+  const map = {};
+  let round = 0;
+  for (const e of events) {
+    if (e.type === 'roundStart') round = e.round;
+    if (e.type === 'reveal' && e.dice[seat]) map[round] = e.dice[seat];
+  }
+  return map;
+}
+
 // myDiceByRound: {round: dice[]}，由 UI 在每局看骰时记录
 export function computeStats(events, you, myDiceByRound) {
   const s = {

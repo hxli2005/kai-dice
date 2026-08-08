@@ -11,7 +11,7 @@ import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishL
 import { compileWish } from '../mods/compiler.js';
 import { examMod } from '../mods/exam.js';
 import { smokeMods } from '../mods/smoke.js';
-import { computeStats, persona, templateVerdict, condBrief } from './report.js';
+import { computeStats, persona, templateVerdict, condBrief, diceByRoundOf } from './report.js';
 import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
@@ -790,17 +790,6 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
   // 玩家刚出局 → 观战提示（§2.5 淘汰观战：看他们收尾）
   if (re.diceCount.A === 0 && !end) $('hint').textContent = '出局 · 观战';
   driveTurn();
-}
-
-// 从摊牌事件回溯某席位每局骰面（公开信息）——供 AI 行为统计复算
-function diceByRoundOf(events, seat) {
-  const map = {};
-  let round = 0;
-  for (const e of events) {
-    if (e.type === 'roundStart') round = e.round;
-    if (e.type === 'reveal' && e.dice[seat]) map[round] = e.dice[seat];
-  }
-  return map;
 }
 
 // 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）

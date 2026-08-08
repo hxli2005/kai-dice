@@ -175,6 +175,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
     ]
       .filter(Boolean)
       .join('；')}。`,
+    ...(ctx.extraFacts ?? []), // 宿主注入的追加事实行（好友房：主持人职责/短语盘/旁注注单——全为真实数据）
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
     ctx.hypotheses?.length
       ? `你摸出的规律假设（证据不足别硬套）：${ctx.hypotheses
