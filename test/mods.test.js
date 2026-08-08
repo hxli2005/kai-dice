@@ -201,7 +201,9 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.match(user, /恰好的概率按你的骰子算是 \d+%/, '掐的表盘双发进提示词');
   assert.match(user, /把这口价原样推回/);
   assert.match(system, /{"type":"qia"}/);
-  assert.match(system, /{"type":"liang","face":F}/);
+  assert.match(system, /{"type":"liang","face":点数1到6}/);
+  assert.match(user, /face 填骰子的点数/, '亮的语义钉死：点数不是第几颗');
+  assert.match(user, /宣言和词条都是真招/, '机制使用软推在场');
 });
 
 test('沉默 bot：被让报推回自己的价时守法（不开自己的价，继续抬）', async () => {

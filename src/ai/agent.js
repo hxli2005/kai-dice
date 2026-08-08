@@ -104,12 +104,13 @@ const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.
 
 // 词条候选动作行：op 驱动的说明（许愿词条同样生效——原子决定语义，不靠 id 白名单）
 function modCandidateLine(meta, ob, fmtP) {
-  const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":选的点数' : ''}}`;
+  const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":要亮的点数' : ''}}`;
   let desc = '';
   if (meta.ops.includes('calzaResolve'))
     desc = `——宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`;
   else if (meta.ops.includes('returnBid')) desc = `——把这口价原样推回给报价者，他必须自己接着抬`;
-  else if (meta.ops.includes('revealOwnDie')) desc = `——亮出自己选定的一颗骰给全桌看（选哪颗亮就是你的话术）`;
+  else if (meta.ops.includes('revealOwnDie'))
+    desc = `——亮出自己的一颗骰给全桌看。face 填骰子的点数（1–6，必须真在你手里），不是第几颗；亮出后全桌都看得见这颗骰，台词里若提点数必须就是它，说错当场穿帮`;
   else if (meta.ops.includes('potMult')) desc = `——本局池翻倍`;
   return `拍词条「${meta.label}」${desc}（${json}${meta.keepTurn ? '，之后你继续行动' : ''}）`;
 }
@@ -175,6 +176,10 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
     ]
       .filter(Boolean)
       .join('；')}。`,
+    // 软倾向（Q22-补：只染色不扣扳机）：宣言与词条是决策动词，不是摆设
+    ob.legal.some((a) => a.type === 'declare' || !!modActionMeta(ob, a.type))
+      ? '提醒：宣言和词条都是真招——虚实、时机、赔率都在里面，该出手就出手；一个只会抬价和开牌的人，是桌上最好读的人。'
+      : null,
     ...(ctx.extraFacts ?? []), // 宿主注入的追加事实行（好友房：主持人职责/短语盘/旁注注单——全为真实数据）
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
     ctx.hypotheses?.length
@@ -187,7 +192,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       : null,
   ].filter(Boolean);
   const modSpec = modActionsOf(ob)
-    .map((a) => `或{"type":"${a.type}"${a.params === 'face' ? ',"face":F' : ''}}（词条「${a.label}」）`)
+    .map((a) => `或{"type":"${a.type}"${a.params === 'face' ? ',"face":点数1到6' : ''}}（词条「${a.label}」）`)
     .join('');
   return { system: personaSystem(persona, three, modSpec), user: facts.join('\n') };
 }

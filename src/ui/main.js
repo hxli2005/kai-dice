@@ -377,7 +377,7 @@ function renderTrio(o) {
     strip.classList.toggle('turn', o.turn === s && !o.over);
     const sh = o.shown?.[s] ?? [];
     $(`dice-${s}`).innerHTML = ps.alive
-      ? sh.map((f) => dieHtml(f, 'mini shown')).join('') +
+      ? sh.map((f) => dieHtml(f, `mini shown ${!o.zhai && f === 1 ? 'wild' : ''}`)).join('') +
         backHtml('mini').repeat(Math.max(0, ps.diceCount - sh.length))
       : '<i class="out-mark">出局</i>';
     renderChips(`meta-${s}`, ps.chips);
@@ -409,7 +409,7 @@ function render() {
     // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条；亮出的明骰面朝上（词条「亮」）
     const shB = o.shown?.B ?? [];
     $('oppDice').innerHTML =
-      shB.map((f) => dieHtml(f, 'shown')).join('') +
+      shB.map((f) => dieHtml(f, `shown ${!o.zhai && f === 1 ? 'wild' : ''}`)).join('') +
       backHtml().repeat(Math.max(0, o.diceCount.opp - shB.length));
     renderChips('oppChips', o.chips.opp);
   }
@@ -640,7 +640,8 @@ async function onPickDie(face) {
   pickPending = null;
   if (!meta || busy) return;
   await match.act('A', { type: meta.type, face }, { elapsedMs: performance.now() - turnStart });
-  stampFx(meta.label);
+  if (room) return;
+  stampFx(`${meta.label} ${face}`);
   sfx.land();
   render();
 }
@@ -696,7 +697,7 @@ async function aiTurnFor(seat) {
   if (meta?.terminal) return doShowdown(seat, { elapsedMs, sayText: d.say, actionType: d.action.type });
   await match.act(seat, d.action, { elapsedMs });
   if (d.action.type === 'declare') stampFx(stampText(d.action.declaration));
-  else if (meta) stampFx(meta.label);
+  else if (meta) stampFx(meta.params === 'face' && d.action.face ? `${meta.label} ${d.action.face}` : meta.label); // 亮的点数打在章上——裁判层视觉永远说真话
   else sfx.tick();
   if (d.say) speak(d.say, seat);
   busy = false;
