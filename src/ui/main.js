@@ -342,8 +342,6 @@ function render() {
   else {
     // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条
     $('oppDice').innerHTML = backHtml().repeat(o.diceCount.opp);
-    const rs0 = lastEvent(o, 'roundStart');
-    $('oppCommit').textContent = `封 ${rs0.commits.B.slice(0, 10)}`;
     renderChips('oppChips', o.chips.opp);
   }
 
@@ -357,7 +355,7 @@ function render() {
     seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
   const aliveN = o.players.filter((q) => q.alive).length;
   $('roundTag').textContent = `第 ${o.round} 局 · ${o.diceCount.you + o.diceCount.opp} 骰`;
-  $('pot').innerHTML = `池 <b>${o.potUnits * aliveN}</b> 注${marks}`;
+  $('pot').innerHTML = marks;
   renderPotChips(o.potUnits * aliveN, mult > 1);
 
   // 中央只放对局物：报价者名＋报价大字；无报价时留白（思考状态由座位动画表达，不摆文字）
@@ -366,8 +364,6 @@ function render() {
     ? `${bidderTag}<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
     : `<span class="none"></span>`;
 
-  const rs = lastEvent(o, 'roundStart');
-  $('myCommit').textContent = meAlive && rs.commits.A ? `封 ${rs.commits.A.slice(0, 10)}` : '出局旁观';
   renderChips('myChips', o.chips.you);
 
   // 我的骰子：未看则盖着（点击=看骰）；盲局锁死；出局清空
@@ -428,11 +424,12 @@ function render() {
     const myP = o.yourDice ? ` · ${pct(probBidTrue(sel, o.yourDice, o.diceCount.opp, o.zhai))}` : '';
     $('bidBtn').textContent = `报 ${sel.count} 个 ${sel.face}${myP}`;
   } else {
-    $('bidBtn').textContent = '没法再抬';
+    $('bidBtn').textContent = '—';
   }
   $('bidBtn').disabled = !myTurn || !bids;
   // 赌注焊在扳机上：拍开就是这个数；三人桌写明开谁（§2.5 开只开上家）
-  const openWho = o.currentBid && isTrio() ? `开·${NAMES[o.currentBid.player] ?? ''}` : '开';
+  const openWho =
+    o.currentBid && isTrio() ? `开·${SEAT_PERSONA[o.currentBid.player]?.seal ?? ''}` : '开';
   $('openBtn').innerHTML = o.currentBid
     ? `${openWho}<small>±${Math.round(o.potUnits * mult)}</small>`
     : '开';
@@ -452,12 +449,8 @@ function render() {
 }
 
 // 首场只给最短操作指引（§2.5），规则全文在「规」页——桌面上只留对局
-function hintFor(o, myTurn) {
-  if (o.over || !myTurn) return '';
-  if (!o.yourDice && !o.blind.A) return '点骰盅看牌';
-  if (isTrio() && o.round === 1 && o.currentBid) return '开＝开上家';
-  if (profile.matches === 0 && o.round === 1 && !o.currentBid) return '报数＝全桌总数';
-  return '';
+function hintFor() {
+  return ''; // 设施不说话：教学归指引层，状态归数据（gauge/按钮）
 }
 
 // ---------- 计时（§2.4：超时＝最小抬价，本身即信号） ----------
