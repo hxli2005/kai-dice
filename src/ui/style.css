@@ -742,11 +742,16 @@ button.danger:active { transform: scale(0.95); }
   background:
     radial-gradient(ellipse 90% 55% at 50% 32%, #33261c 0%, #1c1512 55%, #0f0c0a 100%);
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
+  align-items: center;
+  /* 安全居中：justify-content:center 在内容溢出时会把顶部推出可滚动区（标题够不着）。
+     改首末子元素 margin:auto——内容少时居中，溢出时从顶部正常滚 */
+  justify-content: flex-start;
   gap: 0.9rem;
   padding: 1.6rem 1.6rem calc(env(safe-area-inset-bottom) + 1.6rem);
   overflow-y: auto;
 }
+#lobby > :first-child { margin-top: auto; }
+#lobby > :last-child { margin-bottom: auto; }
 .lobby-title {
   font-size: 3.4rem; color: var(--lamp);
   letter-spacing: 0.28em; text-indent: 0.28em;
@@ -861,8 +866,17 @@ button.ghost {
 .lab-chip.wish { border-style: dashed; }
 .lab-note { font-size: 0.72rem; color: var(--dim); margin-top: 0.5rem; line-height: 1.6; text-align: center; }
 
-/* 词条章：与盲/斋/抬同语言，虚线边区分"实验件"；拾取态发亮 */
-#modRow { display: contents; }
+/* 词条章：与盲/斋/抬同语言，虚线边区分"实验件"。
+   独立成行叠在三印上方——六章同排会撞破屏幕两缘（375px 下贴边裁切），
+   分行后基础印一排、实验章一排，层级也更诚实 */
+#modRow {
+  position: absolute;
+  bottom: 3.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.9rem;
+}
 .stamp.mod { border-style: dashed; }
 .stamp.armed { background: rgba(232, 169, 79, 0.22); box-shadow: 0 0 12px rgba(232, 169, 79, 0.4); }
 
