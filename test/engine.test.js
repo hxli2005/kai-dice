@@ -79,6 +79,52 @@ test('非当前玩家不可行动；阶梯外报数被拒', async () => {
   await assert.rejects(() => m.act('B', { type: 'bid', count: 2, face: 6 }), /bid off ladder/);
 });
 
+test('Q22 抬：每人每局一次、全桌对等、倍率入结算', async () => {
+  const m = await createMatch({ seed: 7 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'declare', declaration: 'raise' });
+  assert.ok(
+    !m.observe('A').legal.some((a) => a.type === 'declare' && a.declaration === 'raise'),
+    '同一局不可再抬',
+  );
+  await assert.rejects(() => m.act('A', { type: 'declare', declaration: 'raise' }), /illegal declare/);
+  await m.act('A', { type: 'bid', count: 2, face: 3 });
+  await m.act('B', { type: 'peek' });
+  await m.act('B', { type: 'declare', declaration: 'raise' }); // 对等：B 也能抬
+  await m.act('B', { type: 'challenge' });
+  const re = m.observe('A').events.findLast((e) => e.type === 'roundEnd');
+  assert.equal(re.mult, 4); // 双方各抬 ×2×2
+  assert.equal(re.transfer, Math.round((1 + 1) * 4)); // units=底1+报1
+});
+
+test('Q22 深水线：第 6 手报价起池 ×2', async () => {
+  const m = await createMatch({ seed: 11 });
+  await m.act('A', { type: 'peek' });
+  await m.act('B', { type: 'peek' });
+  const ladder = [[2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [3, 2]];
+  let p = 'A';
+  for (const [count, face] of ladder) {
+    await m.act(p, { type: 'bid', count, face });
+    p = p === 'A' ? 'B' : 'A';
+  }
+  await m.act(p, { type: 'challenge' });
+  const re = m.observe('A').events.findLast((e) => e.type === 'roundEnd');
+  assert.equal(re.mult, 2);
+  assert.equal(re.transfer, Math.round((1 + 6) * 2));
+});
+
+test('Q22 盲窗口放宽：报过数、只要没看骰仍可宣盲', async () => {
+  const m = await createMatch({ seed: 13 });
+  await m.act('A', { type: 'bid', count: 2, face: 4 }); // 裸报（未看骰）
+  await m.act('B', { type: 'peek' });
+  await m.act('B', { type: 'bid', count: 2, face: 5 });
+  await m.act('A', { type: 'declare', declaration: 'blind' }); // 追认裸报
+  await assert.rejects(() => m.act('A', { type: 'peek' }), /illegal peek/);
+  const o = m.observe('A');
+  assert.equal(o.potMult, 2);
+  assert.ok(o.raises && o.blind.A === true);
+});
+
 test('startChips 支持 {A,B} 不对称初始（跨场账本）', async () => {
   const m = await createMatch({ seed: 1, config: { startChips: { A: 37, B: -5 } } });
   const o = m.observe('A');
@@ -115,19 +161,20 @@ test('自对弈 200 场：终止、守恒、判定、承诺全部成立', async 
     const { events } = await selfPlay(seed);
     const commits = {};
     let bids = 0;
-    let declares = { blindA: false, blindB: false, zhai: false };
+    let declares = { blindA: false, blindB: false, zhai: false, raiseA: false, raiseB: false };
     let diceCount = null;
     for (const e of events) {
       if (e.type === 'roundStart') {
         commits.A = e.commits.A;
         commits.B = e.commits.B;
         bids = 0;
-        declares = { blindA: false, blindB: false, zhai: false };
+        declares = { blindA: false, blindB: false, zhai: false, raiseA: false, raiseB: false };
         diceCount = e.diceCount;
       }
       if (e.type === 'bid') bids++;
       if (e.type === 'declare') {
         if (e.declaration === 'zhai') declares.zhai = true;
+        else if (e.declaration === 'raise') declares[`raise${e.player}`] = true;
         else declares[`blind${e.player}`] = true;
       }
       if (e.type === 'reveal') {
@@ -142,10 +189,11 @@ test('自对弈 200 场：终止、守恒、判定、承诺全部成立', async 
         assert.equal(e.actual, countBid(e.bid, all, e.zhai));
       }
       if (e.type === 'roundEnd') {
-        // 注池：单方投入 × 赔率，零和转移
+        // 注池：单方投入 × 赔率（盲/抬/斋/深水线 Q22），零和转移
         const mult =
           2 ** (declares.blindA ? 1 : 0) * 2 ** (declares.blindB ? 1 : 0) *
-          (declares.zhai ? 1.5 : 1);
+          2 ** (declares.raiseA ? 1 : 0) * 2 ** (declares.raiseB ? 1 : 0) *
+          (declares.zhai ? 1.5 : 1) * (bids >= 6 ? 2 : 1);
         assert.equal(e.transfer, Math.round((1 + bids) * mult));
         assert.equal(e.chips.A + e.chips.B, 200, '筹码守恒');
         assert.equal(e.diceCount.A + e.diceCount.B, diceCount.A + diceCount.B - 1, '每局掉一骰');

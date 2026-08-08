@@ -13,6 +13,7 @@ export function computeStats(events, you, myDiceByRound) {
     myChallenges: 0,
     myChallengeHits: 0,
     myBlinds: 0,
+    myRaises: 0,
     ladderDepths: [],
     myTimes: [],
     slowest: null, // {round, bid, ms}
@@ -43,6 +44,7 @@ export function computeStats(events, you, myDiceByRound) {
     }
     if (e.type === 'declare' && e.declaration === 'zhai') zhai = true;
     if (e.type === 'declare' && e.declaration === 'blind' && e.player === you) s.myBlinds++;
+    if (e.type === 'declare' && e.declaration === 'raise' && e.player === you) s.myRaises++;
     if (e.type === 'bid') {
       depth++;
       if (e.player === you) {

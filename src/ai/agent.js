@@ -19,11 +19,12 @@ const TABLE_TALK = `
 - 每手最多一句话，开牌时刻可以多说。`;
 const personaSystem = (p, three) => `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}你收到的全是真实数据，禁止编造数字。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。
 ${p.flaws}${three ? TABLE_TALK : ''}
-规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。
+规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。
 严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"或"blind"}或{"type":"peek"}（未看骰时掀盅），"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅），"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
 
 const pct = (p) => `${Math.round(p * 100)}%`;
+const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
 
 // 称呼表：you→你；其余按 names 映射（三人桌需要分清是谁），缺省"对方"
 const whoOf = (you, names) => (p) => (p === you ? '你' : (names?.[p] ?? '对方'));
@@ -41,7 +42,7 @@ function narrate(events, you, names) {
     if (e.type === 'peek' && e.player !== you) lines.push(`${who(e.player)}掀盅看了骰`);
     if (e.type === 'bid') lines.push(`${who(e.player)}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')
-      lines.push(`${who(e.player)}宣言「${e.declaration === 'zhai' ? '斋' : '盲'}」${t}`);
+      lines.push(`${who(e.player)}宣言「${DECL[e.declaration] ?? e.declaration}」${t}`);
   }
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
@@ -109,7 +110,11 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
         `抬价（候选：${top.map((b) => `${b.count}个${b.face}=${fmtP(p(b))}`).join('，')}；也可报其他合法阶梯）`,
       ...ob.legal
         .filter((a) => a.type === 'declare')
-        .map((a) => `宣言「${a.declaration === 'zhai' ? '斋' : '盲'}」后再报`),
+        .map((a) =>
+          a.declaration === 'raise'
+            ? `拍「抬」（本局池×2，每局限一次）后再行动`
+            : `宣言「${DECL[a.declaration]}」后再报`,
+        ),
       !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
     ]
       .filter(Boolean)

@@ -58,6 +58,7 @@ export async function createMatch({ seed, config = {} } = {}) {
   let peeked = null;
   let blind = null;
   let zhai = false;
+  let raises = null; // Q22「抬」：{p: bool}，每人每局限一次，全桌对等生效
 
   const alive = (p) => diceCount[p] > 0;
   const aliveList = () => players.filter(alive);
@@ -73,6 +74,11 @@ export async function createMatch({ seed, config = {} } = {}) {
   const totalDice = () => players.reduce((s, p) => s + diceCount[p], 0);
   const currentBid = () => (bids.length ? bids.at(-1) : null);
   const emit = (e) => events.push({ i: events.length, ...e });
+  // §2.2/Q22 赔率乘法叠加：每名盲者 ×2、每记「抬」×2、斋 ×1.5、深水线（第 6 档起）×2
+  const potMult = () =>
+    aliveList().reduce((m, p) => m * (blind[p] ? 2 : 1) * (raises[p] ? 2 : 1), 1) *
+    (zhai ? 1.5 : 1) *
+    (bids.length >= 6 ? 2 : 1);
 
   async function startRound(first) {
     round += 1;
@@ -81,12 +87,14 @@ export async function createMatch({ seed, config = {} } = {}) {
     peeked = {};
     blind = {};
     const commits = {};
+    raises = {};
     for (const p of aliveList()) {
       dice[p] = Array.from({ length: diceCount[p] }, () => 1 + Math.floor(rng() * 6));
       nonces[p] = nonceGen();
       commits[p] = await commitmentOf(dice[p], nonces[p]);
       peeked[p] = false;
       blind[p] = false;
+      raises[p] = false;
     }
     turn = first;
     firstBidder = first;
@@ -100,11 +108,12 @@ export async function createMatch({ seed, config = {} } = {}) {
     const acts = [];
     if (!peeked[p] && !blind[p]) acts.push({ type: 'peek' });
     if (p !== turn) return acts;
-    const myBids = bids.some((b) => b.player === p);
-    // §2.3 宣言窗口：盲=未看骰且未报过数；斋=仅首报者首报前；可叠加
-    if (!peeked[p] && !blind[p] && !myBids) acts.push({ type: 'declare', declaration: 'blind' });
+    // §2.3 宣言窗口（Q22 放宽）：盲=只要尚未看骰（已报过数也行——追认既成的裸报）；
+    // 斋=仅首报者首报前；抬=轮到你、本局没抬过（空手抬是合法演技）；可叠加
+    if (!peeked[p] && !blind[p]) acts.push({ type: 'declare', declaration: 'blind' });
     if (p === firstBidder && bids.length === 0 && !zhai)
       acts.push({ type: 'declare', declaration: 'zhai' });
+    if (!raises[p]) acts.push({ type: 'declare', declaration: 'raise' });
     if (allLegalBids(currentBid(), zhai, totalDice()).length > 0) acts.push({ type: 'bid' });
     // §2.5：开只能开上家——轮转报数下当前报价者必为你的上家，challenge 天然指向上家
     if (bids.length > 0) acts.push({ type: 'challenge' });
@@ -130,9 +139,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     });
     // 注池（§2.2/§2.5）：全桌各底注 1、每次报数全桌各追 1；胜者收池——第三方的注跟池走
     const units = 1 + bids.length;
-    // §2.2 赔率：每名盲者 ×2 累乘，斋 ×1.5，四舍五入
-    const mult =
-      aliveList().reduce((m, p) => m * (blind[p] ? 2 : 1), 1) * (zhai ? 1.5 : 1);
+    const mult = potMult(); // 赔率四舍五入前累乘（盲/抬/斋/深水）
     const pay = Math.round(units * mult);
     const transfers = {};
     let pot = 0;
@@ -188,6 +195,7 @@ export async function createMatch({ seed, config = {} } = {}) {
         if (!legal.some((a) => a.type === 'declare' && a.declaration === action.declaration))
           throw new Error(`illegal declare ${action.declaration}`);
         if (action.declaration === 'blind') blind[p] = true;
+        else if (action.declaration === 'raise') raises[p] = true;
         else zhai = true;
         emit({ type: 'declare', declaration: action.declaration, ...base });
         return;
@@ -221,6 +229,8 @@ export async function createMatch({ seed, config = {} } = {}) {
       turn,
       zhai,
       blind: { ...blind },
+      raises: { ...raises },
+      potMult: potMult(),
       players: players.map((q) => ({
         id: q,
         diceCount: diceCount[q],

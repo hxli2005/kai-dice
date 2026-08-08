@@ -355,18 +355,22 @@ function render() {
     renderChips('oppChips', o.chips.opp);
   }
 
+  // 池标记（Q22 全家福）：斋 / 各家盲 / 各家抬 / 深水线（第 6 手起自动 ×2）
   const marks =
     (o.zhai ? '<span class="mark">斋 ×1.5</span>' : '') +
     seats
       .filter((s) => o.blind[s])
       .map((s) => `<span class="mark">${dispName(s)}盲 ×2</span>`)
-      .join('');
-  const mult =
-    seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
+      .join('') +
+    seats
+      .filter((s) => o.raises?.[s])
+      .map((s) => `<span class="mark">${dispName(s)}抬 ×2</span>`)
+      .join('') +
+    (o.potUnits - 1 >= 6 ? '<span class="mark">深水 ×2</span>' : '');
   const aliveN = o.players.filter((q) => q.alive).length;
   $('roundTag').textContent = `第 ${o.round} 局`;
   $('pot').innerHTML = marks;
-  renderPotChips(o.potUnits * aliveN, mult > 1);
+  renderPotChips(o.potUnits * aliveN, o.potMult > 1);
 
   // 中央只放对局物：报价者名＋报价大字；无报价时留白（思考状态由座位动画表达，不摆文字）
   const bidderTag = o.currentBid && isTrio() ? `<span class="bidder-tag">${dispName(o.currentBid.player)}：</span>` : '';
@@ -441,6 +445,7 @@ function render() {
   $('openBtn').disabled = !myTurn || !o.currentBid;
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');
+  $('raiseBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'raise');
 
   $('hint').textContent = hintFor(o, myTurn);
 
@@ -488,9 +493,11 @@ async function onPeek() {
   myDiceByRound[o.round] = o.yourDice;
 }
 
+const stampText = (d) => (d === 'blind' ? '盲 ×2' : d === 'zhai' ? '斋 ×1.5' : '抬 ×2');
+
 async function onDeclare(declaration) {
   await match.act('A', { type: 'declare', declaration }, { elapsedMs: performance.now() - turnStart });
-  stampFx(declaration === 'blind' ? '盲 ×2' : '斋 ×1.5');
+  stampFx(stampText(declaration));
   render();
 }
 
@@ -549,8 +556,7 @@ async function aiTurnFor(seat) {
   const elapsedMs = performance.now() - t0;
   if (d.action.type === 'challenge') return doChallenge(seat, elapsedMs, false, d.say);
   await match.act(seat, d.action, { elapsedMs });
-  if (d.action.type === 'declare')
-    stampFx(d.action.declaration === 'blind' ? '盲 ×2' : '斋 ×1.5');
+  if (d.action.type === 'declare') stampFx(stampText(d.action.declaration));
   else sfx.tick();
   if (d.say) speak(d.say, seat);
   busy = false;
@@ -750,6 +756,7 @@ async function showReport(end) {
     `${end.rounds}局${won ? '客人赢' : '客人输'}；虚报率${pct(stats.bluffRate)}；` +
     `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次` +
     (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
+    (stats.myRaises ? `；拍抬${stats.myRaises}次` : '') +
     (condBrief(stats) ? `；条件倾向（心理侧，判词优先引用）：${condBrief(stats)}` : '') +
     ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '') +
     (stats.slowest && stats.slowest.ms > 8000
@@ -896,7 +903,8 @@ function openDrawer(section, inLobby = false) {
       <li>1 点是万能牌；斋局失效。</li>
       <li>开只开上家：数够，开的人输；不够，报的人输。输家掉一骰，掉光出局。</li>
       <li>每报一手，全桌各追 1 注；开牌胜者收整池。</li>
-      <li>盲＝不看骰打全局，池×2　｜　斋＝首报者宣，1 失效，池×1.5。</li>
+      <li>盲＝没看骰就能宣、全局不看，池×2　｜　斋＝首报者宣，1 失效，池×1.5　｜　抬＝轮到你拍章，池×2，每人每局一次。</li>
+      <li>第 6 手报价起进深水：池自动再 ×2。倍率全部相乘。</li>
       <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
@@ -1159,7 +1167,7 @@ function showCoach() {
     [['myDice'], '① 点骰盅，偷看自己的骰子', 0.30, 0.24, 0.55, 0.5],
     [['bidBtn'], '② 报数：桌上共有几个几', 0.40, 0.04, 0.25, 0.2],
     [['openBtn'], '③ 觉得他吹牛，拍「开」', 0.50, 0.42, 0.72, 0.5],
-    [['blindBtn', 'zhaiBtn'], '④ 玩狠的按这里：盲、斋，赔率翻倍', 0.60, 0.02, 0.1, 0.9],
+    [['blindBtn', 'zhaiBtn', 'raiseBtn'], '④ 玩狠的按这里：盲、斋、抬，赔率翻倍', 0.60, 0.02, 0.1, 0.9],
   ];
   const c = document.createElement('div');
   c.id = 'coach';
@@ -1202,6 +1210,7 @@ $('bidBtn').addEventListener('click', onBid);
 $('openBtn').addEventListener('click', () => doChallenge('A'));
 $('blindBtn').addEventListener('click', () => onDeclare('blind'));
 $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
+$('raiseBtn').addEventListener('click', () => onDeclare('raise'));
 $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('menuBtn').addEventListener('click', () => openDrawer());
