@@ -76,3 +76,24 @@ test('mindOf 补齐 record.wins（旧档无损，胜率列可用）', () => {
   assert.equal(m.record.wins, 0);
   assert.equal(m.record.plays, 3);
 });
+
+// Q28 钥匙分流：旧 kai.byok.v1 迁移——纯 key＝暗号，全套三格＝客席钥匙
+import { loadPass, loadGuest } from '../src/ui/profile.js';
+
+test('钥匙迁移：只填 key 的旧配置归暗号', () => {
+  const s = memStorage({ 'kai.byok.v1': JSON.stringify({ apiKey: 'sk-pass', baseUrl: '', model: '', format: 'openai' }) });
+  assert.equal(loadPass(s), 'sk-pass');
+  assert.equal(loadGuest(s), null);
+  assert.equal(s.getItem('kai.byok.v1'), null);
+});
+
+test('钥匙迁移：三格全填的旧配置归客席', () => {
+  const s = memStorage({ 'kai.byok.v1': JSON.stringify({ apiKey: 'sk-x', baseUrl: 'https://api.x.com/v1', model: 'm1', format: 'openai' }) });
+  assert.equal(loadGuest(s).model, 'm1');
+  assert.equal(loadPass(s), '');
+});
+
+test('客席身家默认 300（model: 前缀）', () => {
+  const led = loadLedger(memStorage());
+  assert.equal(balanceOf(led, 'model:some-model'), 300);
+});

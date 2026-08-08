@@ -127,22 +127,48 @@ export function loadLedger(storage = localStorage) {
   return l;
 }
 export function balanceOf(ledger, personaId) {
-  return ledger.personas[personaId] ?? PERSONAS[personaId]?.bankroll ?? 100;
+  // 客席（model:xxx）默认身家 300——TODO(Q25/Q28④) 占位，与官方人设一并裁
+  return (
+    ledger.personas[personaId] ??
+    PERSONAS[personaId]?.bankroll ??
+    (personaId.startsWith('model:') ? 300 : 100)
+  );
 }
 export function saveLedger(l, storage = localStorage) {
   storage.setItem(LEDGER_KEY, JSON.stringify(l));
 }
 
-export function loadByok(storage = localStorage) {
+// 钥匙分流（Q28 用户裁决）：暗号（官方通道，只喂官方人设）与客席钥匙（BYOK，只喂客席模型）分开存。
+// 旧 kai.byok.v1 迁移：只填 key＝暗号；三格全填＝客席钥匙。
+const PASS_KEY = 'kai.pass.v1';
+const GUEST_KEY = 'kai.guest.v1';
+function migrateByok(storage) {
   try {
-    return JSON.parse(storage.getItem(BYOK_KEY));
+    const legacy = JSON.parse(storage.getItem(BYOK_KEY));
+    if (legacy?.apiKey) {
+      if (legacy.baseUrl) storage.setItem(GUEST_KEY, JSON.stringify(legacy));
+      else storage.setItem(PASS_KEY, legacy.apiKey);
+    }
+    storage.removeItem(BYOK_KEY);
+  } catch {}
+}
+export function loadPass(storage = localStorage) {
+  migrateByok(storage);
+  return storage.getItem(PASS_KEY) ?? '';
+}
+export function savePass(pass, storage = localStorage) {
+  if (pass) storage.setItem(PASS_KEY, pass);
+  else storage.removeItem(PASS_KEY);
+}
+export function loadGuest(storage = localStorage) {
+  migrateByok(storage);
+  try {
+    return JSON.parse(storage.getItem(GUEST_KEY));
   } catch {
     return null;
   }
 }
-
-// 只填 key（暗号）也可存——零配置走同域官方通道（§9.2）
-export function saveByok(cfg, storage = localStorage) {
-  if (!cfg || !cfg.apiKey) storage.removeItem(BYOK_KEY);
-  else storage.setItem(BYOK_KEY, JSON.stringify(cfg));
+export function saveGuest(cfg, storage = localStorage) {
+  if (!cfg || !cfg.apiKey || !cfg.baseUrl || !cfg.model) storage.removeItem(GUEST_KEY);
+  else storage.setItem(GUEST_KEY, JSON.stringify(cfg));
 }

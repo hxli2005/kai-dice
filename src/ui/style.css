@@ -774,6 +774,19 @@ button.danger:active { transform: scale(0.95); }
 .p-card:not(.sel) .seal { filter: grayscale(1); }
 .p-card.sel { border-color: var(--lamp-dim); box-shadow: 0 0 16px rgba(232, 169, 79, 0.12); }
 .p-info { display: flex; flex-direction: column; gap: 0.18rem; }
+/* 客席（Q28）：未落座=虚线空位卡；已落座=角上「改」进配置 */
+.p-card { position: relative; }
+.card-edit {
+  position: absolute; top: 0.55rem; right: 0.65rem;
+  font-size: 0.72rem; color: var(--dim);
+  border: 1px solid var(--wood-hi); border-radius: 0.35rem;
+  padding: 0.1rem 0.42rem;
+}
+.p-card.add-guest { border-style: dashed; opacity: 0.8; }
+.p-card.add-guest .seal {
+  border-style: dashed; border-color: var(--lamp-dim);
+  color: var(--lamp-dim); background: none; transform: none;
+}
 .p-name { font-size: 1.05rem; letter-spacing: 0.1em; }
 .p-sub { font-size: 0.72rem; color: var(--dim); letter-spacing: 0.06em; }
 .p-data { font-size: 0.72rem; color: var(--dim); font-variant-numeric: tabular-nums; }

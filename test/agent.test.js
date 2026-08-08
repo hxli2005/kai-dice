@@ -86,3 +86,19 @@ test('createOpponent：LLM 垃圾输出与无通道时降级沉默模式，日�
   assert.ok(['bid', 'challenge'].includes(d2.action.type));
   assert.equal(noChannel.logs.at(-1).silentFallback, true);
 });
+
+test('Q28 素颜客席：无人设剧本、保留事实红线与规矩', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  const ob = m.observe('B');
+  const bare = { id: 'model:test-model', name: 'test-model', bare: true, gear: { probInject: 'full', usesBlind: true } };
+  const { system } = buildPrompts(ob, '', bare);
+  assert.match(system, /以本名上桌/);
+  assert.match(system, /test-model/);
+  assert.match(system, /禁止编造数字/); // 红线不脱
+  assert.match(system, /规则提要/);
+  assert.match(system, /严格输出一行 JSON/);
+  assert.ok(!system.includes('毛病')); // 无性格缺陷剧本
+});

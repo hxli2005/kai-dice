@@ -8,7 +8,7 @@ import { createOpponent, settleVerdict, reflect } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict, condBrief } from './report.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadByok, saveByok, loadLedger, saveLedger, balanceOf } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -37,6 +37,29 @@ const typeTimers = {}; // 每席位独立打字机
 
 // 座次（§2.5）：阵容数据驱动——人设只增不改代码。A=玩家，其余按序入座
 const SEAT_IDS = ['B', 'C', 'D', 'E'];
+// 客席（Q28 用户裁决）：素颜模型以本名上桌——身份=模型名，换模型=换人各记各的账
+function guestPersona() {
+  const g = loadGuest();
+  if (!g?.model) return null;
+  return {
+    id: `model:${g.model}`,
+    name: g.model.slice(0, 24),
+    seal: (g.model[0] ?? '客').toUpperCase(),
+    tag: '客席 · 素颜上桌',
+    identity: `一个以本名上桌的语言模型（${g.model}）。`,
+    bare: true,
+    gear: { probInject: 'full', usesBlind: true },
+    strategy: { challengeThreshold: 0.3 },
+    idle: ['……'],
+    pace: 'fast',
+    bankroll: 300, // TODO(Q25/Q28④) 客席身家占位
+  };
+}
+const rosterAll = () => {
+  const g = guestPersona();
+  return [...Object.values(PERSONAS), ...(g ? [g] : [])];
+};
+const rosterMap = () => Object.fromEntries(rosterAll().map((p) => [p.id, p]));
 let SEAT_PERSONA = {}; // seat -> persona（newMatch 构建）
 let NAMES = { A: '客人' };
 const isTrio = () => seats.length > 2;
@@ -48,26 +71,31 @@ function loadTable() {
 function loadLineup(mode) {
   let ids = [];
   try { ids = JSON.parse(localStorage.getItem('kai.lineup.v1') ?? '[]'); } catch {}
-  ids = [...new Set(ids)].filter((id) => PERSONAS[id]);
+  const ros = rosterMap();
+  ids = [...new Set(ids)].filter((id) => ros[id]);
   const need = mode === 'duo' ? 1 : 2;
-  for (const id of Object.keys(PERSONAS)) if (ids.length < need && !ids.includes(id)) ids.push(id);
+  for (const id of Object.keys(ros)) if (ids.length < need && !ids.includes(id)) ids.push(id);
   return ids.slice(0, need);
 }
 
-// 零配置官方通道（§9.2）：只填暗号 → 同域 /api/llm 代理；三格全填 → 自带 API
-function channelOf() {
-  const b = loadByok();
-  if (!b || !b.apiKey) return null;
-  if (!b.baseUrl)
-    return {
-      baseUrl: `${location.origin}/api/llm`,
-      apiKey: b.apiKey,
-      model: 'deepseek-chat',
-      format: 'openai',
-      headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
-    };
-  return b;
+// 通道分流（Q28 用户裁决）：官方人设只走官方通道（暗号→同域代理，原版演员钉死，可控打磨）；
+// 客席只走自带钥匙（BYOK）。两把钥匙互不越界。
+function officialChannelOf() {
+  const pass = loadPass();
+  if (!pass) return null;
+  return {
+    baseUrl: `${location.origin}/api/llm`,
+    apiKey: pass,
+    model: 'deepseek-chat',
+    format: 'openai',
+    headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
+  };
 }
+function guestChannelOf() {
+  const g = loadGuest();
+  return g?.apiKey && g?.baseUrl ? g : null;
+}
+const chanForPersona = (per) => (per?.bare ? guestChannelOf() : officialChannelOf());
 
 // 降级原因 → 人话（连接状态可见性）
 function friendlyError(msg = '') {
@@ -81,25 +109,25 @@ function friendlyError(msg = '') {
 }
 let fallbackNoticed = false;
 
-// 保存即测试：官方通道走 ping 免费校验暗号；自带 API 打一次最小真调用
-async function testChannel() {
-  const ch = channelOf();
-  if (!ch) return { ok: false, msg: '未填钥匙' };
-  if (ch.baseUrl.endsWith('/api/llm')) {
-    try {
-      const r = await fetch(`${location.origin}/api/llm/ping`, {
-        headers: { authorization: `Bearer ${ch.apiKey}` },
-      });
-      const j = await r.json();
-      if (!j.secrets) return { ok: false, msg: '官方通道未开（服务端没配 key）' };
-      if (j.pass !== true) return { ok: false, msg: '暗号不对' };
-      return { ok: true, msg: '已连通' };
-    } catch {
-      return { ok: false, msg: '这个域名没有官方通道' };
-    }
-  }
+// 保存即测试：暗号走 ping 免费校验；客席钥匙打一次最小真调用
+async function testPass() {
+  const ch = officialChannelOf();
+  if (!ch) return { ok: false, msg: '未填暗号' };
   try {
-    await chat(ch, { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
+    const r = await fetch(`${location.origin}/api/llm/ping`, {
+      headers: { authorization: `Bearer ${ch.apiKey}` },
+    });
+    const j = await r.json();
+    if (!j.secrets) return { ok: false, msg: '官方通道未开（服务端没配 key）' };
+    if (j.pass !== true) return { ok: false, msg: '暗号不对' };
+    return { ok: true, msg: '已连通' };
+  } catch {
+    return { ok: false, msg: '这个域名没有官方通道' };
+  }
+}
+async function testGuest(cfg) {
+  try {
+    await chat(cfg, { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
     return { ok: true, msg: '已连通' };
   } catch (e) {
     return { ok: false, msg: friendlyError(e?.message ?? '') };
@@ -335,7 +363,7 @@ function renderTrio(o) {
     $(`dice-${s}`).innerHTML = ps.alive ? backHtml('mini').repeat(ps.diceCount) : '<i class="out-mark">出局</i>';
     renderChips(`meta-${s}`, ps.chips);
     const dot = $(`brain-${s}`);
-    if (!channelOf()) dot.className = 'brain hidden';
+    if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
     else {
       const last = opponents[s]?.logs.at(-1);
       dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
@@ -451,7 +479,7 @@ function render() {
 
   // 连接状态点（duo；trio 各 strip 自带）：亮=在线，红=降级，灰=未开口
   const dot = $('brainDot');
-  if (isTrio() || !channelOf()) dot.className = 'brain hidden';
+  if (isTrio() || !chanForPersona(SEAT_PERSONA.B)) dot.className = 'brain hidden';
   else {
     const last = opponent?.logs.at(-1);
     dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
@@ -545,7 +573,7 @@ async function aiTurnFor(seat) {
     busy = false;
     return aiTurnFor(seat);
   }
-  if (d.silentFallback && d.error && channelOf() && !fallbackNoticed) {
+  if (d.silentFallback && d.error && chanForPersona(ai.persona) && !fallbackNoticed) {
     fallbackNoticed = true;
     $('hint').textContent = `${NAMES[seat]}未连接（${friendlyError(d.error)}）`;
   }
@@ -635,9 +663,9 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   // §3.3 复盘学习触发①：被打脸的 AI 当场短反思（异步，不挡节拍；输入全为已公开信息）
   for (const s of seats.slice(1)) {
     if (re.loser !== s) continue;
-    const ch = channelOf();
-    if (!ch) continue;
     const ai = opponents[s];
+    const ch = chanForPersona(ai.persona);
+    if (!ch) continue;
     const mind = mindOf(profile, ai.persona.id);
     reflect(ch, { persona: ai.persona, factText: roundFactText(rv, re, s), hypotheses: mind.hypotheses })
       .then((hyps) => {
@@ -745,7 +773,7 @@ async function showReport(end) {
     if (end.standings && end.standings.indexOf(s) < end.standings.indexOf('A')) mind.record.beat += 1;
   }
   const stats = computeStats(o.events, 'A', myDiceByRound);
-  const byok = channelOf();
+  const byok = chanForPersona(opponent.persona); // 判词主笔（B 席）用自己的通道执笔
   const standingsLine = end.standings
     ? end.standings.map((s, i) => `${i + 1}. ${dispName(s)}`).join('　')
     : '';
@@ -873,7 +901,6 @@ const bookHtml = (per, extraBits = []) => {
 // ---------- 抽屉（大厅：规矩/设置；局内：档案/规矩/封印/离桌——身家与玩家页在大厅的榜上） ----------
 function openDrawer(section, inLobby = false) {
   const d = $('drawer');
-  const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
   if (!inLobby) disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
   const rsNow = !inLobby && match ? lastEvent(ob(), 'roundStart') : null;
@@ -894,7 +921,7 @@ function openDrawer(section, inLobby = false) {
     ${statTableHtml()}
 
     <h2>他们的本子</h2>
-    ${Object.values(PERSONAS).map((per) => bookHtml(per)).join('')}`
+    ${rosterAll().map((per) => bookHtml(per)).join('')}`
     }
 
     <h2 id="secRules">规矩</h2>
@@ -922,15 +949,10 @@ function openDrawer(section, inLobby = false) {
       !inLobby
         ? ''
         : `<h2 id="secBrain">设置</h2>
-    <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
-    <label>API Key / 暗号</label><input id="fKey" type="password" value="${byok.apiKey}">
-    <label>Model</label><input id="fModel" value="${byok.model}" placeholder="deepseek-chat">
-    <label>格式</label><select id="fFmt">
-      <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
-      <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
-    </select>
-    <div class="btnrow"><button class="primary" id="saveByok">保存</button></div>
-    <div id="byokTest" class="test-line"></div>`
+    <label>暗号（官方通道——只喂官方人物）</label><input id="fPass" type="password" value="${loadPass()}">
+    <div class="btnrow"><button class="primary" id="savePassBtn">保存</button></div>
+    <div id="passTest" class="test-line"></div>
+    <p class="dim-line">自带 API？在大厅的「客席」卡上填钥匙，你的模型以本名上桌。</p>`
     }
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
   if (section === 'profile') d.querySelector('#profileSec')?.scrollIntoView();
@@ -943,24 +965,73 @@ function openDrawer(section, inLobby = false) {
     const o = ob();
     if (o.turn === 'A' && !o.over && !busy) armIdle();
   });
-  d.querySelector('#saveByok')?.addEventListener('click', async () => {
-    saveByok({
-      baseUrl: d.querySelector('#fBase').value.trim(),
-      apiKey: d.querySelector('#fKey').value.trim(),
-      model: d.querySelector('#fModel').value.trim(),
-      format: d.querySelector('#fFmt').value,
-    });
-    const btn = d.querySelector('#saveByok');
-    const out = d.querySelector('#byokTest');
+  d.querySelector('#savePassBtn')?.addEventListener('click', async () => {
+    savePass(d.querySelector('#fPass').value.trim());
+    const btn = d.querySelector('#savePassBtn');
+    const out = d.querySelector('#passTest');
     btn.disabled = true;
     out.className = 'test-line';
     out.textContent = '验证中…';
-    const r = await testChannel();
+    const r = await testPass();
     btn.disabled = false;
     out.textContent = (r.ok ? '✓ ' : '✗ ') + r.msg;
     out.className = 'test-line ' + (r.ok ? 'ok' : 'bad');
     if (match) render(); // 大厅里开局前没有牌局可刷
     if (r.ok) setTimeout(() => d.classList.add('hidden'), 1200);
+  });
+}
+
+// ---------- 客席配置（Q28）：自带钥匙，模型以本名入座 ----------
+function openGuestConfig() {
+  const d = $('drawer');
+  d.classList.remove('hidden');
+  d.scrollTop = 0;
+  const g = loadGuest() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
+  d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
+    <h2>客席</h2>
+    <p class="p-idline">自带钥匙，让你的模型以本名上桌——素颜，无人设，只守规矩。换模型＝换人，各记各的账。钥匙只存这台设备，浏览器直连模型商。</p>
+    <label>Base URL</label><input id="gBase" value="${g.baseUrl}" placeholder="https://api.deepseek.com/v1">
+    <label>API Key</label><input id="gKey" type="password" value="${g.apiKey}">
+    <label>Model</label><input id="gModel" value="${g.model}" placeholder="deepseek-chat">
+    <label>格式</label><select id="gFmt">
+      <option value="openai" ${g.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
+      <option value="anthropic" ${g.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
+    </select>
+    <div class="btnrow"><button class="primary" id="saveGuestBtn">保存并试一手</button>${loadGuest() ? '<button class="ghost" id="clearGuestBtn">撤席</button>' : ''}</div>
+    <div id="guestTest" class="test-line"></div>`;
+  d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
+  d.querySelector('#clearGuestBtn')?.addEventListener('click', () => {
+    saveGuest(null);
+    d.classList.add('hidden');
+    showLobby();
+  });
+  d.querySelector('#saveGuestBtn').addEventListener('click', async () => {
+    const cfg = {
+      baseUrl: d.querySelector('#gBase').value.trim(),
+      apiKey: d.querySelector('#gKey').value.trim(),
+      model: d.querySelector('#gModel').value.trim(),
+      format: d.querySelector('#gFmt').value,
+    };
+    const btn = d.querySelector('#saveGuestBtn');
+    const out = d.querySelector('#guestTest');
+    if (!cfg.baseUrl || !cfg.apiKey || !cfg.model) {
+      out.textContent = '✗ 三格都要填';
+      out.className = 'test-line bad';
+      return;
+    }
+    saveGuest(cfg); // 先落座再试嗓——试失败也保留，可live修
+    btn.disabled = true;
+    out.className = 'test-line';
+    out.textContent = '验证中…';
+    const r = await testGuest(cfg);
+    btn.disabled = false;
+    out.textContent = (r.ok ? '✓ ' : '✗ ') + r.msg;
+    out.className = 'test-line ' + (r.ok ? 'ok' : 'bad');
+    if (r.ok)
+      setTimeout(() => {
+        d.classList.add('hidden');
+        showLobby();
+      }, 900);
   });
 }
 
@@ -981,7 +1052,7 @@ function showLobby() {
   const boardHtml = () =>
     [
       { id: 'you', seal: '客', name: '你', bal: led.you, rate: rateOf(profile.wins, profile.matches) },
-      ...Object.values(PERSONAS).map((per) => {
+      ...rosterAll().map((per) => {
         const rec = mindOf(profile, per.id).record;
         return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays) };
       }),
@@ -1000,7 +1071,7 @@ function showLobby() {
         <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" data-m="duo">单挑</button>
         <button class="mode-btn ${mode === 'trio' ? 'sel' : ''}" data-m="trio">三人桌</button>
       </div>
-      <div class="roster">${Object.values(PERSONAS)
+      <div class="roster">${rosterAll()
         .map(
           (per) => `<button class="p-card ${picked.includes(per.id) ? 'sel' : ''}" data-p="${per.id}">
             <span class="seal">${per.seal}</span>
@@ -1009,21 +1080,34 @@ function showLobby() {
               <span class="p-sub">${per.tag ?? ''}</span>
               <span class="p-data">${dataOf(per)}</span>
             </span>
+            ${per.bare ? '<span class="card-edit" data-edit="1">改</span>' : ''}
           </button>`,
         )
-        .join('')}</div>
+        .join('')}${
+        guestPersona()
+          ? ''
+          : `<button class="p-card add-guest" id="addGuest">
+            <span class="seal">＋</span>
+            <span class="p-info">
+              <span class="p-name">客席</span>
+              <span class="p-sub">自带钥匙 · 你的模型以本名上桌</span>
+            </span>
+          </button>`
+      }</div>
       <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>开局</button>
       <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
         mode = el.dataset.m;
         picked = picked.slice(0, need());
-        for (const id of Object.keys(PERSONAS)) if (picked.length < need() && !picked.includes(id)) picked.push(id);
+        for (const id of Object.keys(rosterMap())) if (picked.length < need() && !picked.includes(id)) picked.push(id);
         draw();
       }),
     );
-    lb.querySelectorAll('.p-card').forEach((el) =>
-      el.addEventListener('click', () => {
+    lb.querySelector('#addGuest')?.addEventListener('click', openGuestConfig);
+    lb.querySelectorAll('.p-card[data-p]').forEach((el) =>
+      el.addEventListener('click', (e) => {
+        if (e.target.dataset?.edit) return openGuestConfig(); // 客席卡角上的「改」
         const id = el.dataset.p;
         picked = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id].slice(-need());
         draw();
@@ -1067,7 +1151,8 @@ function openPlayerPage(id) {
       <p style="margin-top:0.8rem"><button id="resetLedger" class="linkish">翻篇</button></p>
     </div>`;
   } else {
-    const per = PERSONAS[id];
+    const per = rosterMap()[id];
+    if (!per) return;
     body = `<p class="p-idline">${per.identity}</p>` + bookHtml(per, [`身家 ${balanceOf(led, id)}`]);
   }
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>${body}`;
@@ -1105,10 +1190,11 @@ async function newMatch() {
   SEAT_PERSONA = {};
   NAMES = { A: '客人' };
   const startChips = { A: ledger.you };
+  const ros = rosterMap();
   lineup.forEach((pid, i) => {
     const seat = SEAT_IDS[i];
-    SEAT_PERSONA[seat] = PERSONAS[pid];
-    NAMES[seat] = PERSONAS[pid].name;
+    SEAT_PERSONA[seat] = ros[pid];
+    NAMES[seat] = ros[pid].name;
     startChips[seat] = balanceOf(ledger, pid);
   });
   match = await createMatch({ seed, config: { players: seats, startChips } });
@@ -1116,14 +1202,14 @@ async function newMatch() {
   for (const s of seats.slice(1)) {
     const persona = SEAT_PERSONA[s];
     opponents[s] = createOpponent({
-      channel: channelOf,
+      channel: () => chanForPersona(persona), // 通道跟人走：官方人设→暗号；客席→自带钥匙
       profile: profileBrief(profile, persona.id),
       persona,
       ctx: { names: NAMES, three: isTrio(), hypotheses: mindOf(profile, persona.id).hypotheses },
     });
   }
   opponent = opponents.B; // B 席＝主家：开场白与判词主笔（谁坐主位谁执笔）
-  document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name}批：'`);
+  document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name.replace(/['"\\]/g, '')}批：'`);
   buildOppArea();
   myDiceByRound = {};
   sel = null;
