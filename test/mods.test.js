@@ -285,7 +285,7 @@ test('体检：官方词条过静态与冒烟、张力守恒两门；无通道�
   assert.equal(byId.static.pass, true);
   assert.equal(byId.tension.pass, true);
   assert.equal(byId.ambiguity.pass, null);
-  assert.match(byId.ambiguity.detail, /未测/);
+  assert.match(byId.ambiguity.detail, /没测/);
 });
 
 test('compileWish：mock 编译端到端——产物过校验回译并可冒烟；拒绝信带缺失原子', async () => {
@@ -331,5 +331,5 @@ test('体检：窗口永远打不开的词条被门一逮住', async () => {
   const r = await examMod(fixed, { games: 25 });
   const g1 = r.gates.find((g) => g.id === 'static');
   assert.equal(g1.pass, false);
-  assert.match(g1.detail, /一次都没被行使/);
+  assert.match(g1.detail, /一次都没触发/);
 });

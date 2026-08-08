@@ -1509,13 +1509,15 @@ function openWishPanel() {
   const wlog = loadWishLog();
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <h2>许愿台</h2>
-    <p>用人话许一条新规则。引擎只认自己的原子——编得出就上桌（先过 200 场自对弈），编不出给你拒绝信，缺的钩子记进需求清单。</p>
-    <label>愿望（草稿只存这台设备）</label>
-    <textarea id="wishText" rows="3" placeholder="例：每场一次，看过骰后我可以把池翻倍并亮出自己一颗骰">${localStorage.getItem('kai.wishdraft.v1') ?? ''}</textarea>
-    <div class="btnrow"><button class="primary" id="compileBtn" ${chan ? '' : 'disabled'}>编译</button></div>
-    ${chan ? '' : '<p class="test-line bad">需要 LLM 通道：设置里填暗号，或客席卡填自带钥匙</p>'}
+    <p>想要一条这桌上没有的新规矩？用一句大白话写下来。接下来都是自动的：AI 把它翻成一张规则卡，先念给你听——你点头，桌子就自己试打两百场（看会不会卡死、会不会算错账）——全过了，这张卡就挂到下面的架子上，勾上就能开打。</p>
+    <p>桌子会的动作有限，办不到的愿望会退回来，并告诉你差在哪。</p>
+    <label>你的愿望（草稿只存在这台设备上）</label>
+    <textarea id="wishText" rows="3" placeholder="例：每场一次，看过骰后我可以把赌注翻倍，并亮出自己一颗骰">${localStorage.getItem('kai.wishdraft.v1') ?? ''}</textarea>
+    <div class="btnrow"><button class="primary" id="compileBtn" ${chan ? '' : 'disabled'}>许愿</button></div>
+    ${chan ? '' : '<p class="test-line bad">许愿要先连上 AI：在「设置」里填暗号，或在大厅「客席」卡填自带钥匙</p>'}
     <div id="wishOut"></div>
     <h2>词条架</h2>
+    <p>这桌会的新规矩都挂在这。「体检」＝重新试打一遍，再请老李头评一评这张卡带不带劲。</p>
     ${allMods()
       .map(
         (m) => `
@@ -1532,9 +1534,9 @@ function openWishPanel() {
       .join('')}
     ${
       wlog.length
-        ? `<h2>许愿失败日志</h2><p class="dim-line">原子库需求清单——攒多了就是下一批原子的路线图。</p>${wlog
+        ? `<h2>没实现的愿望</h2><p class="dim-line">这些愿望超出了桌子现在会的动作。账都记着——等桌子学了新本事，它们就是第一批候选。</p>${wlog
             .slice(0, 8)
-            .map((w) => `<p class="note-item">「${w.text}」<br>✗ ${w.reason}${w.missing ? `（缺：${w.missing}）` : ''}</p>`)
+            .map((w) => `<p class="note-item">「${w.text}」<br>✗ ${w.reason}${w.missing ? `（差的本事：${w.missing}）` : ''}</p>`)
             .join('')}`
         : ''
     }`;
@@ -1562,28 +1564,30 @@ async function runCompile(text, out) {
   if (!text) return;
   const chan = wishChannel();
   if (!chan) return;
-  out.innerHTML = '<p class="test-line">编译中…（一次 LLM 调用，运行期零裁判）</p>';
+  out.innerHTML = '<p class="test-line">AI 正在把你的愿望翻成规则卡…</p>';
   const r = await compileWish(text, chan, { existingTypes: activeTypes() });
   if (!r.ok) {
     if (!r.retryable) addWishLog({ text: text.slice(0, 60), reason: r.reason, missing: r.missing ?? null });
-    out.innerHTML = `<p class="test-line bad">✗ ${r.reason}${r.missing ? `（缺：${r.missing}）` : ''}</p>${
-      r.retryable ? '<p class="dim-line">网络类问题，可直接重试。</p>' : '<p class="dim-line">已记入许愿失败日志。</p>'
+    out.innerHTML = `<p class="test-line bad">✗ ${r.reason}${r.missing ? `（差的本事：${r.missing}）` : ''}</p>${
+      r.retryable ? '<p class="dim-line">网络没接上，等一下再试一次就行。</p>' : '<p class="dim-line">这条已记进「没实现的愿望」。换个提法也许就行。</p>'
     }`;
     return;
   }
   // 回译确认（Q39：锁编译幻觉）——作者点头，词条才生效
-  out.innerHTML = `<div class="book"><div class="book-head">「${r.ast.name}」<span class="book-tag">引擎回译</span></div><p class="note-item">${r.card}</p></div>
-    <p class="dim-line">这是引擎理解的最终语义——跟你想的一致吗？</p>
-    <div class="btnrow"><button class="primary" id="wishGo">一致，试跑 200 场</button><button class="ghost" id="wishNo">不对，改词重许</button></div>
+  out.innerHTML = `<div class="book"><div class="book-head">「${r.ast.name}」<span class="book-tag">规则卡草稿</span></div><p class="note-item">${r.card}</p></div>
+    <p class="dim-line">上面这张卡就是你的愿望上桌后的样子——念出来的意思，和你想的一样吗？</p>
+    <div class="btnrow"><button class="primary" id="wishGo">一样，试打两百场</button><button class="ghost" id="wishNo">不一样，改词重许</button></div>
     <div class="test-line" id="wishSmoke"></div>`;
   out.querySelector('#wishNo').addEventListener('click', () => (out.innerHTML = ''));
   out.querySelector('#wishGo').addEventListener('click', async () => {
     const line = out.querySelector('#wishSmoke');
     out.querySelector('#wishGo').disabled = true;
     const mod = { id: `wish-${r.ast.actions[0].type}`, name: r.ast.name, card: r.card, origin: 'wish', actions: r.ast.actions };
-    const sm = await smokeMods([mod], { games: 200, onProgress: (g, n) => (line.textContent = `冒烟自对弈 ${g}/${n}…`) });
+    const sm = await smokeMods([mod], { games: 200, onProgress: (g, n) => (line.textContent = `桌子自己试打中 ${g}/${n} 场…`) });
     if (!sm.ok || sm.uses === 0) {
-      const reason = sm.ok ? '200 场自对弈里这动作一次都没被行使（窗口打不开）' : `自对弈出事：${sm.errors[0]}`;
+      const reason = sm.ok
+        ? '试打了两百场，这条规矩一次都没触发——出场条件定得太苛刻，把条件放宽点再许一次'
+        : `试打时桌子出了乱子（${sm.errors[0]}），这张卡不能上桌`;
       addWishLog({ text: text.slice(0, 60), reason, missing: null });
       line.textContent = `✗ ${reason}`;
       line.className = 'test-line bad';
@@ -1593,7 +1597,7 @@ async function runCompile(text, out) {
     const l = loadLab();
     saveLab({ on: true, picks: [...new Set([...l.picks, mod.id])] });
     localStorage.removeItem('kai.wishdraft.v1');
-    line.textContent = `✓ 冒烟全绿（动作被行使 ${sm.uses} 次）——已上架并勾选，回大厅开实验局`;
+    line.textContent = `✓ 两百场试打全过（这条规矩被用了 ${sm.uses} 次）。规则卡已挂上架子并勾选——回大厅点「开实验局」就能玩`;
     line.className = 'test-line ok';
   });
 }
@@ -1606,7 +1610,7 @@ async function runExam(mod, out) {
     channel: wishChannel(),
     games: 200,
     existingTypes: others,
-    onProgress: (g, n) => (out.innerHTML = `<p class="test-line">门一 冒烟 ${g}/${n}…</p>`),
+    onProgress: (g, n) => (out.innerHTML = `<p class="test-line">试打 ${g}/${n} 场…</p>`),
   });
   out.innerHTML = r.gates
     .map(
@@ -1695,7 +1699,7 @@ function showLobby() {
                     `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" data-mod="${m.id}">${m.name}${m.origin === 'wish' ? '<u>愿</u>' : ''}</button>`,
                 )
                 .join('')}<button class="lab-chip wish" id="wishBtn">许愿＋</button></div>
-        <p class="lab-note">词条全桌明牌，AI 读规则即生效。实验局不入榜不入账不入档案。</p>`
+        <p class="lab-note">勾上的新规矩全桌明牌——对面读的是同一张卡。实验局随便造：不入榜、不记账、不进档案。</p>`
             : ''
         }
       </div>`;

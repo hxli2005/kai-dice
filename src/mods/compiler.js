@@ -22,7 +22,7 @@ ${atomsDoc()}
 
 判断纪律：
 - 玩家愿望能被上述原子表达 → 输出 AST，严格一行 JSON，不要其他文字。
-- 表达不了（需要不存在的原子/钩子）→ 输出 {"error":"一句话说明为什么编不出来","missing":"缺的钩子（如：查看他人骰、重掷、禁言、跳过回合）"}。宁可拒绝，不许发明原子、不许曲解愿望硬凑。
+- 表达不了（需要不存在的原子/钩子）→ 输出 {"error":"...","missing":"缺的能力（如：查看他人骰、重掷、禁言、跳过回合）"}。error 要用大白话向不懂技术的玩家解释为什么办不到（说"桌子还不会哪类动作"，禁止出现原子/引擎/编译等行话）。宁可拒绝，不许发明原子、不许曲解愿望硬凑。
 - 愿望里的数值倍率只能落在 potMult 的 x（2 或 3）上。`;
 
 // 返回：{ok:true, ast, card} 或 {ok:false, reason, missing?, retryable?}
@@ -35,20 +35,20 @@ export async function compileWish(text, channel, { existingTypes = [], fetchFn }
       fetchFn,
     );
   } catch (e) {
-    return { ok: false, reason: `编译调用失败（${e?.message ?? '网络不通'}）`, retryable: true };
+    return { ok: false, reason: `没连上 AI（${e?.message ?? '网络不通'}）`, retryable: true };
   }
   let j;
   try {
     j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
   } catch {
-    return { ok: false, reason: '编译器说了胡话（产物不是 JSON）', retryable: true };
+    return { ok: false, reason: 'AI 这次翻译砸了锅，原词再试一次就行', retryable: true };
   }
   if (j.error) return { ok: false, reason: String(j.error).slice(0, 120), missing: j.missing ? String(j.missing).slice(0, 60) : null };
   const v = validateMod(j, { existingTypes });
   if (!v.ok)
     return {
       ok: false,
-      reason: `产物没过静态校验：${v.errors.slice(0, 3).join('；')}`,
+      reason: `AI 翻出来的规则卡不合桌上的规矩（${v.errors.slice(0, 2).join('；')}）——换个说法再许一次`,
       missing: v.missing.length ? v.missing.join('、') : null,
     };
   const ast = { name: j.name.trim(), actions: j.actions };
