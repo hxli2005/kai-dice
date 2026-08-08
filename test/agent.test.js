@@ -39,12 +39,14 @@ test('llm.chat：OpenAI 与 Anthropic 两种格式的请求与解析', async () 
 test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
-  await m.act('A', { type: 'bid', count: 2, face: 4 }, { elapsedMs: 3200 });
+  await m.act('A', { type: 'bid', count: 2, face: 4 }, { elapsedMs: 9200 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
   const { user } = buildPrompts(ob, '爱虚张');
   assert.match(user, new RegExp(`\\[${ob.yourDice.join(', ')}\\]`));
-  assert.match(user, /对方报 2 个 4（用时3\.2秒）/);
+  // Q15 证据分级：极端犹豫只给现象学标注，秒数不进提示词
+  assert.match(user, /对方报 2 个 4（这手前停了很久）/);
+  assert.ok(!/用时|\d秒/.test(user));
   assert.match(user, /2 个 4」。按你的骰子算，此话为真的概率 \d+%/);
   assert.match(user, /爱虚张/);
 });

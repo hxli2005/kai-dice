@@ -140,17 +140,26 @@ export function persona(st) {
 }
 
 // 模板判词（无 LLM 通道时的降级；引用具体局面，素材来自真实事件流）
+// Q15 证据分级：条件倾向（心理侧）最先，决策事实次之；用时不报秒数，只留极端犹豫的现象学一句垫底
 export function templateVerdict(st, won) {
+  const r = (x) => Math.round(x * 100);
+  const c = st.conditional ?? {};
   const bits = [];
-  if (st.slowest && st.slowest.ms > 6000)
-    bits.push(
-      `第${st.slowest.round}局你想了${(st.slowest.ms / 1000).toFixed(0)}秒才报${st.slowest.bid.count}个${st.slowest.bid.face}——那一手我记下了`,
-    );
+  if (c.afterLossBluffRate != null && c.afterLossBluffRate - st.bluffRate > 0.2)
+    bits.push(`一输你就浮——虚报${r(st.bluffRate)}%变${r(c.afterLossBluffRate)}%，脾气全写在报价里`);
+  else if (c.afterLossBluffRate != null && st.bluffRate - c.afterLossBluffRate > 0.2)
+    bits.push(`一输你就缩——虚报${r(st.bluffRate)}%掉到${r(c.afterLossBluffRate)}%，我看得见你怕`);
+  if (c.bigPotOpenRate != null && c.smallPotOpenRate > 0 && c.bigPotOpenRate < c.smallPotOpenRate * 0.5)
+    bits.push('池一深你就不敢开——小注掀我，大注受着');
+  if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
+    bits.push('被我开过一回，下一局你的首报就缩——这个毛病比虚报值钱');
   if (st.bluffRate > 0.5) bits.push(`十句里${Math.round(st.bluffRate * 10)}句是空的，胆子不小`);
   else if (st.bluffRate < 0.15 && st.myBids >= 3) bits.push('你几乎不说谎，所以你一抬价我就信');
   if (st.myChallenges > 0 && st.hitRate < 0.34)
     bits.push(`你开我${st.myChallenges}次错${st.myChallenges - st.myChallengeHits}次，手比脑子快`);
   if (st.myChallenges === 0 && st.rounds >= 3) bits.push('一次都不敢开，我报什么你都得受着');
+  if (st.slowest && st.slowest.ms > 8000)
+    bits.push(`第${st.slowest.round}局你停了半天才报${st.slowest.bid.count}个${st.slowest.bid.face}——不是在算数，是在攒胆子`);
   bits.push(won ? '这局算你的，账还长' : '骰子不会骗人，你会');
   return bits.slice(0, 3).join('。') + '。';
 }

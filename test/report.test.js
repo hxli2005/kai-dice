@@ -36,5 +36,17 @@ test('persona 与模板判词：可生成且引用真实局面', () => {
   const st = computeStats(events, 'A', { 1: [4, 4, 1, 2, 6] });
   assert.equal(typeof persona(st), 'string');
   const v = templateVerdict(st, false);
-  assert.match(v, /第1局你想了9秒/);
+  // Q15：极端犹豫只说现象（锚定局号与报价），秒数不入判词
+  assert.match(v, /第1局你停了半天才报5个6/);
+  assert.ok(!/\d秒/.test(v));
+});
+
+test('模板判词：条件倾向（心理侧）排最前', () => {
+  const st = {
+    bluffRate: 0.3, myBids: 6, myChallenges: 2, myChallengeHits: 2, hitRate: 1, rounds: 5,
+    slowest: { round: 2, bid: { count: 4, face: 3 }, ms: 12000 },
+    conditional: { afterLossBluffRate: 0.7, afterLossBids: 3, bigPotOpenRate: null, smallPotOpenRate: null, postChalFirstP: null, baseFirstP: null },
+  };
+  const v = templateVerdict(st, false);
+  assert.match(v, /^一输你就浮/);
 });

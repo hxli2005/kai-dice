@@ -17,7 +17,7 @@ const TABLE_TALK = `
 - 关于可查证的事实（谁报过什么、战绩、档案、结算），一字不许编。
 - 各为其利：你只为自己赢。对另一个对手的凶狠不得低于对客人，不许跟任何人联手针对第三方。
 - 每手最多一句话，开牌时刻可以多说。`;
-const personaSystem = (p, three) => `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}你收到的全是真实数据，禁止编造数字。
+const personaSystem = (p, three) => `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}你收到的全是真实数据，禁止编造数字。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。
 ${p.flaws}${three ? TABLE_TALK : ''}
 规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。
 严格输出一行 JSON，不要其他文字：
@@ -28,13 +28,16 @@ const pct = (p) => `${Math.round(p * 100)}%`;
 // 称呼表：you→你；其余按 names 映射（三人桌需要分清是谁），缺省"对方"
 const whoOf = (you, names) => (p) => (p === you ? '你' : (names?.[p] ?? '对方'));
 
-// 本局叙事：看骰、报数与宣言序列，含用时指纹（§3.3；揭盅时机也是阅读材料，§2.3）
+// 本局叙事：看骰、报数与宣言序列（§3.3；揭盅时机也是阅读材料，§2.3）
+// Q15 证据分级：用时是三级遥测，不给秒数——只把极端犹豫/秒出标成现象，正常手不着墨
+const hesi = (e) =>
+  e.elapsedMs == null ? '' : e.elapsedMs > 8000 ? '（这手前停了很久）' : e.elapsedMs < 1200 ? '（几乎秒出）' : '';
 function narrate(events, you, names) {
   const who = whoOf(you, names);
   const start = events.findLastIndex((e) => e.type === 'roundStart');
   const lines = [];
   for (const e of events.slice(start + 1)) {
-    const t = e.elapsedMs != null ? `（用时${(e.elapsedMs / 1000).toFixed(1)}秒）` : '';
+    const t = hesi(e);
     if (e.type === 'peek' && e.player !== you) lines.push(`${who(e.player)}掀盅看了骰`);
     if (e.type === 'bid') lines.push(`${who(e.player)}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')

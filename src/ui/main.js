@@ -6,7 +6,7 @@ import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
 import { createOpponent, settleVerdict, reflect } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
-import { PERSONAS, DEFAULT_PERSONA } from '../ai/personas.js';
+import { PERSONAS } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict, condBrief } from './report.js';
 import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadByok, saveByok, loadLedger, saveLedger, balanceOf } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
@@ -32,16 +32,23 @@ let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
 
-// 座次（§2.5）：阵容表驱动——人设只增不改代码。A=玩家，其余按序入座
+// 座次（§2.5）：阵容数据驱动——人设只增不改代码。A=玩家，其余按序入座
 const SEAT_IDS = ['B', 'C', 'D', 'E'];
-const TABLE_LINEUP = { duo: ['laolitou'], trio: ['laolitou', 'afei'] };
 let SEAT_PERSONA = {}; // seat -> persona（newMatch 构建）
 let NAMES = { A: '客人' };
 const isTrio = () => seats.length > 2;
 const dispName = (s) => (s === 'A' ? '你' : NAMES[s]);
-// 桌型（本批默认三人；1v1 读心核保留为可选）
+// 桌型与阵容（选桌页写入；花名册可增，缺位按册序补齐）
 function loadTable() {
   return localStorage.getItem('kai.table.v1') === 'duo' ? 'duo' : 'trio';
+}
+function loadLineup(mode) {
+  let ids = [];
+  try { ids = JSON.parse(localStorage.getItem('kai.lineup.v1') ?? '[]'); } catch {}
+  ids = [...new Set(ids)].filter((id) => PERSONAS[id]);
+  const need = mode === 'duo' ? 1 : 2;
+  for (const id of Object.keys(PERSONAS)) if (ids.length < need && !ids.includes(id)) ids.push(id);
+  return ids.slice(0, need);
 }
 
 // 零配置官方通道（§9.2）：只填暗号 → 同域 /api/llm 代理；三格全填 → 自带 API
@@ -289,8 +296,8 @@ function buildOppArea() {
     trio.classList.add('hidden');
     duo.classList.remove('hidden');
     $('seal').classList.remove('hidden');
-    $('seal').textContent = PERSONAS.laolitou.seal;
-    $('oppName').textContent = PERSONAS.laolitou.name;
+    $('seal').textContent = SEAT_PERSONA.B.seal;
+    $('oppName').textContent = SEAT_PERSONA.B.name;
     return;
   }
   duo.classList.add('hidden');
@@ -725,15 +732,18 @@ async function showReport(end) {
   const standingsLine = end.standings
     ? end.standings.map((s, i) => `${i + 1}. ${dispName(s)}`).join('　')
     : '';
+  // 判词素材（Q15 证据分级）：一级决策事实＋二级条件倾向（心理侧，杀伤力最大）；
+  // 用时是三级遥测——秒数不给，只有极端犹豫化成现象学一句
   const statsText =
     (isTrio() ? `三人桌，名次：${end.standings.map(dispName).join(' > ')}；` : '') +
     `${end.rounds}局${won ? '客人赢' : '客人输'}；虚报率${pct(stats.bluffRate)}；` +
-    `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次；` +
-    `平均思考${(stats.avgTimeMs / 1000).toFixed(1)}秒` +
-    (stats.slowest ? `；最久一手：第${stats.slowest.round}局想了${(stats.slowest.ms / 1000).toFixed(0)}秒才报${stats.slowest.bid.count}个${stats.slowest.bid.face}` : '') +
+    `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次` +
     (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
+    (condBrief(stats) ? `；条件倾向（心理侧，判词优先引用）：${condBrief(stats)}` : '') +
     ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '') +
-    (condBrief(stats) ? `；条件倾向（读心重点）：${condBrief(stats)}` : '');
+    (stats.slowest && stats.slowest.ms > 8000
+      ? `；全场最犹豫的一手：第${stats.slowest.round}局报${stats.slowest.bid.count}个${stats.slowest.bid.face}前他停了半天`
+      : '');
 
   const ov = $('overlay');
   ov.classList.remove('hidden');
@@ -752,20 +762,27 @@ async function showReport(end) {
       </dl>
       <div class="verdict">${verdict}</div>
     </div>
-    <button class="primary again" id="againBtn">再来一局</button>
+    <div class="again-row">
+      <button class="ghost" id="lobbyBtn">换桌</button>
+      <button class="primary again" id="againBtn">再来一局</button>
+    </div>
     <div class="small-note">截屏即可分享 · 这一场已记进他的本子</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
+    ov.querySelector('#lobbyBtn').addEventListener('click', () => {
+      ov.classList.add('hidden');
+      showLobby();
+    });
   };
-  renderCard(byok ? `${DEFAULT_PERSONA.name}在写你的档案……` : templateVerdict(stats, won));
+  renderCard(byok ? `${opponent.persona.name}在写你的档案……` : templateVerdict(stats, won));
 
   let verdict = null;
   let note = '';
   if (byok) {
-    const mindB = mindOf(profile, DEFAULT_PERSONA.id);
+    const mindB = mindOf(profile, opponent.persona.id);
     const r = await settleVerdict(byok, {
       won,
       statsText,
-      persona: DEFAULT_PERSONA,
+      persona: opponent.persona,
       hypotheses: mindB.hypotheses,
     });
     if (r) {
@@ -777,7 +794,7 @@ async function showReport(end) {
   }
   // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）
   for (const s of seats.slice(1)) {
-    if (s === 'B') continue; // 老李头的经 appendMatch 记
+    if (s === 'B') continue; // 主笔（B 席）的经 appendMatch 记
     const ai = opponents[s];
     const extra = ai.logs.map((l) => l.note).filter(Boolean).slice(-2);
     const mind = mindOf(profile, ai.persona.id);
@@ -884,18 +901,11 @@ function openDrawer(section) {
       <option value="openai" ${byok.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${byok.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
     </select>
-    <label>桌型（下一场生效）</label><select id="fTable">
-      <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
-      <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
-    </select>
     <div class="btnrow"><button class="primary" id="saveByok">保存</button></div>
     <div id="byokTest" class="test-line"></div>
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
   if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
   else d.scrollTop = 0;
-  d.querySelector('#fTable').addEventListener('change', (e) => {
-    localStorage.setItem('kai.table.v1', e.target.value);
-  });
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
     saveLedger({ you: 100, personas: {} });
     profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
@@ -928,14 +938,71 @@ function openDrawer(section) {
   });
 }
 
+// ---------- 选桌（开局前：先模式后对手；花名册数据驱动，人设只增不改代码） ----------
+function showLobby() {
+  const lb = $('lobby');
+  const led = loadLedger();
+  let mode = loadTable();
+  let picked = loadLineup(mode);
+  const need = () => (mode === 'duo' ? 1 : 2);
+  // 卡上只放数据：对你战绩＋身家；没打过＝生面孔
+  const dataOf = (per) => {
+    const rec = mindOf(profile, per.id).record;
+    return rec.plays ? `对你 ${rec.plays} 战 ${rec.beat} 胜 · 身家 ${balanceOf(led, per.id)}` : '生面孔';
+  };
+  const draw = () => {
+    lb.innerHTML = `<div class="lobby-title">开！</div>
+      <div class="mode-row">
+        <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" data-m="duo">单挑</button>
+        <button class="mode-btn ${mode === 'trio' ? 'sel' : ''}" data-m="trio">三人桌</button>
+      </div>
+      <div class="roster">${Object.values(PERSONAS)
+        .map(
+          (per) => `<button class="p-card ${picked.includes(per.id) ? 'sel' : ''}" data-p="${per.id}">
+            <span class="seal">${per.seal}</span>
+            <span class="p-info">
+              <span class="p-name">${per.name}</span>
+              <span class="p-sub">${per.tag ?? ''}</span>
+              <span class="p-data">${dataOf(per)}</span>
+            </span>
+          </button>`,
+        )
+        .join('')}</div>
+      <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>开局</button>
+      <a class="lobby-about" href="about.html">说明 →</a>`;
+    lb.querySelectorAll('.mode-btn').forEach((el) =>
+      el.addEventListener('click', () => {
+        mode = el.dataset.m;
+        picked = picked.slice(0, need());
+        for (const id of Object.keys(PERSONAS)) if (picked.length < need() && !picked.includes(id)) picked.push(id);
+        draw();
+      }),
+    );
+    lb.querySelectorAll('.p-card').forEach((el) =>
+      el.addEventListener('click', () => {
+        const id = el.dataset.p;
+        picked = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id].slice(-need());
+        draw();
+      }),
+    );
+    lb.querySelector('#lobbyStart').addEventListener('click', () => {
+      localStorage.setItem('kai.table.v1', mode);
+      localStorage.setItem('kai.lineup.v1', JSON.stringify(picked));
+      lb.classList.add('hidden');
+      newMatch();
+    });
+  };
+  draw();
+  lb.classList.remove('hidden');
+}
+
 // ---------- 开场 ----------
 async function newMatch() {
   $('overlay').classList.add('hidden');
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   const ledger = loadLedger();
-  const table = loadTable();
-  const lineup = TABLE_LINEUP[table] ?? TABLE_LINEUP.trio;
+  const lineup = loadLineup(loadTable());
   seats = ['A', ...lineup.map((_, i) => SEAT_IDS[i])];
   SEAT_PERSONA = {};
   NAMES = { A: '客人' };
@@ -957,7 +1024,8 @@ async function newMatch() {
       ctx: { names: NAMES, three: isTrio(), hypotheses: mindOf(profile, persona.id).hypotheses },
     });
   }
-  opponent = opponents.B; // 老李头：店主、开场白与判词主笔
+  opponent = opponents.B; // B 席＝主家：开场白与判词主笔（谁坐主位谁执笔）
+  document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name}批：'`);
   buildOppArea();
   myDiceByRound = {};
   sel = null;
@@ -978,11 +1046,12 @@ function openerLine(ledger) {
   if ((profile.resets ?? 0) > 0 && ledger.you === 100 && Object.keys(ledger.personas).length === 0)
     return `把账翻篇了？新本子，旧毛病。摇盅。`;
   if (!last) return `又来了。第 ${profile.matches + 1} 场。摇盅。`;
+  // 引用旧账用中性主语：上一场的对手未必是本场主家，"我"字会把别人的账认到自己头上
   const bits = [];
   if (last.myChallenges > 0 && last.myChallengeHits === 0)
-    bits.push(`上回你开我 ${last.myChallenges} 次，一次没中`);
+    bits.push(`上回你开了 ${last.myChallenges} 次，一次没中`);
   if (last.bluffRate > 0.5) bits.push(`上回你十句里一半是空的`);
-  if (last.timesChallenged >= 2) bits.push(`上回被我掀了 ${last.timesChallenged} 回`);
+  if (last.timesChallenged >= 2) bits.push(`上回你被掀了 ${last.timesChallenged} 回`);
   if (last.slowest && last.slowest.ms > 8000)
     bits.push(`上回第 ${last.slowest.round} 局你手停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
   if (last.myBlinds >= 2) bits.push(`上回你盲了 ${last.myBlinds} 把，胆子是真肥`);
@@ -1039,11 +1108,6 @@ function showCoach() {
   });
 }
 
-// 人设上屏（Q10④：UI 从人设对象读取，不写死名字）
-$('seal').textContent = DEFAULT_PERSONA.seal;
-$('oppName').textContent = DEFAULT_PERSONA.name;
-document.documentElement.style.setProperty('--persona-verdict', `'${DEFAULT_PERSONA.name}批：'`);
-
 $('bidBtn').addEventListener('click', onBid);
 $('openBtn').addEventListener('click', () => doChallenge('A'));
 $('blindBtn').addEventListener('click', () => onDeclare('blind'));
@@ -1052,4 +1116,4 @@ $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('menuBtn').addEventListener('click', () => openDrawer());
 
-newMatch();
+showLobby();

@@ -721,3 +721,65 @@ button.danger:active { transform: scale(0.95); }
   border-radius: 0.6rem;
   box-shadow: 0 0 16px rgba(232, 169, 79, 0.35);
 }
+
+/* ---------- 选桌（开局前：模式＋对手；设施只摆数据） ---------- */
+#lobby {
+  position: absolute; inset: 0; z-index: 50;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 32%, #33261c 0%, #1c1512 55%, #0f0c0a 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1rem;
+  padding: 2rem 1.6rem calc(env(safe-area-inset-bottom) + 2rem);
+}
+.lobby-title {
+  font-size: 3.4rem; color: var(--lamp);
+  letter-spacing: 0.28em; text-indent: 0.28em;
+  text-shadow: 0 0 40px rgba(232, 169, 79, 0.25);
+  margin-bottom: 0.5rem;
+}
+.mode-row { display: flex; gap: 0.55rem; width: 100%; max-width: 19rem; }
+.mode-btn {
+  flex: 1;
+  background: none; border: 1px solid var(--wood-hi); border-radius: 0.55rem;
+  color: var(--dim); font-family: var(--serif);
+  font-size: 0.95rem; letter-spacing: 0.3em; text-indent: 0.3em;
+  padding: 0.6rem 0;
+}
+.mode-btn.sel { border-color: var(--lamp-dim); color: var(--lamp); }
+.roster { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; max-width: 19rem; }
+.p-card {
+  display: flex; align-items: center; gap: 0.9rem;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--wood-hi); border-radius: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  color: var(--ink); font-family: var(--serif); text-align: left;
+}
+.p-card .seal { flex: none; }
+.p-card:not(.sel) { opacity: 0.55; }
+.p-card:not(.sel) .seal { filter: grayscale(1); }
+.p-card.sel { border-color: var(--lamp-dim); box-shadow: 0 0 16px rgba(232, 169, 79, 0.12); }
+.p-info { display: flex; flex-direction: column; gap: 0.18rem; }
+.p-name { font-size: 1.05rem; letter-spacing: 0.1em; }
+.p-sub { font-size: 0.72rem; color: var(--dim); letter-spacing: 0.06em; }
+.p-data { font-size: 0.72rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+#lobbyStart {
+  flex: none; width: 100%; max-width: 19rem;
+  font-size: 1.15rem; letter-spacing: 0.45em; text-indent: 0.45em;
+  margin-top: 0.4rem;
+}
+.lobby-about {
+  color: var(--dim); font-size: 0.75rem; letter-spacing: 0.15em;
+  text-decoration: none; margin-top: 0.2rem;
+}
+
+/* 报告卡按钮行：换桌（幽灵）＋再来一局 */
+#overlay .again-row { display: flex; gap: 0.55rem; width: 100%; max-width: 21rem; margin-top: 0.4rem; }
+#overlay .again-row .again { margin-top: 0; width: auto; flex: 2; }
+button.ghost {
+  flex: 1;
+  background: none; border: 1px solid var(--wood-hi); border-radius: 0.55rem;
+  color: var(--dim); font-family: var(--serif);
+  font-size: 0.95rem; letter-spacing: 0.1em;
+  padding: 0.85rem 0;
+}
