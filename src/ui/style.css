@@ -838,3 +838,51 @@ button.ghost {
   font-size: 0.95rem; letter-spacing: 0.1em;
   padding: 0.85rem 0;
 }
+
+/* ---------- 实验桌（Q32 沙盒）与词条 ---------- */
+.lab-box { width: 100%; max-width: 19rem; }
+.lab-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  background: none; border: 1px dashed var(--wood-hi); border-radius: 0.55rem;
+  color: var(--dim); font-family: var(--serif); font-size: 0.9rem;
+  letter-spacing: 0.2em; padding: 0.6rem 0.9rem;
+}
+.lab-head i { font-style: normal; font-size: 0.72rem; letter-spacing: 0.08em; }
+.lab-head i.on { color: var(--lamp); }
+.lab-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.55rem; justify-content: center; }
+.lab-chip {
+  background: rgba(0, 0, 0, 0.22); border: 1px solid var(--wood-hi); border-radius: 1rem;
+  color: var(--dim); font-family: var(--serif); font-size: 0.82rem;
+  padding: 0.32rem 0.8rem; letter-spacing: 0.08em;
+}
+.lab-chip.sel { border-color: var(--lamp-dim); color: var(--lamp); }
+.lab-chip u { text-decoration: none; font-size: 0.62rem; color: var(--lamp-dim); margin-left: 0.25rem; }
+.lab-chip.wish { border-style: dashed; }
+.lab-note { font-size: 0.72rem; color: var(--dim); margin-top: 0.5rem; line-height: 1.6; text-align: center; }
+
+/* 词条章：与盲/斋/抬同语言，虚线边区分"实验件"；拾取态发亮 */
+#modRow { display: contents; }
+.stamp.mod { border-style: dashed; }
+.stamp.armed { background: rgba(232, 169, 79, 0.22); box-shadow: 0 0 12px rgba(232, 169, 79, 0.4); }
+
+/* 明骰（词条「亮」）：面朝上、灯圈——公开事实的视觉语法 */
+.die.shown { outline: 2px solid var(--lamp-dim); outline-offset: 1px; box-shadow: 0 0 9px rgba(232, 169, 79, 0.45); }
+#myDice.picking .die { animation: pickpulse 0.9s ease-in-out infinite; cursor: pointer; }
+@keyframes pickpulse { 50% { transform: translateY(-3px); box-shadow: 0 0 10px rgba(232, 169, 79, 0.5); } }
+
+/* 局前规则卡 */
+.rule-card { text-align: left; margin: 0.55rem 0; line-height: 1.6; }
+.rule-card b { color: var(--lamp); font-weight: 400; letter-spacing: 0.08em; }
+.rule-card p { color: var(--dim); font-size: 0.82rem; margin-top: 0.15rem; }
+
+/* 许愿台 */
+#drawer textarea {
+  width: 100%; padding: 0.55rem 0.7rem;
+  background: rgba(242, 232, 213, 0.06);
+  border: 1px solid rgba(242, 232, 213, 0.18);
+  border-radius: 0.45rem; color: var(--ink);
+  font-family: var(--serif); font-size: 0.9rem; line-height: 1.6; resize: vertical;
+}
+.book-head .spacer { flex: 1; }
+.book-head .linkish { font-size: 0.72rem; flex: none; }

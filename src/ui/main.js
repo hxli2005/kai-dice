@@ -3,10 +3,14 @@
 
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
-import { probBidTrue } from '../probability.js';
+import { obProb, obProbExact } from '../probability.js';
 import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
+import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
+import { compileWish } from '../mods/compiler.js';
+import { examMod } from '../mods/exam.js';
+import { smokeMods } from '../mods/smoke.js';
 import { computeStats, persona, templateVerdict, condBrief } from './report.js';
 import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
@@ -31,6 +35,11 @@ let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer;
 // 离桌守卫：atTable 拦新回合，matchGen 作废在途异步（旧局的 LLM 决策不许落到新局上）
 let atTable = false;
 let matchGen = 0;
+// 实验桌（Q32 沙盒）：本场词条；非空即沙盒——战绩/身家/档案一律不写回
+let labMods = [];
+let sandbox = false;
+let pickPending = null; // 词条参数拾取（亮一颗：先拍章再点自己一颗骰）
+const modMetaOf = (o, type) => o.mods?.flatMap((m) => m.actions).find((a) => a.type === type);
 let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
@@ -362,7 +371,11 @@ function renderTrio(o) {
     if (!strip) continue;
     strip.classList.toggle('out', !ps.alive);
     strip.classList.toggle('turn', o.turn === s && !o.over);
-    $(`dice-${s}`).innerHTML = ps.alive ? backHtml('mini').repeat(ps.diceCount) : '<i class="out-mark">出局</i>';
+    const sh = o.shown?.[s] ?? [];
+    $(`dice-${s}`).innerHTML = ps.alive
+      ? sh.map((f) => dieHtml(f, 'mini shown')).join('') +
+        backHtml('mini').repeat(Math.max(0, ps.diceCount - sh.length))
+      : '<i class="out-mark">出局</i>';
     renderChips(`meta-${s}`, ps.chips);
     const dot = $(`brain-${s}`);
     if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
@@ -380,8 +393,11 @@ function render() {
 
   if (isTrio()) renderTrio(o);
   else {
-    // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条
-    $('oppDice').innerHTML = backHtml().repeat(o.diceCount.opp);
+    // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条；亮出的明骰面朝上（词条「亮」）
+    const shB = o.shown?.B ?? [];
+    $('oppDice').innerHTML =
+      shB.map((f) => dieHtml(f, 'shown')).join('') +
+      backHtml().repeat(Math.max(0, o.diceCount.opp - shB.length));
     renderChips('oppChips', o.chips.opp);
   }
 
@@ -398,7 +414,7 @@ function render() {
       .join('') +
     (o.potUnits - 1 >= 6 ? '<span class="mark">深水 ×2</span>' : '');
   const aliveN = o.players.filter((q) => q.alive).length;
-  $('roundTag').textContent = `第 ${o.round} 局`;
+  $('roundTag').textContent = `${sandbox ? '实验 · ' : ''}第 ${o.round} 局`;
   $('pot').innerHTML = marks;
   renderPotChips(o.potUnits * aliveN, o.potMult > 1);
 
@@ -410,14 +426,24 @@ function render() {
 
   renderChips('myChips', o.chips.you);
 
-  // 我的骰子：未看则盖着（点击=看骰）；盲局锁死；出局清空
+  // 我的骰子：未看则盖着（点击=看骰）；盲局锁死；出局清空；亮出的带明标
   const mine = $('myDice');
+  mine.classList.toggle('picking', !!(pickPending && myTurn && o.yourDice));
   if (!meAlive) {
     mine.innerHTML = '';
   } else if (o.yourDice) {
+    const shownLeft = [...(o.shown?.A ?? [])];
     mine.innerHTML = o.yourDice
-      .map((f) => dieHtml(f, !o.zhai && f === 1 ? 'wild' : ''))
+      .map((f) => {
+        const k = shownLeft.indexOf(f);
+        if (k >= 0) shownLeft.splice(k, 1);
+        return dieHtml(f, `${!o.zhai && f === 1 ? 'wild' : ''} ${k >= 0 ? 'shown' : ''}`);
+      })
       .join('');
+    if (pickPending && myTurn)
+      mine.querySelectorAll('.die').forEach((el, i) =>
+        el.addEventListener('click', () => onPickDie(o.yourDice[i]), { once: true }),
+      );
   } else {
     mine.innerHTML = backHtml().repeat(o.diceCount.you);
     if (!o.blind.A)
@@ -426,11 +452,13 @@ function render() {
       );
   }
 
-  // 概率表盘：事实工具双发（附B.1）
+  // 概率表盘：事实工具双发（附B.1）；明骰折算进已知（词条「亮」）；掐可用时加"恰好"读数（Q37 双发）
   const g = $('gauge');
   if (o.currentBid && o.yourDice) {
-    const p = probBidTrue(o.currentBid, o.yourDice, o.diceCount.opp, o.zhai);
-    g.innerHTML = `「${o.currentBid.count} 个 ${o.currentBid.face}」真 <b>${pct(p)}</b>`;
+    const p = obProb(o, o.currentBid);
+    const canCalza = o.legal.some((l) => modMetaOf(o, l.type)?.ops.includes('calzaResolve'));
+    const exact = canCalza ? ` · 恰好 ${pct(obProbExact(o, o.currentBid))}` : '';
+    g.innerHTML = `「${o.currentBid.count} 个 ${o.currentBid.face}」真 <b>${pct(p)}</b>${exact}`;
   } else if (o.currentBid && o.blind.A) {
     g.textContent = '盲局';
   } else if (!meAlive) {
@@ -465,17 +493,24 @@ function render() {
           render();
         }),
       );
-    const myP = o.yourDice ? ` · ${pct(probBidTrue(sel, o.yourDice, o.diceCount.opp, o.zhai))}` : '';
+    const myP = o.yourDice ? ` · ${pct(obProb(o, sel))}` : '';
     $('bidBtn').textContent = `报${myP}`;
   } else {
     $('bidBtn').textContent = '—';
   }
   $('bidBtn').disabled = !myTurn || !bids;
   $('openBtn').innerHTML = '开<span class="bang">!</span>'; // 开谁由报价行具名；半角叹号手控间距防歪
-  $('openBtn').disabled = !myTurn || !o.currentBid;
+  $('openBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'challenge'); // 让报回推时不能开自己的价
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');
   $('raiseBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'raise');
+  // 词条章（实验桌）：可用性随 legal，拾取态高亮
+  for (const a of labMods.flatMap((m) => m.actions)) {
+    const btn = $(`modbtn-${a.type}`);
+    if (!btn) continue;
+    btn.disabled = !myTurn || !o.legal.some((x) => x.type === a.type);
+    btn.classList.toggle('armed', pickPending?.type === a.type);
+  }
 
   $('hint').textContent = hintFor(o, myTurn);
 
@@ -533,10 +568,63 @@ async function onDeclare(declaration) {
 
 async function onBid() {
   disarmIdle();
+  pickPending = null;
   await match.act('A', { type: 'bid', ...sel }, { elapsedMs: performance.now() - turnStart });
   sfx.tick();
   render();
   driveTurn();
+}
+
+// ---------- 词条动作（实验桌）：章钮随本桌词条动态生成，语义由效果原子驱动 ----------
+function buildModRow() {
+  const row = $('modRow');
+  row.innerHTML = '';
+  pickPending = null;
+  for (const a of labMods.flatMap((m) => m.actions)) {
+    // 归一化成 observe 同款元数据形态（ops 由 effect 派生）——按钮语义只认原子
+    const meta = {
+      type: a.type,
+      label: a.label,
+      params: a.params ?? null,
+      keepTurn: !!a.keepTurn,
+      terminal: !!a.terminal,
+      ops: a.effect.map((e) => e.op),
+    };
+    const btn = document.createElement('button');
+    btn.className = 'stamp mod';
+    btn.id = `modbtn-${a.type}`;
+    btn.textContent = a.label;
+    btn.addEventListener('click', () => onModButton(meta));
+    row.appendChild(btn);
+  }
+}
+
+async function onModButton(meta) {
+  const o = ob();
+  if (busy || o.turn !== 'A' || !o.legal.some((x) => x.type === meta.type)) return;
+  if (meta.params === 'face') {
+    // 亮一颗：拍章进入选骰模式，点自己一颗骰亮出；再拍一次取消
+    pickPending = pickPending?.type === meta.type ? null : meta;
+    render();
+    return;
+  }
+  if (meta.ops.includes('calzaResolve')) return doShowdown('A', { actionType: meta.type });
+  disarmIdle();
+  pickPending = null;
+  await match.act('A', { type: meta.type }, { elapsedMs: performance.now() - turnStart });
+  stampFx(meta.label);
+  render();
+  driveTurn(); // keepTurn 动作行动权仍在你；让报则移交给报价者
+}
+
+async function onPickDie(face) {
+  const meta = pickPending;
+  pickPending = null;
+  if (!meta || busy) return;
+  await match.act('A', { type: meta.type, face }, { elapsedMs: performance.now() - turnStart });
+  stampFx(meta.label);
+  sfx.land();
+  render();
 }
 
 // ---------- 回合调度（§2.5）：轮到谁驱动谁；AI 台词打字与下一位的网络请求并行（节拍 ≤4s） ----------
@@ -584,27 +672,32 @@ async function aiTurnFor(seat) {
   await sleep(Math.max(0, floor - (performance.now() - t0)));
   if (gen !== matchGen) return;
   const elapsedMs = performance.now() - t0;
-  if (d.action.type === 'challenge') return doChallenge(seat, elapsedMs, false, d.say);
+  if (d.action.type === 'challenge') return doShowdown(seat, { elapsedMs, sayText: d.say });
+  const meta = modMetaOf(o, d.action.type);
+  if (meta?.terminal) return doShowdown(seat, { elapsedMs, sayText: d.say, actionType: d.action.type });
   await match.act(seat, d.action, { elapsedMs });
   if (d.action.type === 'declare') stampFx(stampText(d.action.declaration));
+  else if (meta) stampFx(meta.label);
   else sfx.tick();
   if (d.say) speak(d.say, seat);
   busy = false;
-  if (d.action.type === 'declare') return aiTurnFor(seat);
+  if (d.action.type === 'declare' || meta?.keepTurn) return aiTurnFor(seat);
   render();
-  driveTurn();
+  driveTurn(); // 让报把行动权推回报价者——可能是你，也可能是另一个 AI
 }
 
-// ---------- 开牌演出（juice 预算全在这一拍，§6） ----------
-async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') {
+// ---------- 开牌演出（juice 预算全在这一拍，§6）：开与掐共用摊牌，判定行分道 ----------
+async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '', actionType = 'challenge' } = {}) {
   busy = true;
   disarmIdle();
   muteBubble();
+  pickPending = null;
   if (by === 'A' && elapsedMs === null) elapsedMs = performance.now() - turnStart;
-  await match.act(by, { type: 'challenge' }, { elapsedMs, timeout });
+  await match.act(by, { type: actionType }, { elapsedMs, timeout });
   const o = ob();
   const rv = lastEvent(o, 'reveal');
   const re = lastEvent(o, 'roundEnd');
+  const calza = !!rv.calza;
   const isMatch = (f) => f === rv.bid.face || (!rv.zhai && f === 1);
 
   sfx.slam();
@@ -614,8 +707,8 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   ov.classList.remove('hidden');
   // 摊牌行：其他人在上，你压轴
   const seatsIn = [...Object.keys(rv.dice).filter((s) => s !== 'A'), ...(rv.dice.A ? ['A'] : [])];
-  ov.innerHTML = `<div class="kai">开！</div>
-    <div class="row-label">${by === 'A' ? '你' : NAMES[by]}拍了桌子，开${rv.bid.player === 'A' ? '你' : NAMES[rv.bid.player]} · 验「${rv.bid.count} 个 ${rv.bid.face}」</div>
+  ov.innerHTML = `<div class="kai">${calza ? '掐！' : '开！'}</div>
+    <div class="row-label">${dispName(by)}拍了桌子，${calza ? `掐${dispName(rv.bid.player)} · 验「恰好 ${rv.bid.count} 个 ${rv.bid.face}」` : `开${dispName(rv.bid.player)} · 验「${rv.bid.count} 个 ${rv.bid.face}」`}</div>
     ${seatsIn
       .map(
         (s) =>
@@ -651,10 +744,16 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
     }
   }
   await sleep(350);
-  const youLose = re.loser === 'A';
-  cnt.textContent = `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
-  ov.querySelector('#rvLine').innerHTML = `${dispName(re.loser)}输了这局，掉一颗骰`;
-  sfx.loseDie();
+  cnt.textContent = calza
+    ? `实有 ${rv.actual} 个 —— 掐「恰好 ${rv.bid.count}」，${rv.exact ? '掐中！' : '不恰'}`
+    : `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
+  ov.querySelector('#rvLine').innerHTML = calza
+    ? rv.exact
+      ? `${dispName(re.caller)}掐中——赢回一颗骰，收池`
+      : `${dispName(re.caller)}掐空，掉一颗骰`
+    : `${dispName(re.loser)}输了这局，掉一颗骰`;
+  if (calza && rv.exact) sfx.jackpot();
+  else sfx.loseDie();
   if (sayText) speak(sayText, by !== 'A' ? by : 'B'); // 只有角色自己的话才上屏
   await sleep(600);
   const myDelta = re.transfers?.A ?? 0;
@@ -662,7 +761,8 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   await sleep(1100);
 
   // §3.3 复盘学习触发①：被打脸的 AI 当场短反思（异步，不挡节拍；输入全为已公开信息）
-  for (const s of seats.slice(1)) {
+  // 沙盒（获批反驳④）：实验局不喂档案——实验规则下的行为模式会污染对正常打法的读心
+  for (const s of sandbox ? [] : seats.slice(1)) {
     if (re.loser !== s) continue;
     const ai = opponents[s];
     const ch = chanForPersona(ai.persona);
@@ -719,27 +819,30 @@ function roundFactText(rv, re, seat) {
 async function showReport(end) {
   const o = ob();
   const won = end.winner === 'A';
-  // 账本落袋（按人设分户头），下一场带着走
-  const led = loadLedger();
-  for (const s of seats.slice(1)) led.personas[SEAT_PERSONA[s].id] = end.chips[s];
-  led.you = end.chips.A;
-  saveLedger(led);
-  // 每个在场 AI：本场行为统计＋对你战绩入其账（AI 的刻画数据，菜单展示）
-  for (const s of seats.slice(1)) {
-    const mind = mindOf(profile, SEAT_PERSONA[s].id);
-    const aiStats = computeStats(o.events, s, diceByRoundOf(o.events, s));
-    mind.stats = [
-      ...mind.stats,
-      {
-        bluffRate: aiStats.bluffRate,
-        hits: aiStats.myChallengeHits,
-        opens: aiStats.myChallenges,
-        blinds: aiStats.myBlinds,
-      },
-    ].slice(-10);
-    mind.record.plays += 1;
-    if (end.winner === s) mind.record.wins += 1; // 场胜：榜的胜率列
-    if (end.standings && end.standings.indexOf(s) < end.standings.indexOf('A')) mind.record.beat += 1;
+  // 沙盒经济（Q32）：实验局不入榜不入账不入档案——以下写回全部跳过
+  if (!sandbox) {
+    // 账本落袋（按人设分户头），下一场带着走
+    const led = loadLedger();
+    for (const s of seats.slice(1)) led.personas[SEAT_PERSONA[s].id] = end.chips[s];
+    led.you = end.chips.A;
+    saveLedger(led);
+    // 每个在场 AI：本场行为统计＋对你战绩入其账（AI 的刻画数据，菜单展示）
+    for (const s of seats.slice(1)) {
+      const mind = mindOf(profile, SEAT_PERSONA[s].id);
+      const aiStats = computeStats(o.events, s, diceByRoundOf(o.events, s));
+      mind.stats = [
+        ...mind.stats,
+        {
+          bluffRate: aiStats.bluffRate,
+          hits: aiStats.myChallengeHits,
+          opens: aiStats.myChallenges,
+          blinds: aiStats.myBlinds,
+        },
+      ].slice(-10);
+      mind.record.plays += 1;
+      if (end.winner === s) mind.record.wins += 1; // 场胜：榜的胜率列
+      if (end.standings && end.standings.indexOf(s) < end.standings.indexOf('A')) mind.record.beat += 1;
+    }
   }
   const stats = computeStats(o.events, 'A', myDiceByRound);
   const byok = chanForPersona(opponent.persona); // 判词主笔（B 席）用自己的通道执笔
@@ -754,6 +857,8 @@ async function showReport(end) {
     `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次` +
     (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
     (stats.myRaises ? `；拍抬${stats.myRaises}次` : '') +
+    (stats.myCalzas ? `；掐${stats.myCalzas}次中${stats.myCalzaHits}次` : '') +
+    (sandbox ? `；本场为实验桌沙盒局，词条：${labMods.map((m) => m.name).join('、')}` : '') +
     (condBrief(stats) ? `；条件倾向（心理侧，判词优先引用）：${condBrief(stats)}` : '') +
     ((profile.resets ?? 0) > 0 ? `；此人历史上把账翻篇过${profile.resets}次` : '') +
     (stats.slowest && stats.slowest.ms > 8000
@@ -764,14 +869,16 @@ async function showReport(end) {
   ov.classList.remove('hidden');
   const renderCard = (verdict) => {
     ov.innerHTML = `<div class="card fade-in">
-      <h2>酒桌档案 · 第 ${profile.matches + 1} 场</h2>
+      <h2>${sandbox ? '实验桌 · 沙盒对局' : `酒桌档案 · 第 ${profile.matches + 1} 场`}</h2>
       <div class="persona">${persona(stats)}</div>
       <dl>
+        ${sandbox ? `<dt>词条</dt><dd>${labMods.map((m) => `「${m.name}」`).join('')}</dd>` : ''}
         ${isTrio() && end.standings ? `<dt>名次</dt><dd>${standingsLine}</dd>` : ''}
         <dt>胜负</dt><dd>${won ? `赢 · ${end.rounds} 局` : `输 · ${end.rounds} 局`}</dd>
-        <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}</dd>
+        <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}${sandbox ? '（沙盒·不记账）' : ''}</dd>
         <dt>虚报率</dt><dd>${pct(stats.bluffRate)}</dd>
         <dt>开牌命中</dt><dd>${stats.myChallengeHits}/${stats.myChallenges}</dd>
+        ${stats.myCalzas ? `<dt>掐</dt><dd>${stats.myCalzaHits}/${stats.myCalzas}</dd>` : ''}
         <dt>被他开</dt><dd>${stats.timesChallenged} 次</dd>
         <dt>平均思考</dt><dd>${(stats.avgTimeMs / 1000).toFixed(1)} 秒</dd>
       </dl>
@@ -781,7 +888,7 @@ async function showReport(end) {
       <button class="ghost" id="lobbyBtn">换桌</button>
       <button class="primary again" id="againBtn">再来一局</button>
     </div>
-    <div class="small-note">截屏即可分享 · 这一场已记进他的本子 · kai-dice.pages.dev</div>`;
+    <div class="small-note">${sandbox ? '实验局 · 不入榜不入账不入档案' : '截屏即可分享 · 这一场已记进他的本子'} · kai-dice.pages.dev</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
     ov.querySelector('#lobbyBtn').addEventListener('click', () => {
       ov.classList.add('hidden');
@@ -802,11 +909,12 @@ async function showReport(end) {
     });
     if (r) {
       ({ verdict, note } = r);
-      // §3.3 触发②：场终全量复盘——修订后的规律假设入主观层
-      if (r.hypotheses) mindB.hypotheses = r.hypotheses;
+      // §3.3 触发②：场终全量复盘——修订后的规律假设入主观层（沙盒不喂）
+      if (r.hypotheses && !sandbox) mindB.hypotheses = r.hypotheses;
     }
     renderCard(verdict ?? templateVerdict(stats, won));
   }
+  if (sandbox) return; // 沙盒到此为止：判词照说，档案一字不写
   // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）
   for (const s of seats.slice(1)) {
     if (s === 'B') continue; // 主笔（B 席）的经 appendMatch 记
@@ -879,7 +987,7 @@ function openDrawer(section, inLobby = false) {
     <nav class="drawer-nav">${
       inLobby
         ? '<a href="#secRules">规矩</a><a href="#secBrain">设置</a>'
-        : '<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secSeal">封印</a><a class="leave" id="leaveBtn">离桌</a>'
+        : `<a href="#profileSec">档案</a><a href="#secRules">规矩</a>${labMods.length ? '<a href="#secMods">词条</a>' : ''}<a href="#secSeal">封印</a><a class="leave" id="leaveBtn">离桌</a>`
     }</nav>
     ${
       inLobby
@@ -904,6 +1012,13 @@ function openDrawer(section, inLobby = false) {
       <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
+    ${
+      !inLobby && labMods.length
+        ? `<h2 id="secMods">词条（本桌明牌）</h2>${labMods
+            .map((m) => `<p class="note-item"><b>「${m.name}」</b>${m.card}</p>`)
+            .join('')}`
+        : ''
+    }
     ${
       inLobby
         ? ''
@@ -1017,6 +1132,126 @@ function openGuestConfig() {
   });
 }
 
+// ---------- 许愿台（Q39 愿望编译器）：人话 → AST → 引擎回译确认 → 200 场冒烟 → 上桌 ----------
+const wishChannel = () => guestChannelOf() ?? officialChannelOf(); // 编译调用 BYOK 优先（Q39）
+
+function openWishPanel() {
+  const d = $('drawer');
+  d.classList.remove('hidden');
+  d.scrollTop = 0;
+  const chan = wishChannel();
+  const wlog = loadWishLog();
+  d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
+    <h2>许愿台</h2>
+    <p>用人话许一条新规则。引擎只认自己的原子——编得出就上桌（先过 200 场自对弈），编不出给你拒绝信，缺的钩子记进需求清单。</p>
+    <label>愿望（草稿只存这台设备）</label>
+    <textarea id="wishText" rows="3" placeholder="例：每场一次，看过骰后我可以把池翻倍并亮出自己一颗骰">${localStorage.getItem('kai.wishdraft.v1') ?? ''}</textarea>
+    <div class="btnrow"><button class="primary" id="compileBtn" ${chan ? '' : 'disabled'}>编译</button></div>
+    ${chan ? '' : '<p class="test-line bad">需要 LLM 通道：设置里填暗号，或客席卡填自带钥匙</p>'}
+    <div id="wishOut"></div>
+    <h2>词条架</h2>
+    ${allMods()
+      .map(
+        (m) => `
+      <div class="book">
+        <div class="book-head">「${m.name}」<span class="book-tag">${m.origin === 'wish' ? '许愿' : '官方'}</span>
+          <span class="spacer"></span>
+          <button class="linkish" data-exam="${m.id}">体检</button>
+          ${m.origin === 'wish' ? `<button class="linkish" data-del="${m.id}">撕掉</button>` : ''}
+        </div>
+        <p class="note-item">${m.card}</p>
+        <div id="exam-${m.id}"></div>
+      </div>`,
+      )
+      .join('')}
+    ${
+      wlog.length
+        ? `<h2>许愿失败日志</h2><p class="dim-line">原子库需求清单——攒多了就是下一批原子的路线图。</p>${wlog
+            .slice(0, 8)
+            .map((w) => `<p class="note-item">「${w.text}」<br>✗ ${w.reason}${w.missing ? `（缺：${w.missing}）` : ''}</p>`)
+            .join('')}`
+        : ''
+    }`;
+  d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
+  const ta = d.querySelector('#wishText');
+  ta.addEventListener('input', () => localStorage.setItem('kai.wishdraft.v1', ta.value));
+  d.querySelector('#compileBtn').addEventListener('click', () => runCompile(ta.value.trim(), d.querySelector('#wishOut')));
+  d.querySelectorAll('[data-exam]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const mod = allMods().find((m) => m.id === el.dataset.exam);
+      if (mod) runExam(mod, $(`exam-${mod.id}`));
+    }),
+  );
+  d.querySelectorAll('[data-del]').forEach((el) =>
+    el.addEventListener('click', () => {
+      saveWishes(loadWishes().filter((w) => w.id !== el.dataset.del));
+      const l = loadLab();
+      saveLab({ ...l, picks: l.picks.filter((x) => x !== el.dataset.del) });
+      openWishPanel(); // 重绘
+    }),
+  );
+}
+
+async function runCompile(text, out) {
+  if (!text) return;
+  const chan = wishChannel();
+  if (!chan) return;
+  out.innerHTML = '<p class="test-line">编译中…（一次 LLM 调用，运行期零裁判）</p>';
+  const r = await compileWish(text, chan, { existingTypes: activeTypes() });
+  if (!r.ok) {
+    if (!r.retryable) addWishLog({ text: text.slice(0, 60), reason: r.reason, missing: r.missing ?? null });
+    out.innerHTML = `<p class="test-line bad">✗ ${r.reason}${r.missing ? `（缺：${r.missing}）` : ''}</p>${
+      r.retryable ? '<p class="dim-line">网络类问题，可直接重试。</p>' : '<p class="dim-line">已记入许愿失败日志。</p>'
+    }`;
+    return;
+  }
+  // 回译确认（Q39：锁编译幻觉）——作者点头，词条才生效
+  out.innerHTML = `<div class="book"><div class="book-head">「${r.ast.name}」<span class="book-tag">引擎回译</span></div><p class="note-item">${r.card}</p></div>
+    <p class="dim-line">这是引擎理解的最终语义——跟你想的一致吗？</p>
+    <div class="btnrow"><button class="primary" id="wishGo">一致，试跑 200 场</button><button class="ghost" id="wishNo">不对，改词重许</button></div>
+    <div class="test-line" id="wishSmoke"></div>`;
+  out.querySelector('#wishNo').addEventListener('click', () => (out.innerHTML = ''));
+  out.querySelector('#wishGo').addEventListener('click', async () => {
+    const line = out.querySelector('#wishSmoke');
+    out.querySelector('#wishGo').disabled = true;
+    const mod = { id: `wish-${r.ast.actions[0].type}`, name: r.ast.name, card: r.card, origin: 'wish', actions: r.ast.actions };
+    const sm = await smokeMods([mod], { games: 200, onProgress: (g, n) => (line.textContent = `冒烟自对弈 ${g}/${n}…`) });
+    if (!sm.ok || sm.uses === 0) {
+      const reason = sm.ok ? '200 场自对弈里这动作一次都没被行使（窗口打不开）' : `自对弈出事：${sm.errors[0]}`;
+      addWishLog({ text: text.slice(0, 60), reason, missing: null });
+      line.textContent = `✗ ${reason}`;
+      line.className = 'test-line bad';
+      return;
+    }
+    saveWishes([...loadWishes(), { id: mod.id, ast: r.ast, card: r.card }]);
+    const l = loadLab();
+    saveLab({ on: true, picks: [...new Set([...l.picks, mod.id])] });
+    localStorage.removeItem('kai.wishdraft.v1');
+    line.textContent = `✓ 冒烟全绿（动作被行使 ${sm.uses} 次）——已上架并勾选，回大厅开实验局`;
+    line.className = 'test-line ok';
+  });
+}
+
+// 三门体检（词条上你桌前的自动前置；复活测试留给你本人当终审）
+async function runExam(mod, out) {
+  out.innerHTML = '<p class="test-line">体检中…</p>';
+  const others = activeTypes().filter((t) => !mod.actions.some((a) => a.type === t));
+  const r = await examMod(mod, {
+    channel: wishChannel(),
+    games: 200,
+    existingTypes: others,
+    onProgress: (g, n) => (out.innerHTML = `<p class="test-line">门一 冒烟 ${g}/${n}…</p>`),
+  });
+  out.innerHTML = r.gates
+    .map(
+      (g) =>
+        `<p class="test-line ${g.pass === true ? 'ok' : g.pass === false ? 'bad' : ''}">${
+          g.pass === true ? '✓' : g.pass === false ? '✗' : '—'
+        } ${g.name}：${g.detail}</p>`,
+    )
+    .join('');
+}
+
 // ---------- 选桌（开局前：先模式后对手；花名册数据驱动，人设只增不改代码） ----------
 function showLobby() {
   const lb = $('lobby');
@@ -1081,7 +1316,25 @@ function showLobby() {
             </span>
           </button>`
       }</div>
-      <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>开局</button>
+      ${(() => {
+        // 实验桌（Q32）：默认关；开着即沙盒。词条可多勾（获批反驳②：单轴纪律管毕业评审，不管沙盒并存）
+        const lab = loadLab();
+        return `<div class="lab-box">
+        <button class="lab-head" id="labToggle"><span>实验桌</span><i class="${lab.on ? 'on' : ''}">${lab.on ? '开 · 沙盒' : '关'}</i></button>
+        ${
+          lab.on
+            ? `<div class="lab-chips">${allMods()
+                .map(
+                  (m) =>
+                    `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" data-mod="${m.id}">${m.name}${m.origin === 'wish' ? '<u>愿</u>' : ''}</button>`,
+                )
+                .join('')}<button class="lab-chip wish" id="wishBtn">许愿＋</button></div>
+        <p class="lab-note">词条全桌明牌，AI 读规则即生效。实验局不入榜不入账不入档案。</p>`
+            : ''
+        }
+      </div>`;
+      })()}
+      <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>${loadLab().on && pickedMods().length ? '开实验局' : '开局'}</button>
       <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
@@ -1091,6 +1344,20 @@ function showLobby() {
         draw();
       }),
     );
+    lb.querySelector('#labToggle').addEventListener('click', () => {
+      const l = loadLab();
+      saveLab({ ...l, on: !l.on });
+      draw();
+    });
+    lb.querySelectorAll('.lab-chip[data-mod]').forEach((el) =>
+      el.addEventListener('click', () => {
+        const l = loadLab();
+        const id = el.dataset.mod;
+        saveLab({ ...l, picks: l.picks.includes(id) ? l.picks.filter((x) => x !== id) : [...l.picks, id] });
+        draw();
+      }),
+    );
+    lb.querySelector('#wishBtn')?.addEventListener('click', openWishPanel);
     lb.querySelector('#addGuest')?.addEventListener('click', openGuestConfig);
     lb.querySelectorAll('.p-card[data-p]').forEach((el) =>
       el.addEventListener('click', (e) => {
@@ -1176,6 +1443,8 @@ async function newMatch() {
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   const ledger = loadLedger();
+  labMods = pickedMods(); // 实验桌（Q32）：勾了词条即沙盒
+  sandbox = labMods.length > 0;
   const lineup = loadLineup(loadTable());
   seats = ['A', ...lineup.map((_, i) => SEAT_IDS[i])];
   SEAT_PERSONA = {};
@@ -1188,7 +1457,7 @@ async function newMatch() {
     NAMES[seat] = ros[pid].name;
     startChips[seat] = balanceOf(ledger, pid);
   });
-  match = await createMatch({ seed, config: { players: seats, startChips } });
+  match = await createMatch({ seed, config: { players: seats, startChips, mods: labMods } });
   opponents = {};
   for (const s of seats.slice(1)) {
     const persona = SEAT_PERSONA[s];
@@ -1202,6 +1471,7 @@ async function newMatch() {
   opponent = opponents.B; // B 席＝主家：开场白与判词主笔（谁坐主位谁执笔）
   document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name.replace(/['"\\]/g, '')}批：'`);
   buildOppArea();
+  buildModRow();
   myDiceByRound = {};
   sel = null;
   busy = false;
@@ -1211,6 +1481,18 @@ async function newMatch() {
   render();
   armIdle();
   showCoach();
+  if (labMods.length) showRuleCardsIntro(); // 词条以明牌规则卡在局前展示（Q32；AI 侧同卡走提示词）
+}
+
+// 局前规则卡：全桌明牌——你读的和他们读的是同一张卡
+function showRuleCardsIntro() {
+  const ov = $('overlay');
+  ov.classList.remove('hidden');
+  ov.innerHTML = `<div class="card fade-in"><h2>实验桌</h2>
+    ${labMods.map((m) => `<div class="rule-card"><b>「${m.name}」</b><p>${m.card}</p></div>`).join('')}
+    <p class="dim-line" style="margin-top:0.6rem">明牌：他们读的是同一张卡。实验局不入榜不入账不入档案。</p></div>
+    <div class="again-row"><button class="primary again" id="rcGo">上桌</button></div>`;
+  ov.querySelector('#rcGo').addEventListener('click', () => ov.classList.add('hidden'));
 }
 
 // 开场白（§5.3-bis 硬节拍）：主家亲口说——LLM 按自己的声口引用旧账；写死的老李头腔已废。
@@ -1294,7 +1576,7 @@ function showCoach() {
 }
 
 $('bidBtn').addEventListener('click', onBid);
-$('openBtn').addEventListener('click', () => doChallenge('A'));
+$('openBtn').addEventListener('click', () => doShowdown('A'));
 $('blindBtn').addEventListener('click', () => onDeclare('blind'));
 $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
 $('raiseBtn').addEventListener('click', () => onDeclare('raise'));

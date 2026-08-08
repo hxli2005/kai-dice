@@ -9,6 +9,7 @@ import { probBidTrue, probBidExact, obProb, obProbExact } from '../src/probabili
 import { CATALOG, catalogMap, validateMod, renderCard } from '../src/mods/catalog.js';
 import { selfPlayMods, checkInvariants, smokeMods } from '../src/mods/smoke.js';
 import { examMod } from '../src/mods/exam.js';
+import { compileWish } from '../src/mods/compiler.js';
 import { parseDecision, buildPrompts } from '../src/ai/agent.js';
 import { createSilentBot } from '../src/ai/silent.js';
 
@@ -285,6 +286,39 @@ test('体检：官方词条过静态与冒烟、张力守恒两门；无通道�
   assert.equal(byId.tension.pass, true);
   assert.equal(byId.ambiguity.pass, null);
   assert.match(byId.ambiguity.detail, /未测/);
+});
+
+test('compileWish：mock 编译端到端——产物过校验回译并可冒烟；拒绝信带缺失原子', async () => {
+  const mockFetch = (content) => async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content } }] }),
+  });
+  const chan = { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' };
+  // 成功路径：potMult 原子（第四原子的引擎覆盖也在这条冒烟里）
+  const good = JSON.stringify({
+    name: '翻倍章',
+    actions: [{ type: 'fanbei', label: '倍', window: { turn: true, oncePer: 'match' }, keepTurn: true, effect: [{ op: 'potMult', x: 2 }] }],
+  });
+  const r = await compileWish('每场一次把池翻倍', chan, { fetchFn: mockFetch(good) });
+  assert.ok(r.ok, r.reason);
+  assert.match(r.card, /每人每场一次/);
+  assert.match(r.card, /池 ×2/);
+  const mod = { id: 'wish-fanbei', name: r.ast.name, card: r.card, origin: 'wish', actions: r.ast.actions };
+  const sm = await smokeMods([mod], { games: 40 });
+  assert.ok(sm.ok && sm.uses > 0, sm.errors.join('\n'));
+  // 编译器自认表达不了：拒绝信带缺的钩子（许愿失败日志原料）
+  const refuse = await compileWish('让我能看对面的骰子', chan, {
+    fetchFn: mockFetch('{"error":"没有查看他人骰面的原子","missing":"查看他人骰"}'),
+  });
+  assert.equal(refuse.ok, false);
+  assert.match(refuse.reason, /没有查看他人骰面的原子/);
+  assert.equal(refuse.missing, '查看他人骰');
+  // 编译幻觉：发明了不存在的原子——静态校验拦下，missing 指名
+  const bad = await compileWish('x', chan, {
+    fetchFn: mockFetch('{"name":"坏","actions":[{"type":"huan","label":"幻","window":{"turn":true},"keepTurn":true,"effect":[{"op":"teleport"}]}]}'),
+  });
+  assert.equal(bad.ok, false);
+  assert.match(bad.missing, /teleport/);
 });
 
 test('体检：窗口永远打不开的词条被门一逮住', async () => {
