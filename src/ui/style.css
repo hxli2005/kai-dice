@@ -356,7 +356,7 @@ main {
 
 /* ---------- 我的区 ---------- */
 footer {
-  padding: 0 1rem calc(env(safe-area-inset-bottom) + 1.3rem);
+  padding: 0 1rem calc(env(safe-area-inset-bottom) + 2.4rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
 #gauge { font-size: 0.85rem; color: var(--dim); text-align: center; margin-top: 0.35rem; }
@@ -405,9 +405,6 @@ footer .meta-line { margin: 0 0 0.55rem; }
   color: var(--lamp);
   font-family: var(--serif); font-size: 1rem;
 }
-.stamp:nth-child(1) { transform: rotate(-6deg); }
-.stamp:nth-child(2) { transform: rotate(3deg); }
-.stamp:nth-child(3) { transform: rotate(-2deg); }
 .stamp:disabled { opacity: 0.18; }
 button.primary {
   flex: 1;
