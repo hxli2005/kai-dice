@@ -80,14 +80,20 @@ export function bumpResets(profile, storage = localStorage) {
   return profile;
 }
 
-// 跨场账本（Q12）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）
+// 跨场账本（Q12）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）。
+// v2：按人设分户头（三人桌各记各的）；旧 {you,opp} 迁移为 opp→laolitou
 const LEDGER_KEY = 'kai.ledger.v1';
 export function loadLedger(storage = localStorage) {
   try {
     const l = JSON.parse(storage.getItem(LEDGER_KEY));
-    if (l && Number.isFinite(l.you) && Number.isFinite(l.opp)) return l;
+    if (l && Number.isFinite(l.you)) {
+      if (Number.isFinite(l.opp) && !Number.isFinite(l.laolitou)) {
+        return { you: l.you, laolitou: l.opp, afei: 100 };
+      }
+      return { you: l.you, laolitou: l.laolitou ?? 100, afei: l.afei ?? 100 };
+    }
   } catch {}
-  return { you: 100, opp: 100 };
+  return { you: 100, laolitou: 100, afei: 100 };
 }
 export function saveLedger(l, storage = localStorage) {
   storage.setItem(LEDGER_KEY, JSON.stringify(l));

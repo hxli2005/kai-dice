@@ -6,7 +6,7 @@ import { allLegalBids } from '../rules.js';
 import { probBidTrue } from '../probability.js';
 import { createOpponent, settleVerdict } from '../ai/agent.js';
 import { chat } from '../ai/llm.js';
-import { DEFAULT_PERSONA } from '../ai/personas.js';
+import { PERSONAS, DEFAULT_PERSONA } from '../ai/personas.js';
 import { computeStats, persona, templateVerdict } from './report.js';
 import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, loadByok, saveByok, loadLedger, saveLedger } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
@@ -27,7 +27,20 @@ const dieHtml = (face, cls = '') =>
 const backHtml = (cls = '') => `<span class="die back ${cls}"></span>`;
 
 let profile = loadProfile();
-let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer, typeTimer;
+let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer;
+let seats = ['A', 'B'];
+let opponents = {}; // seat -> AI 客户端
+const typeTimers = {}; // 每席位独立打字机
+
+// 座次表（§2.5 三人桌）：A=你，B=老李头，C=阿飞
+const SEAT_PERSONA = { B: PERSONAS.laolitou, C: PERSONAS.afei };
+const NAMES = { A: '客人', B: PERSONAS.laolitou.name, C: PERSONAS.afei.name };
+const isTrio = () => seats.length > 2;
+const dispName = (s) => (s === 'A' ? '你' : NAMES[s]);
+// 桌型（本批默认三人；1v1 读心核保留为可选）
+function loadTable() {
+  return localStorage.getItem('kai.table.v1') === 'duo' ? 'duo' : 'trio';
+}
 
 // 零配置官方通道（§9.2）：只填暗号 → 同域 /api/llm 代理；三格全填 → 自带 API
 function channelOf() {
@@ -90,22 +103,30 @@ function deviceId() {
   return id;
 }
 
-// ---------- 台词气泡（打字机，不阻塞输入 §3.5） ----------
-function speak(text) {
+// ---------- 台词气泡（打字机，不阻塞输入 §3.5；每席位独立） ----------
+function bubbleEl(seat) {
+  if (isTrio()) {
+    const el = document.querySelector(`#strip-${seat} .strip-bubble`);
+    if (el) return el;
+  }
+  return $('bubble');
+}
+function speak(text, seat = 'B') {
   if (!text) return;
-  const b = $('bubble');
+  const b = bubbleEl(seat);
   b.classList.remove('hidden', 'silent');
-  clearInterval(typeTimer);
+  clearInterval(typeTimers[seat]);
   let i = 0;
   b.textContent = '';
-  typeTimer = setInterval(() => {
+  typeTimers[seat] = setInterval(() => {
     b.textContent = text.slice(0, ++i);
-    if (i >= text.length) clearInterval(typeTimer);
+    if (i >= text.length) clearInterval(typeTimers[seat]);
   }, 28);
 }
 function muteBubble() {
-  clearInterval(typeTimer);
+  for (const k of Object.keys(typeTimers)) clearInterval(typeTimers[k]);
   $('bubble').classList.add('hidden');
+  document.querySelectorAll('.strip-bubble').forEach((el) => el.classList.add('hidden'));
 }
 
 // ---------- 渲染 ----------
@@ -258,34 +279,98 @@ function ensureSel(o) {
   return bids;
 }
 
+// 三人对手条：DOM 每场建一次（气泡与打字机不被 render 摧毁），render 只刷数据
+function buildOppArea() {
+  const trio = $('trioOpp');
+  const duo = $('duoOpp');
+  if (!isTrio()) {
+    trio.classList.add('hidden');
+    duo.classList.remove('hidden');
+    $('seal').classList.remove('hidden');
+    $('seal').textContent = PERSONAS.laolitou.seal;
+    $('oppName').textContent = PERSONAS.laolitou.name;
+    return;
+  }
+  duo.classList.add('hidden');
+  trio.classList.remove('hidden');
+  $('seal').classList.add('hidden');
+  $('oppName').textContent = '三人桌';
+  trio.innerHTML = seats
+    .slice(1)
+    .map((s) => {
+      const per = SEAT_PERSONA[s];
+      return `<div class="opp-strip" id="strip-${s}">
+        <div class="strip-head">
+          <span class="seal mini">${per.seal}</span><b>${per.name}</b>
+          <span class="brain hidden" id="brain-${s}"></span>
+          <span class="dicerow strip-dice" id="dice-${s}"></span>
+          <span class="strip-meta" id="meta-${s}"></span>
+        </div>
+        <div class="strip-bubble hidden"></div>
+      </div>`;
+    })
+    .join('');
+}
+
+function renderTrio(o) {
+  for (const s of seats.slice(1)) {
+    const ps = o.players.find((q) => q.id === s);
+    const strip = document.querySelector(`#strip-${s}`);
+    if (!strip) continue;
+    strip.classList.toggle('out', !ps.alive);
+    strip.classList.toggle('turn', o.turn === s && !o.over);
+    $(`dice-${s}`).innerHTML = ps.alive ? backHtml('mini').repeat(ps.diceCount) : '<i class="out-mark">出局</i>';
+    const rs = lastEvent(o, 'roundStart');
+    $(`meta-${s}`).textContent = `${rs.commits[s] ? '封 ' + rs.commits[s].slice(0, 6) + ' · ' : ''}筹 ${ps.chips}`;
+    const dot = $(`brain-${s}`);
+    if (!channelOf()) dot.className = 'brain hidden';
+    else {
+      const last = opponents[s]?.logs.at(-1);
+      dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
+    }
+  }
+}
+
 function render() {
   const o = ob();
-  const myTurn = o.turn === 'A' && !o.over && !busy;
-  // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条
-  $('oppDice').innerHTML = backHtml().repeat(o.diceCount.opp);
+  const meAlive = o.players.find((q) => q.id === 'A').alive;
+  const myTurn = o.turn === 'A' && !o.over && !busy && meAlive;
+
+  if (isTrio()) renderTrio(o);
+  else {
+    // 镜像：他的暗骰与你的骰子同尺寸同位置——骰子行即血条
+    $('oppDice').innerHTML = backHtml().repeat(o.diceCount.opp);
+    const rs0 = lastEvent(o, 'roundStart');
+    $('oppCommit').textContent = `封 ${rs0.commits.B.slice(0, 10)}`;
+    renderChips('oppChips', o.chips.opp);
+  }
 
   const marks =
     (o.zhai ? '<span class="mark">斋 ×1.5</span>' : '') +
-    (o.blind.A ? '<span class="mark">你盲 ×2</span>' : '') +
-    (o.blind.B ? '<span class="mark">他盲 ×2</span>' : '');
-  const mult = 2 ** (o.blind.A ? 1 : 0) * 2 ** (o.blind.B ? 1 : 0) * (o.zhai ? 1.5 : 1);
-  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * 2}</b> 注${marks}`;
-  renderPotChips(o.potUnits * 2, mult > 1);
+    seats
+      .filter((s) => o.blind[s])
+      .map((s) => `<span class="mark">${dispName(s)}盲 ×2</span>`)
+      .join('');
+  const mult =
+    seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
+  const aliveN = o.players.filter((q) => q.alive).length;
+  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * aliveN}</b> 注${marks}`;
+  renderPotChips(o.potUnits * aliveN, mult > 1);
 
+  const bidderTag = o.currentBid && isTrio() ? `<span class="bidder-tag">${dispName(o.currentBid.player)}：</span>` : '';
   $('bidBig').innerHTML = o.currentBid
-    ? `<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
-    : `<span class="none">${o.over ? '' : o.turn === 'A' ? '等你开口' : '他在想'}</span>`;
+    ? `${bidderTag}<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
+    : `<span class="none">${o.over ? '' : o.turn === 'A' ? '等你开口' : `${dispName(o.turn)}在想`}</span>`;
 
-  // 镜像：封印与筹码余额各贴各的骰子行
   const rs = lastEvent(o, 'roundStart');
-  $('oppCommit').textContent = `封 ${rs.commits.B.slice(0, 10)}`;
-  $('myCommit').textContent = `封 ${rs.commits.A.slice(0, 10)}`;
-  renderChips('oppChips', o.chips.opp);
+  $('myCommit').textContent = meAlive && rs.commits.A ? `封 ${rs.commits.A.slice(0, 10)}` : '出局旁观';
   renderChips('myChips', o.chips.you);
 
-  // 我的骰子：未看则盖着（点击=看骰）；盲局锁死
+  // 我的骰子：未看则盖着（点击=看骰）；盲局锁死；出局清空
   const mine = $('myDice');
-  if (o.yourDice) {
+  if (!meAlive) {
+    mine.innerHTML = '';
+  } else if (o.yourDice) {
     mine.innerHTML = o.yourDice
       .map((f) => dieHtml(f, !o.zhai && f === 1 ? 'wild' : ''))
       .join('');
@@ -304,6 +389,8 @@ function render() {
     g.innerHTML = `按你的骰子算，「${o.currentBid.count} 个 ${o.currentBid.face}」为真 <b>${pct(p)}</b>`;
   } else if (o.currentBid) {
     g.textContent = o.blind.A ? '盲局——你选的路' : '看了骰才有数';
+  } else if (!meAlive) {
+    g.textContent = '观战中——他们打完这场才算完';
   } else {
     g.textContent = myTurn ? `桌上共 ${o.diceCount.you + o.diceCount.opp} 颗骰，你先报` : '';
   }
@@ -340,17 +427,20 @@ function render() {
     $('bidBtn').textContent = '没法再抬';
   }
   $('bidBtn').disabled = !myTurn || !bids;
-  // 赌注焊在扳机上：拍开就是这个数（§2.2 开值＝单方投入×赔率）
-  $('openBtn').innerHTML = o.currentBid ? `开<small>±${Math.round(o.potUnits * mult)}</small>` : '开';
+  // 赌注焊在扳机上：拍开就是这个数；三人桌写明开谁（§2.5 开只开上家）
+  const openWho = o.currentBid && isTrio() ? `开·${NAMES[o.currentBid.player] ?? ''}` : '开';
+  $('openBtn').innerHTML = o.currentBid
+    ? `${openWho}<small>±${Math.round(o.potUnits * mult)}</small>`
+    : '开';
   $('openBtn').disabled = !myTurn || !o.currentBid;
   $('blindBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'blind');
   $('zhaiBtn').disabled = !myTurn || !o.legal.some((a) => a.type === 'declare' && a.declaration === 'zhai');
 
   $('hint').textContent = hintFor(o, myTurn);
 
-  // 连接状态点：亮=LLM 在线，红=已降级沉默模式，灰=尚未开口；未配置则隐藏
+  // 连接状态点（duo；trio 各 strip 自带）：亮=在线，红=降级，灰=未开口
   const dot = $('brainDot');
-  if (!channelOf()) dot.className = 'brain hidden';
+  if (isTrio() || !channelOf()) dot.className = 'brain hidden';
   else {
     const last = opponent?.logs.at(-1);
     dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
@@ -361,6 +451,8 @@ function render() {
 function hintFor(o, myTurn) {
   if (o.over || !myTurn) return '';
   if (!o.yourDice && !o.blind.A) return '点骰盅看牌';
+  if (isTrio() && o.round === 1 && o.currentBid)
+    return `开牌只能开上家——现在能开的是${NAMES[o.currentBid.player]}`;
   if (profile.matches === 0 && o.round === 1)
     return o.currentBid ? '抬价，或拍「开」' : '报：桌上至少有几个几点';
   return '';
@@ -375,7 +467,7 @@ function armIdle() {
     const o = ob();
     if (o.turn !== 'A' || o.over || busy) return;
     const lines = opponent?.persona?.idle ?? [];
-    if (lines.length) speak(lines[Math.floor(Math.random() * lines.length)]);
+    if (lines.length) speak(lines[Math.floor(Math.random() * lines.length)], 'B');
     idleTimer = setTimeout(nag, IDLE_MS);
   };
   idleTimer = setTimeout(nag, IDLE_MS);
@@ -406,41 +498,58 @@ async function onBid() {
   await match.act('A', { type: 'bid', ...sel }, { elapsedMs: performance.now() - turnStart });
   sfx.tick();
   render();
-  aiTurn();
+  driveTurn();
 }
 
-// ---------- 对手回合 ----------
-async function aiTurn() {
-  const o = match.observe('B');
+// ---------- 回合调度（§2.5）：轮到谁驱动谁；AI 台词打字与下一位的网络请求并行（节拍 ≤4s） ----------
+function driveTurn() {
+  const o = ob();
   if (o.over) return;
+  if (o.turn === 'A') {
+    render();
+    armIdle();
+    return;
+  }
+  aiTurnFor(o.turn);
+}
+
+async function aiTurnFor(seat) {
+  const o = match.observe(seat);
+  if (o.over || o.turn !== seat) return;
   busy = true;
   render();
   const t0 = performance.now();
-  const d = await opponent.decide(o);
+  const ai = opponents[seat];
+  const d = await ai.decide(o);
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
-    await match.act('B', d.action);
+    await match.act(seat, d.action);
     sfx.land();
-    $('oppDice').querySelectorAll('.die').forEach((el) => el.classList.add('reveal'));
+    (isTrio()
+      ? document.querySelectorAll(`#strip-${seat} .die`)
+      : $('oppDice').querySelectorAll('.die')
+    ).forEach((el) => el.classList.add('reveal'));
     busy = false;
-    return aiTurn();
+    return aiTurnFor(seat);
   }
   if (d.silentFallback && d.error && channelOf() && !fallbackNoticed) {
     fallbackNoticed = true;
-    $('hint').textContent = `接不上他的脑子（${friendlyError(d.error)}），先闭嘴算账`;
+    $('hint').textContent = `接不上${NAMES[seat]}的脑子（${friendlyError(d.error)}），先闭嘴算账`;
   }
-  await sleep(Math.max(0, 900 + Math.random() * 800 - (performance.now() - t0)));
+  // 人设节奏：阿飞近乎秒出，老李头想得慢
+  const floor = ai.persona.pace === 'fast' ? 350 + Math.random() * 350 : 900 + Math.random() * 800;
+  await sleep(Math.max(0, floor - (performance.now() - t0)));
   const elapsedMs = performance.now() - t0;
-  if (d.action.type === 'challenge') return doChallenge('B', elapsedMs, false, d.say);
-  await match.act('B', d.action, { elapsedMs });
+  if (d.action.type === 'challenge') return doChallenge(seat, elapsedMs, false, d.say);
+  await match.act(seat, d.action, { elapsedMs });
   if (d.action.type === 'declare')
     stampFx(d.action.declaration === 'blind' ? '盲 ×2' : '斋 ×1.5');
   else sfx.tick();
-  if (d.say) speak(d.say);
+  if (d.say) speak(d.say, seat);
   busy = false;
-  if (d.action.type === 'declare') return aiTurn();
+  if (d.action.type === 'declare') return aiTurnFor(seat);
   render();
-  armIdle();
+  driveTurn();
 }
 
 // ---------- 开牌演出（juice 预算全在这一拍，§6） ----------
@@ -460,34 +569,40 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   setTimeout(() => $('app').classList.remove('shake'), 400);
   const ov = $('overlay');
   ov.classList.remove('hidden');
+  // 摊牌行：其他人在上，你压轴
+  const seatsIn = [...Object.keys(rv.dice).filter((s) => s !== 'A'), ...(rv.dice.A ? ['A'] : [])];
   ov.innerHTML = `<div class="kai">开！</div>
-    <div class="row-label">${by === 'A' ? '你拍了桌子' : '他拍了桌子'} · 验「${rv.bid.count} 个 ${rv.bid.face}」</div>
-    <div><div class="row-label">他</div><div class="dicerow" id="rvB"></div></div>
-    <div><div class="row-label">你</div><div class="dicerow" id="rvA"></div></div>
+    <div class="row-label">${by === 'A' ? '你' : NAMES[by]}拍了桌子，开${rv.bid.player === 'A' ? '你' : NAMES[rv.bid.player]} · 验「${rv.bid.count} 个 ${rv.bid.face}」</div>
+    ${seatsIn
+      .map(
+        (s) =>
+          `<div><div class="row-label">${dispName(s)}</div><div class="dicerow" id="rv${s}"></div></div>`,
+      )
+      .join('')}
     <div class="count" id="rvCount"></div>
     <div class="verdict-line" id="rvLine"></div>`;
   await sleep(500);
   // 逐颗揭骰
-  for (const [pid, rowId] of [['B', 'rvB'], ['A', 'rvA']]) {
-    const row = ov.querySelector(`#${rowId}`);
-    for (const f of rv.dice[pid]) {
+  for (const s of seatsIn) {
+    const row = ov.querySelector(`#rv${s}`);
+    for (const f of rv.dice[s]) {
       row.insertAdjacentHTML('beforeend', dieHtml(f, `reveal ${!rv.zhai && f === 1 ? 'wild' : ''}`));
       sfx.land();
-      await sleep(110);
+      await sleep(isTrio() ? 80 : 110);
     }
   }
   await sleep(300);
   // 清点：命中发光，其余转暗
   let n = 0;
   const cnt = ov.querySelector('#rvCount');
-  const allDice = [...rv.dice.B, ...rv.dice.A];
-  const dieEls = [...ov.querySelectorAll('#rvB .die, #rvA .die')];
+  const allDice = seatsIn.flatMap((s) => rv.dice[s]);
+  const dieEls = seatsIn.flatMap((s) => [...ov.querySelectorAll(`#rv${s} .die`)]);
   for (let i = 0; i < dieEls.length; i++) {
     if (isMatch(allDice[i])) {
       dieEls[i].classList.add('hit');
       cnt.textContent = `${++n}`;
       sfx.tick();
-      await sleep(140);
+      await sleep(isTrio() ? 110 : 140);
     } else {
       dieEls[i].classList.add('dark');
     }
@@ -495,11 +610,13 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   await sleep(350);
   const youLose = re.loser === 'A';
   cnt.textContent = `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
-  ov.querySelector('#rvLine').innerHTML = `${youLose ? '你' : '他'}输了这局，掉一颗骰`;
+  ov.querySelector('#rvLine').innerHTML = `${dispName(re.loser)}输了这局，掉一颗骰`;
   sfx.loseDie();
-  speak(sayText || challengeLine(rv, re));
+  const line = sayText ? { text: sayText, seat: by !== 'A' ? by : 'B' } : challengeLine(rv, re);
+  speak(line.text, line.seat);
   await sleep(600);
-  await chipFlight(ov, re.transfer, !youLose);
+  const myDelta = re.transfers?.A ?? 0;
+  if (myDelta !== 0) await chipFlight(ov, Math.abs(myDelta), myDelta > 0);
   await sleep(1100);
 
   const end = lastEvent(o, 'matchEnd');
@@ -509,35 +626,68 @@ async function doChallenge(by, elapsedMs = null, timeout = false, sayText = '') 
   busy = false;
   sel = null; // 新局重置报价选择
   render();
-  showDelta(youLose ? -re.transfer : re.transfer);
+  if (myDelta !== 0) showDelta(myDelta);
   const next = ob();
   myDiceByRound[next.round] = null;
-  if (next.turn === 'A') armIdle();
-  else aiTurn();
+  // 玩家刚出局 → 观战提示（§2.5 淘汰观战：看他们收尾）
+  if (re.diceCount.A === 0 && !end)
+    $('hint').textContent = '你出局了——坐着看他们收尾';
+  driveTurn();
 }
 
-// 结算分层话术（§3.5）：全部由摊牌真实数据生成，不许编
+// 结算分层话术（§3.5）：全部由摊牌真实数据生成，不许编。返回 {text, seat=说话者}
 function challengeLine(rv, re) {
-  const iOpened = (rv.stands ? re.loser : re.loser === 'A' ? 'B' : 'A') === 'B';
-  const pHis = probBidTrue(rv.bid, rv.dice.B, rv.dice.A.length, rv.zhai);
-  if (iOpened && re.loser === 'A')
-    return `我算过，你这话只有${pct(pHis)}是真的。骰子替我作证。`;
-  if (iOpened && re.loser === 'B')
-    return pHis < 0.4
-      ? `${pct(pHis)}的话你也敢咬死——这把算你的，记下了。`
-      : '这把是我手快。';
-  if (!iOpened && re.loser === 'B') return '你赢的这把不是运气，是我本人。已记入档案。';
-  return `我没骗你。${rv.bid.count} 个 ${rv.bid.face}，一个不少。`;
+  const bidder = rv.bid.player;
+  const challenger = rv.challenger;
+  const winner = re.winner;
+  const say = (seat, text) => ({ seat, text });
+  const pOf = (seat) => {
+    const mine = rv.dice[seat] ?? [];
+    const unknown = Object.entries(rv.dice)
+      .filter(([k]) => k !== seat)
+      .reduce((s, [, d]) => s + d.length, 0);
+    return probBidTrue(rv.bid, mine, unknown, rv.zhai);
+  };
+  // AI 开你
+  if (challenger !== 'A' && bidder === 'A') {
+    const pHis = pOf(challenger);
+    return re.loser === 'A'
+      ? say(challenger, `我算过，你这话只有${pct(pHis)}是真的。骰子替我作证。`)
+      : say(challenger, pHis < 0.4 ? `${pct(pHis)}的话你也敢咬死——这把算你的，记下了。` : '这把是我手快。');
+  }
+  // 你开 AI
+  if (challenger === 'A' && bidder !== 'A') {
+    return re.loser === bidder
+      ? say(bidder, '你赢的这把不是运气，是我本人。已记入档案。')
+      : say(bidder, `我没骗你。${rv.bid.count} 个 ${rv.bid.face}，一个不少。`);
+  }
+  // AI 开 AI（三人桌互咬——赢家说话）
+  if (challenger !== 'A' && bidder !== 'A') {
+    return winner === challenger
+      ? say(challenger, `${NAMES[bidder]}，这种话留着骗客人吧。收钱。`)
+      : say(bidder, `急什么。${rv.bid.count} 个 ${rv.bid.face}，一个不少——${NAMES[challenger]}你付账。`);
+  }
+  return say('B', `${rv.bid.count} 个 ${rv.bid.face}，摊开了。`);
 }
 
 // ---------- 报告卡（§5.2：核心传播物） ----------
 async function showReport(end) {
   const o = ob();
   const won = end.winner === 'A';
-  saveLedger({ you: end.chips.A, opp: end.chips.B }); // 账本落袋，下一场带着走
+  // 账本落袋（按人设分户头），下一场带着走
+  const led = loadLedger();
+  saveLedger({
+    you: end.chips.A,
+    laolitou: end.chips.B ?? led.laolitou,
+    afei: end.chips.C ?? led.afei,
+  });
   const stats = computeStats(o.events, 'A', myDiceByRound);
   const byok = channelOf();
+  const standingsLine = end.standings
+    ? end.standings.map((s, i) => `${i + 1}. ${dispName(s)}`).join('　')
+    : '';
   const statsText =
+    (isTrio() ? `三人桌，名次：${end.standings.map(dispName).join(' > ')}；` : '') +
     `${end.rounds}局${won ? '客人赢' : '客人输'}；虚报率${pct(stats.bluffRate)}；` +
     `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次；` +
     `平均思考${(stats.avgTimeMs / 1000).toFixed(1)}秒` +
@@ -552,6 +702,7 @@ async function showReport(end) {
       <h2>酒桌档案 · 第 ${profile.matches + 1} 场</h2>
       <div class="persona">${persona(stats)}</div>
       <dl>
+        ${isTrio() && end.standings ? `<dt>名次</dt><dd>${standingsLine}</dd>` : ''}
         <dt>胜负</dt><dd>${won ? `赢 · ${end.rounds} 局` : `输 · ${end.rounds} 局`}</dd>
         <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}</dd>
         <dt>虚报率</dt><dd>${pct(stats.bluffRate)}</dd>
@@ -574,6 +725,14 @@ async function showReport(end) {
     if (r) ({ verdict, note } = r);
     renderCard(verdict ?? templateVerdict(stats, won));
   }
+  // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）
+  for (const s of seats.slice(1)) {
+    if (s === 'B') continue; // 老李头的经 appendMatch 记
+    const ai = opponents[s];
+    const extra = ai.logs.map((l) => l.note).filter(Boolean).slice(-2);
+    const mind = mindOf(profile, ai.persona.id);
+    mind.notes = [...mind.notes, ...extra].slice(-30);
+  }
   const aiNotes = opponent.logs.map((l) => l.note).filter(Boolean).slice(-2);
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note], personaId: opponent.persona.id });
 }
@@ -594,6 +753,7 @@ function openDrawer(section) {
       <li>注池：每局双方各押 1 注底，此后每报一次数、双方各自动加 1 注。开牌定归属。</li>
       <li>筹码面额：白 1 · 红 5 · 绿 25 · 黑 100（金环）。</li>
       <li>宣言（轮到你、开口之前）：「盲」＝整局不看自己的骰子，本局池 ×2；「斋」＝本局 1 点不作万能，池 ×1.5，只有一局的首报者能宣。</li>
+      <li>三人桌：轮转报数，「开」只能开你上家（上一个报价的人）；开牌局输家掉骰，骰子掉光出局旁观，打到只剩一人。每报一次数全桌各追 1 注，开牌胜者收整池——看客的注也在池里。</li>
       <li>不限时。骰子不催人——但你手停多久，他都看着，也记着。</li>
       <li>表盘概率只按你手里的骰子和纯运气算，不猜人心。他敢不敢这么报、是不是在钓你开——得你自己读。他那边的表盘也一样。</li>
     </ul>
@@ -611,7 +771,11 @@ function openDrawer(section) {
         : ''
     }
     ${mindOf(profile, DEFAULT_PERSONA.id).notes.slice(-6).map((n) => `<p class="note-item">${n}</p>`).join('')}
-    <p>身家 ${loadLedger().you}（他 ${loadLedger().opp}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
+    <p>身家 ${loadLedger().you}（老李头 ${loadLedger().laolitou} · 阿飞 ${loadLedger().afei}）· <button id="resetLedger" class="linkish">把账翻篇，各回 100</button></p>
+    <label>桌型（下一场生效）</label><select id="fTable">
+      <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
+      <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
+    </select>
     <h2>接上他的脑子</h2>
     <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
@@ -627,8 +791,11 @@ function openDrawer(section) {
     <p>① 每局开始，双方骰面先封哈希上屏，摊牌可验——他不能重掷，你也不能。② 他和你走同一套接口，拿同样的字节：接口里没有你的骰面这个字段。③ 你按下之前的犹豫不采样，落子才算数。</p>`;
   if (section === 'profile') d.querySelector('#profileSec').scrollIntoView();
   else d.scrollTop = 0;
+  d.querySelector('#fTable').addEventListener('change', (e) => {
+    localStorage.setItem('kai.table.v1', e.target.value);
+  });
   d.querySelector('#resetLedger').addEventListener('click', (e) => {
-    saveLedger({ you: 100, opp: 100 });
+    saveLedger({ you: 100, laolitou: 100, afei: 100 });
     profile = bumpResets(profile); // Q12：翻篇记档案，判词可引用
     e.target.textContent = '翻篇了，下一场生效（他记下了）';
     e.target.disabled = true;
@@ -665,14 +832,31 @@ async function newMatch() {
   muteBubble();
   const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
   const ledger = loadLedger();
-  match = await createMatch({ seed, config: { startChips: { A: ledger.you, B: ledger.opp } } });
-  opponent = createOpponent({ channel: channelOf, profile: profileBrief(profile, DEFAULT_PERSONA.id), persona: DEFAULT_PERSONA });
+  const table = loadTable();
+  seats = table === 'trio' ? ['A', 'B', 'C'] : ['A', 'B'];
+  const startChips =
+    table === 'trio'
+      ? { A: ledger.you, B: ledger.laolitou, C: ledger.afei }
+      : { A: ledger.you, B: ledger.laolitou };
+  match = await createMatch({ seed, config: { players: seats, startChips } });
+  opponents = {};
+  for (const s of seats.slice(1)) {
+    const persona = SEAT_PERSONA[s];
+    opponents[s] = createOpponent({
+      channel: channelOf,
+      profile: profileBrief(profile, persona.id),
+      persona,
+      ctx: { names: NAMES, three: isTrio() },
+    });
+  }
+  opponent = opponents.B; // 老李头：店主、开场白与判词主笔
+  buildOppArea();
   myDiceByRound = {};
   sel = null;
   busy = false;
   fallbackNoticed = false;
   sfx.shake();
-  speak(openerLine(ledger));
+  speak(openerLine(ledger), 'B');
   render();
   armIdle();
   showCoach();

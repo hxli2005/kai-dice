@@ -10,31 +10,41 @@ import { chat } from './llm.js';
 import { TONES, DEFAULT_PERSONA } from './personas.js';
 
 // SYSTEM 全部由人设五件套拼装：身份 + 嘴臭度 + 回复风格 + 性格缺陷（Q11）
-const personaSystem = (p) => `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}你收到的全是真实数据，禁止编造数字。
-${p.flaws}
-规则提要：双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）；认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。默认 1 点是万能牌（斋局除外）。
+// tableTalk：三人桌台词双层制（§2.5）——裁判层不许编 / 牌手层允许诈 / 各为其利 / 禁围剿
+const TABLE_TALK = `
+这是三人桌（你、客人、另一个对手），额外规矩：
+- 关于你自己的手牌与意图，你可以虚张、误导、演戏（"我劝你别开，我这把是真的"）——说话是玩法。
+- 关于可查证的事实（谁报过什么、战绩、档案、结算），一字不许编。
+- 各为其利：你只为自己赢。对另一个对手的凶狠不得低于对客人，不许跟任何人联手针对第三方。
+- 每手最多一句话，开牌时刻可以多说。`;
+const personaSystem = (p, three) => `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}你收到的全是真实数据，禁止编造数字。
+${p.flaws}${three ? TABLE_TALK : ''}
+规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。
 严格输出一行 JSON，不要其他文字：
 {"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"或"blind"}或{"type":"peek"}（未看骰时掀盅），"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}`;
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 
+// 称呼表：you→你；其余按 names 映射（三人桌需要分清是谁），缺省"对方"
+const whoOf = (you, names) => (p) => (p === you ? '你' : (names?.[p] ?? '对方'));
+
 // 本局叙事：看骰、报数与宣言序列，含用时指纹（§3.3；揭盅时机也是阅读材料，§2.3）
-function narrate(events, you) {
+function narrate(events, you, names) {
+  const who = whoOf(you, names);
   const start = events.findLastIndex((e) => e.type === 'roundStart');
   const lines = [];
   for (const e of events.slice(start + 1)) {
-    const who = e.player === you ? '你' : '对方';
     const t = e.elapsedMs != null ? `（用时${(e.elapsedMs / 1000).toFixed(1)}秒）` : '';
-    if (e.type === 'peek' && e.player !== you) lines.push(`对方掀盅看了骰`);
-    if (e.type === 'bid') lines.push(`${who}报 ${e.count} 个 ${e.face}${t}`);
+    if (e.type === 'peek' && e.player !== you) lines.push(`${who(e.player)}掀盅看了骰`);
+    if (e.type === 'bid') lines.push(`${who(e.player)}报 ${e.count} 个 ${e.face}${t}`);
     if (e.type === 'declare')
-      lines.push(`${who}宣言「${e.declaration === 'zhai' ? '斋' : '盲'}」${t}`);
+      lines.push(`${who(e.player)}宣言「${e.declaration === 'zhai' ? '斋' : '盲'}」${t}`);
   }
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
 
 // 本场前情（§5.3-bis）：此前各局一句话事实——"第 3 局前引用早期行为"的原料
-function matchRecap(events, you) {
+function matchRecap(events, you, names) {
   const rounds = [];
   let cur = null;
   for (const e of events) {
@@ -44,7 +54,7 @@ function matchRecap(events, you) {
     else if (e.type === 'reveal') cur.out = e;
     else if (e.type === 'roundEnd') rounds.push(cur);
   }
-  const who = (p) => (p === you ? '你' : '对方');
+  const who = whoOf(you, names);
   return rounds
     .map((r) => {
       if (!r.out) return '';
@@ -58,7 +68,10 @@ function matchRecap(events, you) {
 // 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
 const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
 
-export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
+export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
+  const names = ctx.names;
+  const three = (ob.players?.filter((q) => q.alive).length ?? 2) > 2 || !!ctx.three;
+  const who = whoOf(ob.you, names);
   const total = ob.diceCount.you + ob.diceCount.opp;
   const bids = allLegalBids(ob.currentBid, ob.zhai, total);
   const myDice = ob.yourDice ?? []; // 盲局/未看骰：按零已见算——这就是他的真实认知
@@ -71,14 +84,21 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
     : isBlind
       ? `你宣了盲——这局不看自己的骰盅（池已翻倍），${ob.diceCount.you} 颗骰蒙着打`
       : `你还没掀自己的骰盅（${ob.diceCount.you} 颗）`;
+  const tableLine = three
+    ? `桌上：${ob.players
+        .filter((q) => q.id !== ob.you)
+        .map((q) => `${who(q.id)}${q.alive ? ` ${q.diceCount} 颗暗骰` : '（已出局）'}`)
+        .join('，')}`
+    : `对方 ${ob.diceCount.opp} 颗暗骰`;
+  const bidder = ob.currentBid ? who(ob.currentBid.player) : null;
   const facts = [
-    `第 ${ob.round} 局。${diceLine}，对方 ${ob.diceCount.opp} 颗暗骰。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
-    matchRecap(ob.events, ob.you) ? `本场前情：${matchRecap(ob.events, ob.you)}。` : null,
-    `本局进程：${narrate(ob.events, ob.you)}。`,
+    `第 ${ob.round} 局。${diceLine}，${tableLine}。池 ${ob.potUnits} 注${ob.zhai ? '，斋局（1 不是万能牌）' : ''}。`,
+    matchRecap(ob.events, ob.you, names) ? `本场前情：${matchRecap(ob.events, ob.you, names)}。` : null,
+    `本局进程：${narrate(ob.events, ob.you, names)}。`,
     ob.currentBid
       ? persona.gear?.probInject === 'coarse'
-        ? `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
-        : `当前报价：对方报「${ob.currentBid.count} 个 ${ob.currentBid.face}」。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
+        ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你粗掂量一下，这话${fmtP(p(ob.currentBid))}。`
+        : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。按你的骰子算，此话为真的概率 ${fmtP(p(ob.currentBid))}。`
       : `你是首报（数量至少 2）。`,
     `可选动作：${[
       ob.currentBid && `开牌`,
@@ -96,7 +116,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA) {
       ? '【节拍要求】你在第 3 局结束前，至少要有一句台词引用对方本场更早的具体行为（让他知道你在记）。'
       : null,
   ].filter(Boolean);
-  return { system: personaSystem(persona), user: facts.join('\n') };
+  return { system: personaSystem(persona, three), user: facts.join('\n') };
 }
 
 export function parseDecision(text, ob) {
@@ -153,7 +173,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
 
 // channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）。
 // channel 可传函数（每手求值）——设置保存后下一手立即生效，不用等下一场。
-export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, fetchFn } = {}) {
+export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, ctx = {}, fetchFn } = {}) {
   const silent = createSilentBot(persona.strategy); // 策略参数随人设（Q10④）
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
   return {
@@ -164,14 +184,15 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）
       if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind)
         return { action: { type: 'peek' } };
-      const prompts = buildPrompts(ob, profile, persona);
+      const prompts = buildPrompts(ob, profile, persona, ctx);
       const ch = typeof channel === 'function' ? channel() : channel;
       let decision = null;
       let raw = null;
       let error = null;
       if (ch) {
         try {
-          raw = await chat(ch, prompts, fetchFn);
+          // maxTokens 压低：动作 JSON＋一句台词用不了多少，生成时长是节拍主项（T4 ≤4s）
+          raw = await chat(ch, { ...prompts, maxTokens: 320 }, fetchFn);
           decision = parseDecision(raw, ob);
           if (decision === null) error = 'bad-output';
         } catch (e) {
