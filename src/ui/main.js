@@ -303,9 +303,10 @@ function buildOppArea() {
         <div class="strip-head">
           <span class="seal mini">${per.seal}</span><b>${per.name}</b>
           <span class="brain hidden" id="brain-${s}"></span>
-          <span class="dicerow strip-dice" id="dice-${s}"></span>
-          <span class="strip-meta" id="meta-${s}"></span>
+          <span class="thinking"><i></i><i></i><i></i></span>
         </div>
+        <div class="dicerow strip-dice" id="dice-${s}"></div>
+        <div class="strip-meta" id="meta-${s}"></div>
         <div class="strip-bubble hidden"></div>
       </div>`;
     })
@@ -320,8 +321,7 @@ function renderTrio(o) {
     strip.classList.toggle('out', !ps.alive);
     strip.classList.toggle('turn', o.turn === s && !o.over);
     $(`dice-${s}`).innerHTML = ps.alive ? backHtml('mini').repeat(ps.diceCount) : '<i class="out-mark">出局</i>';
-    const rs = lastEvent(o, 'roundStart');
-    $(`meta-${s}`).textContent = `${rs.commits[s] ? '封 ' + rs.commits[s].slice(0, 6) + ' · ' : ''}筹 ${ps.chips}`;
+    $(`meta-${s}`).textContent = `筹 ${ps.chips}`;
     const dot = $(`brain-${s}`);
     if (!channelOf()) dot.className = 'brain hidden';
     else {
@@ -354,13 +354,15 @@ function render() {
   const mult =
     seats.reduce((m, s) => m * (o.blind[s] ? 2 : 1), 1) * (o.zhai ? 1.5 : 1);
   const aliveN = o.players.filter((q) => q.alive).length;
-  $('pot').innerHTML = `第 ${o.round} 局 · 池 <b>${o.potUnits * aliveN}</b> 注${marks}`;
+  $('roundTag').textContent = `第 ${o.round} 局`;
+  $('pot').innerHTML = `池 <b>${o.potUnits * aliveN}</b> 注${marks}`;
   renderPotChips(o.potUnits * aliveN, mult > 1);
 
+  // 中央只放对局物：报价者名＋报价大字；无报价时留白（思考状态由座位动画表达，不摆文字）
   const bidderTag = o.currentBid && isTrio() ? `<span class="bidder-tag">${dispName(o.currentBid.player)}：</span>` : '';
   $('bidBig').innerHTML = o.currentBid
     ? `${bidderTag}<span class="n">${o.currentBid.count}</span><span class="x">个</span>${dieHtml(o.currentBid.face, !o.zhai && o.currentBid.face === 1 ? 'wild' : '')}`
-    : `<span class="none">${o.over ? '' : o.turn === 'A' ? '等你开口' : `${dispName(o.turn)}在想`}</span>`;
+    : `<span class="none"></span>`;
 
   const rs = lastEvent(o, 'roundStart');
   $('myCommit').textContent = meAlive && rs.commits.A ? `封 ${rs.commits.A.slice(0, 10)}` : '出局旁观';
@@ -779,8 +781,12 @@ function openDrawer(section) {
   const byok = loadByok() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
   disarmIdle(); // 看规矩不吃决策钟；关闭时重开当轮
   d.classList.remove('hidden');
+  const rsNow = match ? lastEvent(ob(), 'roundStart') : null;
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
-    <h2>规矩</h2>
+    <nav class="drawer-nav">
+      <a href="#secRules">规矩</a><a href="#profileSec">档案</a><a href="#secSeal">封印</a><a href="#secBrain">接脑子</a>
+    </nav>
+    <h2 id="secRules">规矩</h2>
     <ul>
       <li>你和他各摇五颗暗骰。轮流报数：「桌上至少有 N 个 X 点」——说的是双方合计。</li>
       <li>报数只能往上抬：数量加大，或数量不变、点数加大。首报至少 2 个。</li>
@@ -813,7 +819,16 @@ function openDrawer(section) {
       <option value="trio" ${loadTable() === 'trio' ? 'selected' : ''}>三人桌——老李头＋阿飞</option>
       <option value="duo" ${loadTable() === 'duo' ? 'selected' : ''}>单挑——只跟老李头</option>
     </select>
-    <h2>接上他的脑子</h2>
+    <h2 id="secSeal">本局封印</h2>
+    <p>每局开始，各家骰面连同随机数封成哈希先上屏；摊牌时开封可验——谁都不能重掷。</p>
+    ${
+      rsNow
+        ? Object.entries(rsNow.commits)
+            .map(([s, c]) => `<p class="note-item"><b>${dispName(s)}</b>　<span class="mono-sm">${c}</span></p>`)
+            .join('')
+        : ''
+    }
+    <h2 id="secBrain">接上他们的脑子</h2>
     <p>两种接法：① 拿到暗号的，只填 API Key 一格（填暗号），走官方通道；② 自带 API 的，三格全填，浏览器直连模型商、钥匙只存这台设备。全空则他不说话，只算数。</p>
     <label>Base URL</label><input id="fBase" value="${byok.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <label>API Key</label><input id="fKey" type="password" value="${byok.apiKey}">
@@ -979,7 +994,6 @@ $('blindBtn').addEventListener('click', () => onDeclare('blind'));
 $('zhaiBtn').addEventListener('click', () => onDeclare('zhai'));
 $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
-$('gear').addEventListener('click', () => openDrawer('profile'));
-$('rulesBtn').addEventListener('click', () => openDrawer());
+$('menuBtn').addEventListener('click', () => openDrawer());
 
 newMatch();
