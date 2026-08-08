@@ -206,6 +206,33 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.match(user, /宣言和词条都是真招/, '机制使用软推在场');
 });
 
+test('原子注册表语义面：许愿词条与官方同权——自定义动作自动获得候选说明/嘴手纪律/叙事', async () => {
+  // 一个"许愿形态"的词条：自定义 type/label，效果复用 revealOwnDie 原子
+  const wish = {
+    id: 'wish-shi',
+    name: '试胆',
+    origin: 'wish',
+    card: '看过骰后可拍「试」亮一颗。',
+    actions: [
+      { type: 'shidan', label: '试', window: { turn: true, requiresPeeked: true, oncePer: 'round' }, params: 'face', keepTurn: true, effect: [{ op: 'revealOwnDie' }] },
+    ],
+  };
+  const m = await createMatch({ seed: 5, config: { mods: [wish] } });
+  await m.act('A', { type: 'peek' });
+  const obA = m.observe('A');
+  const { user } = buildPrompts(obA, '');
+  assert.match(user, /拍词条「试」/, '自定义 label 进候选');
+  assert.match(user, /face 填骰子的点数/, '语义钉死来自原子注册表，不是官方 id 白名单');
+  assert.match(user, /说错当场穿帮/, '嘴手纪律同权');
+  // 叙事同权：亮出后进对手的局面叙事
+  const face = obA.yourDice[0];
+  await m.act('A', { type: 'shidan', face });
+  await m.act('A', { type: 'bid', count: 2, face: 3 });
+  await m.act('B', { type: 'peek' });
+  const { user: userB } = buildPrompts(m.observe('B'), '');
+  assert.match(userB, new RegExp(`对方亮出自己一颗 ${face}`), '叙事查注册表');
+});
+
 test('沉默 bot：被让报推回自己的价时守法（不开自己的价，继续抬）', async () => {
   const m = await matchWith([rang], 5);
   await m.act('A', { type: 'bid', count: 2, face: 4 });

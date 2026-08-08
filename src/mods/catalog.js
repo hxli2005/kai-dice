@@ -5,32 +5,63 @@
 
 // ---------- 原子注册表 ----------
 
+import { obProbExact } from '../probability.js';
+
 // 效果原子（引擎侧预实现，Q38"原子预审预实现"）。
 // tension（Q35 张力守恒律）：moves=搬运不确定性（合格）；kills=出售确定性（不许上桌）。
+//
+// 每个原子是"全息条目"——除引擎/编译面（doc/card/tension/needs）外，还带五个语义槽，
+// AI 客户端与 UI 只查表零分支，官方词条与玩家许愿自动同权（都是这些原子的组合）：
+//   ai(ob, fmtP)  候选动作说明（含语义钉死：点数不是第几颗、恰好概率双发等）
+//   sayRule       嘴手纪律（台词必须怎么贴住这个动作——方向锚、点数一致等）
+//   narrate(e, who) 公开事件叙事（喂进全桌 AI 的局面叙事）
+//   selfDesc(a)   自我记忆回灌里对这动作的描述（防跨调用失忆）
+//   stamp(a, label) 盖章演出的字（裁判层视觉永远说真话）
 export const OPS = {
   revealOwnDie: {
     doc: '亮出自己选定的一颗骰给全桌看（永久公开，仍算你手里的骰）。需要 window.requiresPeeked=true、params="face"、keepTurn=true',
     card: '翻开自己选定的一颗骰给全桌看（亮出的骰算数、收不回）',
     tension: 'moves', // 付信息买歧义：亮的是饵还是实话，对面读不透
     needs: { requiresPeeked: true, params: 'face', keepTurn: true },
+    ai: () => `亮出自己的一颗骰给全桌看。face 填骰子的点数（1–6，必须真在你手里），不是第几颗`,
+    sayRule: '亮出的骰全桌都看得见——台词里若提点数，必须就是 face 里的数，说错当场穿帮',
+    narrate: (e, who) => `${who(e.player)}亮出自己一颗 ${e.face}`,
+    selfDesc: (a) => `亮出了一颗 ${a.face}（全桌可见）`,
+    stamp: (a, label) => `${label} ${a.face}`,
   },
   calzaResolve: {
     doc: '宣布"当前报价恰好为真"并当场开牌：恰好→你赢回一颗骰（唯一回骰通道）并收池；不恰→你掉一颗骰、报价者收池；被掐的报价者永不掉骰。需要 window.needBid=true、notOwnBid=true、terminal=true，且必须是唯一效果',
     card: '宣布报价恰好为真并开牌——恰好则你赢回一颗骰并收池，不恰则你掉一颗骰、池归报价者（报价者不掉骰）',
     tension: 'moves', // 在开/跟之间劈出第三条分叉
     needs: { needBid: true, notOwnBid: true, terminal: true, sole: true },
+    ai: (ob, fmtP) =>
+      `宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`,
+    sayRule: '方向别搞反：是你主动出手掐对方的报价——台词是"我掐你"，不是"我被掐"',
+    narrate: null, // 终局动作：摊牌事件自带叙事（matchRecap 的掐分支）
+    selfDesc: () => '主动掐了对方的报价',
+    stamp: (a, label) => label,
   },
   returnBid: {
     doc: '把当前报价原样推回给报价者，他必须自己继续抬（不能开自己的价）。需要 window.needBid=true、notOwnBid=true、needRaisableByBidder=true，且必须是唯一效果',
     card: '把当前报价原样推回去，对方必须自己接着抬',
     tension: 'moves', // 让节奏换池深与开牌权
     needs: { needBid: true, notOwnBid: true, needRaisableByBidder: true, sole: true },
+    ai: () => `把这口价原样推回给报价者，他必须自己接着抬`,
+    sayRule: '你是把价推回去的人——话顺着"这价还给你"说，不是你在接价',
+    narrate: (e, who) => `${who(e.player)}把报价原样推了回去`,
+    selfDesc: () => '把对方的报价原样推了回去',
+    stamp: (a, label) => label,
   },
   potMult: {
     doc: '本局池倍率 ×x（x 只许 2 或 3；与盲/斋/抬/深水相乘）。需要 window.oncePer、keepTurn=true',
     card: null, // 动态：`本局池 ×${x}`
     tension: 'moves', // 与「抬」同族：注型即信号
     needs: { keepTurn: true, oncePerRequired: true },
+    ai: () => `本局池翻倍`,
+    sayRule: '你在主动把赌注抬大——话要压得住这个注',
+    narrate: (e, who) => `${who(e.player)}把本局池抬到 ×${e.x}`,
+    selfDesc: () => '把本局池翻了倍',
+    stamp: (a, label) => label,
   },
 };
 

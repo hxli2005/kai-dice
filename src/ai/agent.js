@@ -5,7 +5,8 @@
 // 词条（§8 实验桌）：规则卡明牌注入、动作 schema 动态扩展——LLM 读规则即生效（Q24 规则流动性）。
 
 import { allLegalBids, isLegalBid } from '../rules.js';
-import { obProb, obProbExact } from '../probability.js';
+import { obProb } from '../probability.js';
+import { OPS } from '../mods/catalog.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { TONES, DEFAULT_PERSONA } from './personas.js';
@@ -63,15 +64,7 @@ function narrate(events, you, names) {
     if (e.type === 'declare')
       lines.push(`${who(e.player)}宣言「${DECL[e.declaration] ?? e.declaration}」${t}`);
     if (e.type === 'modAction')
-      lines.push(
-        e.op === 'revealOwnDie'
-          ? `${who(e.player)}亮出自己一颗 ${e.face}${t}`
-          : e.op === 'returnBid'
-            ? `${who(e.player)}把报价原样推了回去${t}`
-            : e.op === 'potMult'
-              ? `${who(e.player)}把本局池抬到 ×${e.x}${t}`
-              : `${who(e.player)}用了词条动作${t}`,
-      );
+      lines.push(`${OPS[e.op]?.narrate?.(e, who) ?? `${who(e.player)}用了词条动作`}${t}`); // 语义查原子注册表——许愿词条同权
   }
   return lines.length ? lines.join('；') : '（本局尚无动作）';
 }
@@ -103,29 +96,25 @@ function matchRecap(events, you, names) {
 // 粗算（阿飞装备）：不给百分比，给手感话——他不是不知道世界，是懒得算精
 const coarse = (p) => (p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯');
 
-// 自己刚才的动作 → 一句话（自我记忆回灌用）
-const ownActDesc = (a) =>
-  a?.type === 'declare'
-    ? `宣言了「${DECL[a.declaration] ?? a.declaration}」`
-    : a?.type === 'bid'
-      ? `报了 ${a.count} 个 ${a.face}`
-      : a?.type === 'peek'
-        ? '掀盅看了骰'
-        : a?.type
-          ? `用了「${a.type}」${a.face ? `（亮出 ${a.face}）` : ''}`
-          : '（无动作）';
+// 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
+const ownActDesc = (a, ob) => {
+  if (a?.type === 'declare') return `宣言了「${DECL[a.declaration] ?? a.declaration}」`;
+  if (a?.type === 'bid') return `报了 ${a.count} 个 ${a.face}`;
+  if (a?.type === 'peek') return '掀盅看了骰';
+  if (!a?.type) return '（无动作）';
+  const meta = modActionMeta(ob, a.type);
+  if (!meta) return `用了「${a.type}」`;
+  const desc = meta.ops.map((op) => OPS[op]?.selfDesc?.(a)).filter(Boolean).join('，');
+  return `拍了「${meta.label}」${desc ? `——${desc}` : ''}`;
+};
 
-// 词条候选动作行：op 驱动的说明（许愿词条同样生效——原子决定语义，不靠 id 白名单）
+// 词条候选动作行：语义整行查原子注册表（ai 说明＋sayRule 嘴手纪律）——
+// 官方词条与玩家许愿走同一条路，加新原子零改动（注册表即唯一事实源）
 function modCandidateLine(meta, ob, fmtP) {
   const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":要亮的点数' : ''}}`;
-  let desc = '';
-  if (meta.ops.includes('calzaResolve'))
-    desc = `——宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰。方向别搞反：是你主动出手掐对方的报价，台词是"我掐你"，不是"我被掐"`;
-  else if (meta.ops.includes('returnBid')) desc = `——把这口价原样推回给报价者，他必须自己接着抬`;
-  else if (meta.ops.includes('revealOwnDie'))
-    desc = `——亮出自己的一颗骰给全桌看。face 填骰子的点数（1–6，必须真在你手里），不是第几颗；亮出后全桌都看得见这颗骰，台词里若提点数必须就是它，说错当场穿帮`;
-  else if (meta.ops.includes('potMult')) desc = `——本局池翻倍`;
-  return `拍词条「${meta.label}」${desc}（${json}${meta.keepTurn ? '，之后你继续行动' : ''}）`;
+  const desc = meta.ops.map((op) => OPS[op]?.ai?.(ob, fmtP)).filter(Boolean).join('，并且');
+  const rules = meta.ops.map((op) => OPS[op]?.sayRule).filter(Boolean).join('；');
+  return `拍词条「${meta.label}」${desc ? `——${desc}` : ''}${rules ? `。${rules}` : ''}（${json}${meta.keepTurn ? '，之后你继续行动' : ''}）`;
 }
 
 export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
@@ -172,7 +161,7 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       ? `你自己这局刚做过：${ctx.ownLog
           .map(
             (l) =>
-              `${ownActDesc(l.action)}${l.say ? `，嘴上说的是「${l.say}」` : ''}${l.note ? `（当时心思：${l.note}）` : ''}`,
+              `${ownActDesc(l.action, ob)}${l.say ? `，嘴上说的是「${l.say}」` : ''}${l.note ? `（当时心思：${l.note}）` : ''}`,
           )
           .join('；')}。接下来的动作和台词必须接得上这些话——要么兑现，要么是你有意在诈（心里要有数），不许像失忆一样自相矛盾。`
       : null,

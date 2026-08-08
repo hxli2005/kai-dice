@@ -8,6 +8,7 @@ import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
 import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
+import { OPS } from '../mods/catalog.js';
 import { joinRoom, createRemoteRoom } from './net.js';
 import { SEALS, PHRASES } from '../room/protocol.js';
 import { compileWish } from '../mods/compiler.js';
@@ -44,6 +45,14 @@ let pickPending = null; // 词条参数拾取（亮一颗：先拍章再点自�
 const modMetaOf = (o, type) => o.mods?.flatMap((m) => m.actions).find((a) => a.type === type);
 // 好友房（Q29）：room 非空即远程模式——本地不驱动 AI，一切演出由事件重放驱动
 let room = null;
+// 词条盖章内容查原子注册表（裁判层视觉说真话；许愿词条同权）
+const modStamp = (meta, action) => {
+  for (const op of meta.ops) {
+    const s = OPS[op]?.stamp?.(action, meta.label);
+    if (s) return s;
+  }
+  return meta.label;
+};
 let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
@@ -641,7 +650,7 @@ async function onPickDie(face) {
   if (!meta || busy) return;
   await match.act('A', { type: meta.type, face }, { elapsedMs: performance.now() - turnStart });
   if (room) return;
-  stampFx(`${meta.label} ${face}`);
+  stampFx(modStamp(meta, { type: meta.type, face }));
   sfx.land();
   render();
 }
@@ -704,7 +713,7 @@ async function aiTurnFor(seat) {
   if (meta?.terminal) return doShowdown(seat, { elapsedMs, sayText: d.say, actionType: d.action.type });
   await match.act(seat, d.action, { elapsedMs });
   if (d.action.type === 'declare') stampFx(stampText(d.action.declaration));
-  else if (meta) stampFx(meta.params === 'face' && d.action.face ? `${meta.label} ${d.action.face}` : meta.label); // 亮的点数打在章上——裁判层视觉永远说真话
+  else if (meta) stampFx(modStamp(meta, d.action));
   else sfx.tick();
   if (d.say) speak(d.say, seat);
   busy = false;
