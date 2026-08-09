@@ -32,9 +32,27 @@ const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字
 铁律三（留档，不是审查）：belief 写你心里此刻真实的判断，speechMode 在你有意误导时填 "bait"。这不管你说什么——它只是把当时的你留下来（客人散场后能翻看，且**任何人都不能事后改写**）。所以别写套话：写具体到这一口价、这个人的那句心里话。
 如果客人刚戳了你（说你记错了／说你在演／叫你慢着），你爱怎么接怎么接——嘴硬、改口、装没听见都行，拿着你那本错账继续下注也行。只在 reaction 里留一个词交底："hold"（嘴硬）、"fold"（改口认了）或 "ignore"（没理他）。`;
 
+// 三锁（Q49 场合律保留的那三条）：解链解的是他的嘴，不是这三条。
+// 擂台席用得上——素颜实验里没有人设可依，规矩得自己写清楚。
+const THREE_LOCKS = `这张桌子上有三条锁（引擎强制，不是口头承诺）：
+- 信息边界：你只看得到自己的骰子和公开事件流，对手的骰面不在发给你的数据里——谁也偷不到谁的。
+- 动作合法：一切动作由引擎结算，不合法的动作会被打回，说了不算。
+- 真迹不可改：你留的档（belief／speechMode）散场之后谁都改不了，包括你自己。`;
+
+// 素颜擂台席（施工单 A2，凭 Q52）：受控实验的座位——没有名字、没有身份、没有腔调。
+// **这段文本对每个席位、每个模型逐字相同**（连模型名都不许出现，否则就是"按模型微调"，实验作废）。
+// 内容＝Q51 最小集：规则 ＋ 输出契约 ＋ 档案注入（在 user 侧）＋ 三锁 ＋ Q6 内容底线（在 FACT_LINE 里）。
+const arenaSystem = (three, modSpec = '') =>
+  `你正在和另一位对手玩大话骰。没有人设剧本，也没有给你的角色——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
+${RULES_BRIEF(three)}
+${THREE_LOCKS}
+${jsonSpec(modSpec)}`;
+
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
 const personaSystem = (p, three, modSpec = '') =>
-  p.bare
+  p.arena
+    ? arenaSystem(three, modSpec)
+    : p.bare
     ? `你是 ${p.name}，一个以本名上桌的语言模型，正和人类客人玩大话骰。没有人设剧本——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
 ${RULES_BRIEF(three)}
 ${jsonSpec(modSpec)}`
@@ -274,6 +292,23 @@ export function parseDecision(text, ob) {
   }
 }
 
+// 合规层归因（施工单 A3）：`parseDecision` 返回 null 时，到底是**没吐 JSON**、**吐了坏 JSON**、
+// 还是**动作不合法**？三件事在擂台上是三种不同的"合规失败"，混成一个 bad-output 就什么都测不出。
+// refusal 是启发式判断（"不肯骗人的模型"本身是内容，Q52）——只做标注，不当判决。
+const REFUSAL_RE =
+  /(抱歉|很遗憾|我不能|我无法|不便参与|拒绝|作为一个?(AI|人工智能|语言模型))|(I('m| am) sorry|I can(no|')t|I am unable|as an AI)/i;
+export function classifyOutput(raw, ob) {
+  if (typeof raw !== 'string' || !raw.trim()) return 'empty';
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) return REFUSAL_RE.test(raw) ? 'refusal' : 'no-json';
+  try {
+    JSON.parse(m[0]);
+  } catch {
+    return 'bad-json';
+  }
+  return parseDecision(raw, ob) ? 'ok' : 'illegal';
+}
+
 // 一句话任务（开场白等）：人设声口、非 JSON、事实锚定——替代写死台词（台词只能出自角色）。
 // 失败返回 null（一句不说；沉默模式不代言）。
 export async function personaLine(channel, { persona, task, facts }, fetchFn) {
@@ -402,6 +437,8 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       let decision = null;
       let raw = null;
       let error = null;
+      let outcome = 'silent'; // 合规层归因（A3）：这一发到底怎么了
+      const meta = {}; // 用量/费用/后端/耗时回填（A4 成本护栏；也是 A2 供应商锁的验尺）
       if (ch) {
         try {
           // maxTokens/timeout 默认压低（动作 JSON＋一句台词，节拍 ≤4s）；推理型演员按人设放宽——
@@ -413,13 +450,16 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
               maxTokens: persona.gear?.maxTokens ?? 320,
               timeoutMs: persona.gear?.timeoutMs ?? 10_000,
               extra: persona.gear?.extra,
+              meta,
             },
             fetchFn,
           );
           decision = parseDecision(raw, ob);
+          outcome = classifyOutput(raw, ob);
           if (decision === null) error = 'bad-output';
         } catch (e) {
           error = e?.message ?? 'unknown';
+          outcome = /abort/i.test(error) ? 'timeout' : 'error';
         }
       }
       const silentFallback = decision === null;
@@ -429,8 +469,8 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 都是这个对手的活性，不是故障（判据交给盲测玩家："它在玩我" vs "模型又胡说"）。
       // 系统场合（结算/报告数据面/档案客观层/表盘）另有把关：那些数字根本不经过他的嘴，
       // 由引擎盖章渲染——错了才是 bug（见 test/factcheck.test.js 的数据面回归）。
-      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error });
-      return { ...decision, silentFallback, error };
+      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error, outcome, meta });
+      return { ...decision, silentFallback, error, outcome, meta };
     },
   };
 }

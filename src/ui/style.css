@@ -705,6 +705,17 @@ button.danger:active { transform: scale(0.95); }
 .linkish:disabled { color: var(--dim); text-decoration: none; }
 .wipe-armed { color: var(--red-hi) !important; }
 
+/* OpenRouter 模型清单（A1）：当场拉的名单，滚动挑——移动端一屏放不下四百个模型 */
+.or-list { max-height: 12rem; overflow-y: auto; margin-top: 0.4rem; border: 1px solid rgba(242, 232, 213, 0.14); border-radius: 0.45rem; }
+.or-row {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+  width: 100%; padding: 0.45rem 0.6rem; background: none; border: none;
+  border-bottom: 1px solid rgba(242, 232, 213, 0.08);
+  color: var(--ink); font-family: var(--mono); font-size: 0.78rem; text-align: left;
+}
+.or-row:last-child { border-bottom: none; }
+.or-row span { color: var(--dim); font-size: 0.72rem; }
+
 .test-line { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.1rem; color: var(--dim); }
 .test-line.ok { color: var(--lamp); }
 .test-line.bad { color: var(--red-hi); }

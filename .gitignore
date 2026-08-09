@@ -5,3 +5,7 @@ dist/
 # wrangler 本地开发缓存
 .wrangler/
 **/.wrangler/
+
+# 擂台跑批的全量事件与决策日志（大且只对本机有用）——
+# 榜（board.md）与台词留样（lines.md）是证据，照常入库
+docs/arena/**/run.json

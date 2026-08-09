@@ -8,6 +8,7 @@ import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent
 import { silentSay } from '../ai/voice.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS } from '../ai/personas.js';
+import { OPENROUTER_BASE, isOpenRouter, originHeaders, fetchModels, perMillion } from '../ai/openrouter.js';
 import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
 import { OPS } from '../mods/catalog.js';
 import { joinRoom, createRemoteRoom } from './net.js';
@@ -123,9 +124,13 @@ function officialChannelOf(per) {
     headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
   };
 }
+// OpenRouter（A1）：按其惯例带来源标识头。key 仍不出设备——浏览器直连，我方服务器不经手。
+// 抽成一处是有教训的：这批实测踩到"头值非 ASCII 直接把整条通道打死"，
+// 而当时连通测试走的是另一条路，测得通、打起来全静默——**试嗓要试你真唱的那条**。
+const withGuestHeaders = (g) => (isOpenRouter(g.baseUrl) ? { ...g, headers: originHeaders() } : g);
 function guestChannelOf() {
   const g = loadGuest();
-  return g?.apiKey && g?.baseUrl ? g : null;
+  return g?.apiKey && g?.baseUrl ? withGuestHeaders(g) : null;
 }
 const chanForPersona = (per) => (per?.bare ? guestChannelOf() : officialChannelOf(per));
 
@@ -161,7 +166,7 @@ async function testPass() {
 }
 async function testGuest(cfg) {
   try {
-    await chat(cfg, { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
+    await chat(withGuestHeaders(cfg), { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
     return { ok: true, msg: '已连通' };
   } catch (e) {
     return { ok: false, msg: friendlyError(e?.message ?? '') };
@@ -1359,6 +1364,71 @@ function openDrawer(section, inLobby = false) {
   });
 }
 
+// OpenRouter 模型挑选（A1，凭 Q52①）：**清单当场拉，不预置会腐烂的名单**。
+// 拉不到就退回自由输入框（老路子照旧能用）——宁可让人自己敲，也不摆一份三个月前的幽灵名单。
+let orCache = null;
+function wireOpenRouterPicker(d) {
+  const base = d.querySelector('#gBase');
+  const box = d.querySelector('#orBox');
+  const list = d.querySelector('#orList');
+  const filter = d.querySelector('#orFilter');
+  const note = d.querySelector('#orNote');
+  const sync = () => box.classList.toggle('hidden', !isOpenRouter(base.value));
+  base.addEventListener('input', sync);
+  sync();
+  d.querySelector('#gDS').addEventListener('click', () => {
+    base.value = 'https://api.deepseek.com/v1';
+    sync();
+  });
+  d.querySelector('#gOR').addEventListener('click', () => {
+    base.value = OPENROUTER_BASE;
+    d.querySelector('#gFmt').value = 'openai'; // OpenRouter 是 OpenAI 兼容口，Anthropic 模型也从这个口进
+    sync();
+  });
+
+  const draw = () => {
+    const q = filter.value.trim().toLowerCase();
+    let ms = orCache ?? [];
+    if (q === '免费') ms = ms.filter((m) => m.free);
+    else if (q === '便宜')
+      ms = [...ms].filter((m) => !m.free && m.priceKnown).sort((a, b) => a.promptPrice - b.promptPrice);
+    else if (q) ms = ms.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
+    list.innerHTML = ms
+      .slice(0, 60)
+      .map((m) => {
+        const price = m.free
+          ? '免费'
+          : m.priceKnown
+            ? `$${perMillion(m.promptPrice).toFixed(2)}/$${perMillion(m.completionPrice).toFixed(2)} 每百万`
+            : '价格不定（路由型）';
+        return `<button class="or-row" data-id="${m.id}"><b>${m.id}</b><span>${price}${m.reasoning ? ' · 思考型（慢且贵）' : ''}</span></button>`;
+      })
+      .join('');
+    note.textContent = `清单 ${orCache?.length ?? 0} 个，显示 ${Math.min(ms.length, 60)} 个。`;
+  };
+
+  d.querySelector('#orLoad').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    note.textContent = '拉取中…';
+    try {
+      orCache = orCache ?? (await fetchModels()); // 清单是公开的：拉名单不用把钥匙递出去
+      filter.classList.remove('hidden');
+      list.classList.remove('hidden');
+      draw();
+    } catch {
+      note.textContent = '清单拉不下来（网络或它那边的事）——照旧手敲 Model 就行。';
+    }
+    e.target.disabled = false;
+  });
+  filter.addEventListener('input', draw);
+  list.addEventListener('click', (e) => {
+    const row = e.target.closest('.or-row');
+    if (!row) return;
+    d.querySelector('#gModel').value = row.dataset.id;
+    note.textContent = `已选 ${row.dataset.id}`;
+  });
+}
+
 // ---------- 客席配置（Q28）：自带钥匙，模型以本名入座 ----------
 function openGuestConfig() {
   const d = $('drawer');
@@ -1369,8 +1439,15 @@ function openGuestConfig() {
     <h2>客席</h2>
     <p class="p-idline">自带钥匙，让你的模型以本名上桌——素颜，无人设，只守规矩。换模型＝换人，各记各的账。钥匙只存这台设备，浏览器直连模型商。</p>
     <label>Base URL</label><input id="gBase" value="${g.baseUrl}" placeholder="https://api.deepseek.com/v1">
+    <p class="dim-line">一把钥匙开一屋子模型：<button class="linkish" id="gOR">用 OpenRouter</button>　·　<button class="linkish" id="gDS">用 DeepSeek</button></p>
     <label>API Key</label><input id="gKey" type="password" value="${g.apiKey}">
     <label>Model</label><input id="gModel" value="${g.model}" placeholder="deepseek-chat">
+    <div id="orBox" class="hidden">
+      <div class="btnrow" style="margin-top:0.5rem"><button class="ghost" id="orLoad">拉一份现在的模型清单</button></div>
+      <input id="orFilter" class="hidden" placeholder="筛一筛：claude / deepseek / 便宜 / 免费">
+      <div id="orList" class="or-list hidden"></div>
+      <p id="orNote" class="dim-line"></p>
+    </div>
     <label>格式</label><select id="gFmt">
       <option value="openai" ${g.format !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option>
       <option value="anthropic" ${g.format === 'anthropic' ? 'selected' : ''}>Anthropic</option>
@@ -1378,6 +1455,7 @@ function openGuestConfig() {
     <div class="btnrow"><button class="primary" id="saveGuestBtn">保存并试一手</button>${loadGuest() ? '<button class="ghost" id="clearGuestBtn">撤席</button>' : ''}</div>
     <div id="guestTest" class="test-line"></div>`;
   d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
+  wireOpenRouterPicker(d);
   d.querySelector('#clearGuestBtn')?.addEventListener('click', () => {
     saveGuest(null);
     d.classList.add('hidden');

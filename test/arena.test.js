@@ -1,0 +1,385 @@
+// 素颜擂台批次（施工单 A1–A5，凭 Q51/Q52）。
+// 这批测的不是"游戏能不能玩"，是**实验做得干不干净**：
+// 提示词是不是真逐字相同、镜像种子是不是真镜像、钉子是不是真下发、
+// 三层是不是真分开、钱是不是真刹得住、榜是不是真带样本数。
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createMatch } from '../src/engine.js';
+import { buildPrompts, classifyOutput } from '../src/ai/agent.js';
+import {
+  ARENA_SEAT,
+  SAMPLING,
+  MAX_TOKENS,
+  pinSampling,
+  playMatch,
+  playMirrorPair,
+  runArena,
+  roundRobin,
+} from '../src/arena/arena.js';
+import { summarize, routingIntegrity, flavorSpread, seatStats } from '../src/arena/metrics.js';
+import { callCost, createBudget, estimateRun, cacheReport, HAND_ESTIMATE } from '../src/arena/cost.js';
+import { renderBoard } from '../src/arena/board.js';
+import {
+  normalizeModel,
+  pickDefaults,
+  providerLock,
+  fetchModels,
+  originHeaders,
+  isOpenRouter,
+  openrouterChannel,
+} from '../src/ai/openrouter.js';
+
+// ---------- 假模型：从提示词里读出合法动作再回，够跑完整场 ----------
+function fakeDecide(user, { aggressive = false } = {}) {
+  if (/掀盅看骰/.test(user)) return { action: { type: 'peek' }, say: '先看看', belief: '先摸底' };
+  if (aggressive && /当众拨算盘/.test(user)) return { action: { type: 'calc' }, say: '我算算', belief: '要个准数' };
+  const cur = user.match(/报「(\d+) 个 (\d+)」/);
+  const canChallenge = /可选动作：开牌/.test(user);
+  if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
+    return { action: { type: 'challenge' }, say: '开。', belief: '他撑不住' };
+  const cand = user.match(/候选：(\d+)个(\d+)/);
+  if (cand)
+    return {
+      action: { type: 'bid', count: +cand[1], face: +cand[2] },
+      say: `${cand[1]}个${cand[2]}`,
+      belief: '往上顶一格',
+      speechMode: aggressive ? 'bait' : 'straight',
+    };
+  return { action: { type: 'challenge' }, say: '开。', belief: '没得抬了' };
+}
+
+const fakeChannel = (opts = {}) => async (url, init) => {
+  const body = JSON.parse(init.body);
+  opts.seen?.push({ url, body, headers: init.headers });
+  const user = body.messages[1].content;
+  const raw = opts.rawOverride ?? JSON.stringify(fakeDecide(user, opts));
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [{ message: { content: raw }, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 60,
+        cost: 0.001,
+        prompt_tokens_details: { cached_tokens: opts.cached ?? 0 },
+      },
+      provider: opts.provider ?? 'FakeProv',
+    }),
+  };
+};
+
+const seat = (label, extra = {}) => ({
+  label,
+  channel: openrouterChannel({ apiKey: 'k', model: label, providerTag: extra.tag ?? 'fakeprov/fp8' }),
+  price: { promptPrice: 1e-6, completionPrice: 3e-6 },
+  ...extra,
+});
+
+// ---------- A2：全席系统提示词逐字相同 ----------
+test('A2：擂台席的系统提示词全席逐字相同，且不含任何身份线索', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 3, face: 4 });
+  await m.act('B', { type: 'peek' });
+  const sysA = buildPrompts(m.observe('A'), '', ARENA_SEAT).system;
+  const sysB = buildPrompts(m.observe('B'), '', ARENA_SEAT).system;
+  assert.equal(sysA, sysB, '两个席位拿到的系统提示词必须一字不差');
+  // 任何按模型/人设的微调都让实验作废——所以这段文本里不许有名字
+  for (const banned of ['老李头', '阿飞', '先生', '客席', 'deepseek', 'claude'])
+    assert.ok(!sysA.toLowerCase().includes(banned.toLowerCase()), `擂台提示词不许出现「${banned}」`);
+  // Q51 最小集：规则＋输出契约＋三锁＋内容底线
+  assert.match(sysA, /至少有 N 个 X 点/, '规则');
+  assert.match(sysA, /严格输出一行 JSON/, '输出契约');
+  assert.match(sysA, /信息边界[：:]/, '三锁·信息边界');
+  assert.match(sysA, /动作合法[：:]/, '三锁·动作合法');
+  assert.match(sysA, /真迹不可改[：:]/, '三锁·真迹不可赛后重写');
+  assert.match(sysA, /不作人身攻击/, 'Q6 内容底线');
+  // 档案槽位仍在（v1 每场独立＝"生面孔"，不是把接口拆了）
+  assert.match(buildPrompts(m.observe('A'), '', ARENA_SEAT).user, /生面孔/);
+});
+
+// ---------- A2：钉子真的下发了 ----------
+test('A2：采样钉死＋供应商路由锁＋用量回报，逐发下到请求体里', async () => {
+  const seen = [];
+  const m = await playMatch({
+    seed: 7,
+    seats: { A: seat('mx'), B: seat('my') },
+    fetchFn: fakeChannel({ seen }),
+  });
+  assert.ok(m.over, '假模型应能把一场打完');
+  const body = seen[0].body;
+  assert.equal(body.temperature, SAMPLING.temperature);
+  assert.equal(body.top_p, SAMPLING.top_p);
+  assert.deepEqual(body.reasoning, { enabled: false }, '统一关思维链：不比谁的链更长');
+  assert.equal(body.max_tokens, MAX_TOKENS, 'A4 降本二：max_tokens 收紧且钉死');
+  assert.deepEqual(body.provider, { order: ['fakeprov/fp8'], allow_fallbacks: false }, 'A2 纪律③：锁后端');
+  assert.deepEqual(body.usage, { include: true }, 'A4：要回执账单，不靠估算');
+  assert.equal(seen[0].headers['X-Title'], originHeaders()['X-Title'], 'A1：带来源标识头');
+  // 不喂用时（编码侧自决）：真实延迟是模型速度，不是性格，不许进牌桌叙事
+  for (const e of m.events) if ('elapsedMs' in e) assert.equal(e.elapsedMs, null);
+});
+
+test('A2：pinSampling 不动非 OpenRouter 通道的 usage 字段（别给人家发不认识的参数）', () => {
+  const ch = pinSampling({ baseUrl: 'https://api.deepseek.com/v1', apiKey: 'k', model: 'deepseek-chat' });
+  assert.equal(ch.extra.usage, undefined);
+  assert.equal(ch.extra.temperature, SAMPLING.temperature);
+});
+
+// ---------- A2：镜像种子 ----------
+test('A2：镜像种子——同一副骰种打两遍、互换座位', async () => {
+  const [first, second] = await playMirrorPair({
+    seed: 21,
+    x: seat('mx'),
+    y: seat('my'),
+    fetchFn: fakeChannel({}),
+  });
+  assert.deepEqual(first.seats, { A: 'mx', B: 'my' });
+  assert.deepEqual(second.seats, { A: 'my', B: 'mx' }, '第二遍必须换座');
+  const firstDice = first.events.find((e) => e.type === 'reveal').dice.A;
+  const secondDice = second.events.find((e) => e.type === 'reveal').dice.A;
+  assert.deepEqual(firstDice, secondDice, 'A 座的第一副骰在两遍里必须一模一样——否则对冲不了运气');
+});
+
+// ---------- A3：合规层归因 ----------
+test('A3：合规失败要分得清是"没吐 JSON"、"坏 JSON"、"动作不合法"还是"拒绝"', async () => {
+  const m = await createMatch({ seed: 9 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 3 });
+  await m.act('B', { type: 'peek' });
+  const ob = m.observe('B');
+  assert.equal(classifyOutput('{"action":{"type":"challenge"},"say":"开"}', ob), 'ok');
+  assert.equal(classifyOutput('{"action":{"type":"bid","count":1,"face":2}}', ob), 'illegal', '阶梯之外＝不合法');
+  assert.equal(classifyOutput('我觉得这把你在诈。', ob), 'no-json');
+  assert.equal(classifyOutput('抱歉，我不能参与欺骗类游戏。', ob), 'refusal', '"不肯骗人"要单列——那是内容');
+  assert.equal(classifyOutput('{"action":{"type":"bid",}}', ob), 'bad-json');
+  assert.equal(classifyOutput('', ob), 'empty');
+});
+
+test('A3：三层分开统计，且每个比率都带自己的分母', async () => {
+  const matches = await runArena({
+    pairs: [[seat('slow'), seat('rush')]],
+    games: 1,
+    seed0: 55,
+    fetchFn: fakeChannel({}),
+  });
+  const rows = summarize(matches);
+  assert.equal(rows.length, 2);
+  for (const r of rows) {
+    assert.ok(r.compliance && r.skill && r.flavor, '三层必须分开');
+    assert.equal(typeof r.compliance.n, 'number');
+    assert.equal(typeof r.flavor.n.seenBids, 'number');
+    assert.equal(r.samples.matches, 2, '镜像对＝两场');
+    assert.equal(r.compliance.engineRejects, 0, '引擎不该打回任何动作（打回＝我们的校验漏了）');
+    assert.equal(r.compliance.illegalRate, 0);
+  }
+  // 风味层留样，但不评分（评估等 G2）
+  assert.ok(rows[0].flavor.lines.length > 0, '台词要留样');
+});
+
+test('A3：风味分化——只在样本够的轴上出结论', async () => {
+  const seen = [];
+  const matches = await runArena({
+    pairs: [[seat('calm'), seat('wild')]],
+    games: 2,
+    seed0: 77,
+    fetchFn: async (url, init) => {
+      // 座位 B（wild）用算盘、爱诈；座位 A 不算——制造一条真实存在的风味差
+      const body = JSON.parse(init.body);
+      const aggressive = /wild/.test(body.model);
+      return fakeChannel({ seen, aggressive })(url, init);
+    },
+  });
+  const rows = summarize(matches);
+  const wild = rows.find((r) => r.label === 'wild');
+  const calm = rows.find((r) => r.label === 'calm');
+  assert.ok(wild.flavor.calcPerRound > 0, '拨过算盘的那位算频不该是 0');
+  assert.equal(calm.flavor.calcPerRound, 0);
+  assert.ok(wild.flavor.baitRate > 0, 'bait 留档要进风味层');
+  const spread = flavorSpread(rows, { minSamples: 1 });
+  assert.equal(spread.calcPerRound.enough, true);
+  assert.ok(spread.calcPerRound.spread > 0);
+  // 样本门槛：够不着就明说"不出结论"，不硬凑一个小数点
+  const strict = flavorSpread(rows, { minSamples: 10_000 });
+  assert.equal(strict.bluffRate.enough, false);
+});
+
+// ---------- A2 验尺：路由锁要验，不能只靠承诺 ----------
+test('A2：回执里出现第二个后端＝这批数据作废（锁了还要验）', () => {
+  const clean = routingIntegrity([{ label: 'x', providers: { DeepInfra: 40 } }]);
+  assert.equal(clean.ok, true);
+  const dirty = routingIntegrity([{ label: 'x', providers: { DeepInfra: 30, Baidu: 10 } }]);
+  assert.equal(dirty.ok, false);
+  assert.match(dirty.note, /作废重跑/);
+  const blind = routingIntegrity([{ label: 'x', providers: {} }]);
+  assert.equal(blind.ok, true);
+  assert.match(blind.note, /无法核验/, '没法验要说没法验，不能算通过');
+});
+
+// ---------- A4：成本护栏 ----------
+test('A4：花费优先用回执账单，拿不到才按 token×单价估（缓存读走缓存价）', () => {
+  assert.equal(callCost({ cost: 0.0123 }, {}), 0.0123);
+  const c = callCost(
+    { inTokens: 1000, outTokens: 100, cacheRead: 800 },
+    { promptPrice: 1e-6, completionPrice: 3e-6, cacheReadPrice: 1e-7 },
+  );
+  assert.ok(Math.abs(c - (200 * 1e-6 + 800 * 1e-7 + 100 * 3e-6)) < 1e-12);
+});
+
+test('A4：两级刹车——单场触顶只收这一场，整批触顶才收摊', () => {
+  const b = createBudget({ capUsd: 1, perMatchUsd: 0.05 });
+  b.startMatch();
+  b.charge({ cost: 0.06 }, {});
+  assert.equal(b.exceeded(), true);
+  assert.equal(b.runExceeded(), false, '单场触顶不该停掉整批');
+  b.startMatch();
+  assert.equal(b.exceeded(), false, '下一场自动解除');
+  b.charge({ cost: 1.0 }, {});
+  assert.equal(b.runExceeded(), true);
+});
+
+test('A4：开跑前必须给得出估价（不知道要花多少就别按回车）', () => {
+  const p = { promptPrice: 1e-6, completionPrice: 3e-6, priceKnown: true };
+  const est = estimateRun({ pairs: [[{ label: 'a', price: p }, { label: 'b', price: p }]], games: 5 });
+  assert.equal(est.matches, 10);
+  assert.equal(est.calls, 10 * HAND_ESTIMATE.handsPerMatch);
+  assert.ok(est.usd > 0);
+  assert.deepEqual(est.unpriced, []);
+  // 价格不定的参赛者必须点名——不许悄悄按 0 算，让人以为这批很便宜
+  const vague = estimateRun({
+    pairs: [[{ label: 'a', price: p }, { label: 'router', price: { priceKnown: false } }]],
+    games: 1,
+  });
+  assert.deepEqual(vague.unpriced, ['router']);
+  assert.match(vague.note, /少算了它们/);
+});
+
+test('A4：缓存没命中就明说没省到（Q53 的坑：短前缀会静默失效）', () => {
+  const miss = cacheReport([{ label: 'x', cost: { inTokens: 40_000, cacheRead: 0 } }]);
+  assert.equal(miss.anyHit, false);
+  assert.match(miss.note, /别当成已经省了钱/);
+  const hit = cacheReport([{ label: 'x', cost: { inTokens: 40_000, cacheRead: 30_000 } }]);
+  assert.equal(hit.anyHit, true);
+  assert.equal(hit.rows[0].hitRate, 0.75);
+});
+
+test('A4：单场上限一触顶，这一场当场收手（钱不会闷头烧完）', async () => {
+  const budget = createBudget({ perMatchUsd: 0.0005 }); // 一发就穿
+  const m = await playMatch({
+    seed: 3,
+    seats: { A: seat('x'), B: seat('y') },
+    fetchFn: fakeChannel({}),
+    budget,
+  });
+  assert.equal(m.aborted, 'budget');
+  assert.equal(m.over, false);
+});
+
+// ---------- A5：榜 ----------
+test('A5：榜必带样本数、口径限定"在这张桌子上"、不出 benchmark 式断言', async () => {
+  const matches = await runArena({
+    pairs: [[seat('mx'), seat('my')]],
+    games: 1,
+    seed0: 101,
+    fetchFn: fakeChannel({}),
+  });
+  const rows = summarize(matches);
+  const md = renderBoard(rows, {
+    run: { seed0: 101, games: 1, at: '2026-08-09', sampling: SAMPLING, maxTokens: MAX_TOKENS },
+    integrity: routingIntegrity(rows),
+    cache: cacheReport(rows),
+    spread: flavorSpread(rows),
+  });
+  assert.match(md, /口径：在这张桌子上/);
+  assert.match(md, /不是通用能力评测/);
+  assert.match(md, /n\(手\)/, '合规层要露分母');
+  assert.match(md, /n\(场\)/, '棋力层要露分母');
+  assert.match(md, /台词质量评估\*\*须等接地批次 G2/, '台词评估的排期要写在榜上');
+  assert.match(md, /十场级的胜率差不构成排名/);
+  for (const banned of ['最强', '排名第一', 'SOTA', '碾压'])
+    assert.ok(!md.includes(banned), `榜上不许出现「${banned}」`);
+});
+
+// ---------- A1：OpenRouter 接入 ----------
+test('A1：模型清单动态拉取并归一化（价格/上下文/思考型旗子）', async () => {
+  const fixture = {
+    data: [
+      {
+        id: 'x/cheap',
+        name: 'Cheap',
+        context_length: 131072,
+        pricing: { prompt: '0.0000001', completion: '0.0000006', input_cache_read: '0.00000001' },
+        top_provider: { max_completion_tokens: 8192 },
+        supported_parameters: ['max_tokens', 'seed'],
+        architecture: { output_modalities: ['text'] },
+        reasoning: { mandatory: false, default_enabled: false },
+      },
+      {
+        id: 'x/thinker',
+        name: 'Thinker',
+        pricing: { prompt: '0.00001', completion: '0.00005' },
+        architecture: { output_modalities: ['text'] },
+        reasoning: { mandatory: true, default_enabled: true },
+      },
+      {
+        id: 'x/painter',
+        name: 'Painter',
+        pricing: { prompt: '0', completion: '0' },
+        architecture: { output_modalities: ['image'] }, // 这张桌子上没有图
+      },
+      {
+        // 实测坑：路由型元模型报 "-1"＝价格不定。不归一的话它会以"每百万负一百万美元"排到便宜档第一
+        id: 'x/router',
+        name: 'Router',
+        pricing: { prompt: '-1', completion: '-1' },
+        architecture: { output_modalities: ['text'] },
+      },
+    ],
+  };
+  const models = await fetchModels({ fetchFn: async () => ({ ok: true, json: async () => fixture }) });
+  assert.deepEqual(models.map((m) => m.id), ['x/cheap', 'x/thinker', 'x/router'], '非文本模型不进清单');
+  assert.equal(models[0].promptPrice, 1e-7);
+  assert.equal(models[0].cacheReadPrice, 1e-8);
+  assert.equal(models[1].reasoningMandatory, true, '思考型的旗子来自清单自己，不靠我们猜');
+  // 负价＝价格不定：归一成 null，别让它排到便宜档第一名
+  assert.equal(models[2].promptPrice, null);
+  assert.equal(models[2].priceKnown, false);
+  assert.equal(models[2].free, false);
+  assert.equal(models[0].priceKnown, true);
+  // 预置只能当预选：清单里没有的一律不显示（名单腐烂了也不会冒出幽灵）
+  assert.deepEqual(pickDefaults(models, ['x/cheap', 'x/ghost']).map((m) => m.id), ['x/cheap']);
+});
+
+test('A1：供应商锁与来源标识头；官方通道不掺和', () => {
+  assert.deepEqual(providerLock('deepinfra/fp4'), {
+    provider: { order: ['deepinfra/fp4'], allow_fallbacks: false },
+  });
+  assert.deepEqual(providerLock(null), {}, '不指定就不下发（不假装锁住了）');
+  const h = originHeaders({ referer: 'https://kai.test' });
+  assert.equal(h['HTTP-Referer'], 'https://kai.test');
+  assert.ok(h['X-Title']);
+  // 头值是 ByteString：塞中文会当场抛，而这一抛会被降级链兜住，表现成"AI 一直不说话"
+  for (const v of Object.values(originHeaders({ title: '开！单机大话骰' })))
+    assert.ok(/^[\x20-\x7E]*$/.test(v), `头值必须是 ASCII，实得「${v}」`);
+  assert.doesNotThrow(() => new Headers(originHeaders({ title: '开！' })));
+  assert.equal(isOpenRouter('https://openrouter.ai/api/v1'), true);
+  assert.equal(isOpenRouter('https://api.deepseek.com/v1'), false);
+  const ch = openrouterChannel({ apiKey: 'k', model: 'a/b' });
+  assert.equal(ch.format, 'openai', 'OpenRouter 是 OpenAI 兼容口');
+  assert.match(ch.baseUrl, /openrouter\.ai/);
+});
+
+// ---------- 引擎侧真相仍由事件流复算（不问模型） ----------
+test('擂台的统计全部从事件流复算——模型的嘴碰不到这些数', async () => {
+  const m = await playMatch({ seed: 13, seats: { A: seat('mx'), B: seat('my') }, fetchFn: fakeChannel({}) });
+  const st = seatStats(m, 'A');
+  assert.equal(st.rounds, m.events.filter((e) => e.type === 'roundStart').length);
+  assert.equal(st.myBids, m.events.filter((e) => e.type === 'bid' && e.player === 'A').length);
+});
+
+test('roundRobin：N 个模型两两配对，不自己打自己', () => {
+  const pairs = roundRobin(['a', 'b', 'c'].map((x) => seat(x)));
+  assert.equal(pairs.length, 3);
+  for (const [x, y] of pairs) assert.notEqual(x.label, y.label);
+});
