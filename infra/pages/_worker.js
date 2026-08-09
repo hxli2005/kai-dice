@@ -6,6 +6,16 @@
 const DEVICE_DAILY_LIMIT = 400; // 每设备每日调用（2026-08-08 二次上调 150→400，用户授权：词条时代编译/体检/判词都计调用，重度日 150 必见底；成本兜底=预充值余额+月熔断）
 const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低于 ¥500 红线一半，双保险）
 
+// ---- 托管席（用户裁决 2026-08-09）：不带暗号也能玩上一个真模型 ----
+// §3.4 早写了"默认走官方通道（内置低成本模型，每日限额，保证零门槛上手）"，一直欠着。
+// 现在补上，但按 Q7 保命三律「别破产」把口子开小：
+//   · 免费档**只放行托管这一个便宜模型**（暗号持有者才碰得到别的原版演员）；
+//   · 免费档单设备日限另算一档更小的（≈4–5 场），暗号档仍是 400；
+//   · 免费档要求请求来自浏览器同源（Origin 或 Sec-Fetch-Site）——挡住裸脚本刷；
+//   · 全局月熔断照旧，是最后那道闸。
+const HOSTED_MODEL = "deepseek-v4-flash"; // 与 src/ai/personas.js 的 HOSTED_MODEL 同名
+const OPEN_DAILY_LIMIT = 60;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -56,10 +66,13 @@ export default {
         const pass = auth && env.FRIEND_PASS ? auth === env.FRIEND_PASS : null;
         // 带 X-Device 时回报今日用量——"连不上"从猜谜变成读数
         let deviceUsed = null;
+        let openUsed = null;
         const dev = request.headers.get("X-Device");
         if (env.QUOTA && dev) {
+          const day = new Date().toISOString().slice(0, 10);
           try {
-            deviceUsed = +(await env.QUOTA.get(`d:${dev.slice(0, 64)}:${new Date().toISOString().slice(0, 10)}`)) || 0;
+            deviceUsed = +(await env.QUOTA.get(`d:${dev.slice(0, 64)}:${day}`)) || 0;
+            openUsed = +(await env.QUOTA.get(`o:${dev.slice(0, 64)}:${day}`)) || 0;
           } catch {}
         }
         return json({
@@ -69,16 +82,42 @@ export default {
           pass,
           deviceUsed,
           deviceLimit: DEVICE_DAILY_LIMIT,
+          openUsed, // 免费托管档今日用量
+          openLimit: OPEN_DAILY_LIMIT,
+          hosted: HOSTED_MODEL,
         });
+      }
+      // 上游模型清单（运维用）：托管席的模型名必须与上游对得上，靠这个查而不是靠猜。
+      if (url.pathname === "/api/llm/models") {
+        if (!env.DEEPSEEK_KEY) return json({ error: "服务端未配置 key" }, 503);
+        try {
+          const r = await fetch("https://api.deepseek.com/models", {
+            headers: { Authorization: `Bearer ${env.DEEPSEEK_KEY}` },
+          });
+          const j = await r.json();
+          const ids = (j.data ?? []).map((m) => m.id);
+          return json({ ids, hosted: HOSTED_MODEL, hostedAvailable: ids.includes(HOSTED_MODEL) }, r.status);
+        } catch (e) {
+          return json({ error: "上游清单拉取失败：" + (e && e.message) }, 502);
+        }
       }
       if (request.method !== "POST") return json({ error: "POST only" }, 405);
       // Origin 锁域（§9.7 Q8②）：镜像站在浏览器里带的是自己的 Origin——有 Origin 且非本站即拒。
       // 无 Origin（curl 等）不拦：威胁模型是"镜像网站白嫖官方通道"，脚本盗刷靠暗号轮换与配额兜底。
       const origin = request.headers.get("Origin");
       if (origin && origin !== url.origin) return json({ error: "此暗号只在官方域有效" }, 403);
-      if (!env.FRIEND_PASS || !env.DEEPSEEK_KEY) return json({ error: "服务端未配置暗号或 key" }, 503);
+      if (!env.DEEPSEEK_KEY) return json({ error: "服务端未配置 key" }, 503);
       const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-      if (pass !== env.FRIEND_PASS) return json({ error: "暗号不对" }, 401);
+      // 两档：有暗号＝原班人马全开、日限 400；没暗号＝免费托管档、只放行托管模型、日限 60。
+      const friend = !!(env.FRIEND_PASS && pass && pass === env.FRIEND_PASS);
+      if (pass && !friend) return json({ error: "暗号不对" }, 401);
+      if (!friend) {
+        // 免费档只招待浏览器里的真人：裸脚本（无 Origin 且无 Sec-Fetch-Site）不接待
+        const sfs = request.headers.get("Sec-Fetch-Site");
+        if (origin !== url.origin && sfs !== "same-origin")
+          return json({ error: "免费档只在官方页面里可用" }, 403);
+      }
+      const dailyLimit = friend ? DEVICE_DAILY_LIMIT : OPEN_DAILY_LIMIT;
 
       // ---- 配额检查（尽力计数，KV 异常放行）----
       if (env.QUOTA) {
@@ -87,14 +126,19 @@ export default {
           const day = now.toISOString().slice(0, 10);
           const month = day.slice(0, 7);
           const device = (request.headers.get("X-Device") || "anon").slice(0, 64);
-          const dKey = `d:${device}:${day}`;
+          // 免费档单独记一本账：省得路人把暗号持有者的额度吃掉，也方便看免费档到底有多少人在用
+          const dKey = `${friend ? "d" : "o"}:${device}:${day}`;
           const gKey = `g:${month}`;
           const [dUsed, gUsed] = await Promise.all([
             env.QUOTA.get(dKey).then((v) => +v || 0),
             env.QUOTA.get(gKey).then((v) => +v || 0),
           ]);
           if (gUsed >= GLOBAL_MONTHLY_LIMIT) return json({ error: "本月打烊，下月再来" }, 503);
-          if (dUsed >= DEVICE_DAILY_LIMIT) return json({ error: "今日额度用完，明天再来" }, 429);
+          if (dUsed >= dailyLimit)
+            return json(
+              { error: friend ? "今日额度用完，明天再来" : "今日免费额度用完了，明天再来（有暗号可以填在设置里）" },
+              429,
+            );
           await Promise.all([
             env.QUOTA.put(dKey, String(dUsed + 1), { expirationTtl: 86400 * 2 }),
             env.QUOTA.put(gKey, String(gUsed + 1), { expirationTtl: 86400 * 40 }),
@@ -104,9 +148,10 @@ export default {
 
       let body;
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
-      // 模型服务端白名单（Q18 原版演员按人设钉）：名单外一律钉回默认——暗号持有者也改不了成本档
-      const MODEL_ALLOW = ["deepseek-chat", "deepseek-v4-pro"];
-      if (!MODEL_ALLOW.includes(body.model)) body.model = "deepseek-chat";
+      // 模型服务端白名单（Q18 原版演员按人设钉）：名单外一律钉回默认——暗号持有者也改不了成本档。
+      // 免费档更严：只准托管那一个模型，谁也别想用免费口子点贵的。
+      const MODEL_ALLOW = friend ? ["deepseek-chat", "deepseek-v4-pro", HOSTED_MODEL] : [HOSTED_MODEL];
+      if (!MODEL_ALLOW.includes(body.model)) body.model = friend ? "deepseek-chat" : HOSTED_MODEL;
       const upstream = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_KEY}` },

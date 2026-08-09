@@ -8,13 +8,9 @@
 
 import { obProb, coarseWord } from '../probability.js';
 
-// 无 voice 的人设（素颜客席等）按嘴臭度取一套通用说法
-const FALLBACK = {
-  hell: (f) => `${f.coarse}。${f.clause ? `${f.clause}。` : ''}开。`,
-  spicy: (f) => `${f.clause ? `${f.clause}，` : ''}这话${f.coarse}。开。`,
-  cold: (f) => `${f.clause ? `${f.clause}。` : ''}${f.coarse}。开。`,
-  mild: (f) => `这话${f.coarse}。开。`,
-};
+// 没有 voice 的座位（模型席）用这句通用的。
+// 注：这是**表现层模板**，不是提示词——通道断了时由我们代它开口，属于"化身"那一层。
+const FALLBACK = (f) => `${f.clause ? `${f.clause}。` : ''}这话${f.coarse}。开。`;
 
 // 本局最扎的一条公开事实 → 一句短语（挑一条就够；挑不出就闭嘴，别凑废话）
 export function readClause(ob) {
@@ -36,7 +32,7 @@ export function readClause(ob) {
 // 沉默模式台词：kind 目前只有 'challenge'（开牌那一拍——"它为什么开我"正是被读感的落点）
 export function silentSay(persona, ob, kind = 'challenge') {
   if (!ob?.currentBid) return '';
-  const tpl = persona?.voice?.[kind] ?? FALLBACK[persona?.tone] ?? FALLBACK.mild;
+  const tpl = persona?.voice?.[kind] ?? FALLBACK;
   const line = tpl({
     coarse: coarseWord(obProb(ob, ob.currentBid)),
     clause: readClause(ob),

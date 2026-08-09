@@ -9,7 +9,7 @@ import { obProb, coarseWord } from '../probability.js';
 import { OPS } from '../mods/catalog.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
-import { TONES, DEFAULT_PERSONA } from './personas.js';
+import { DEFAULT_PERSONA } from './personas.js';
 
 // SYSTEM 全部由人设五件套拼装：身份 + 嘴臭度 + 回复风格 + 性格缺陷（Q11）
 // tableTalk：三人桌台词双层制（§2.5）——裁判层不许编 / 牌手层允许诈 / 各为其利 / 禁围剿
@@ -39,27 +39,23 @@ const THREE_LOCKS = `这张桌子上有三条锁（引擎强制，不是口头�
 - 动作合法：一切动作由引擎结算，不合法的动作会被打回，说了不算。
 - 真迹不可改：你留的档（belief／speechMode）散场之后谁都改不了，包括你自己。`;
 
-// 素颜擂台席（施工单 A2，凭 Q52）：受控实验的座位——没有名字、没有身份、没有腔调。
-// **这段文本对每个席位、每个模型逐字相同**（连模型名都不许出现，否则就是"按模型微调"，实验作废）。
-// 内容＝Q51 最小集：规则 ＋ 输出契约 ＋ 档案注入（在 user 侧）＋ 三锁 ＋ Q6 内容底线（在 FACT_LINE 里）。
-const arenaSystem = (three, modSpec = '') =>
-  `你正在和另一位对手玩大话骰。没有人设剧本，也没有给你的角色——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
+// ---------- 一张桌子，一份提示词（用户裁决 2026-08-09：**提示词只管规则**） ----------
+//
+// 以前这里分三条岔路：官方人设注入身份＋嘴臭度＋腔调＋四条性格缺陷，素颜客席只给规则，
+// 擂台席连名字都不给。现在只剩一条：**每个座位拿到的都是规则 ＋ 输出契约 ＋ 三锁 ＋ 内容底线**，
+// 唯一的差别是那个名字标签（擂台席连名字都不要——受控实验里名字也是变量）。
+//
+// 也就是说：**模型是真身，形象是化身。** 化身给的是一张脸和一个称呼，不是一套性格脚本；
+// 它怎么打、怎么说、记不记仇，是模型自己的事。座位之间还能有差别，但差别只许来自
+// **座位规则**（工具可用性：算盘给不给、盲能不能宣）——那是明牌的规则，不是偷偷塞的人格。
+const seatSystem = (name, three, modSpec = '') =>
+  `${name ? `你在这张桌上的名字是「${name}」。` : ''}你正和客人玩大话骰。没有人设剧本，也没有派给你的性格——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
 ${RULES_BRIEF(three)}
 ${THREE_LOCKS}
 ${jsonSpec(modSpec)}`;
 
-// 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
-const personaSystem = (p, three, modSpec = '') =>
-  p.arena
-    ? arenaSystem(three, modSpec)
-    : p.bare
-    ? `你是 ${p.name}，一个以本名上桌的语言模型，正和人类客人玩大话骰。没有人设剧本——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
-${RULES_BRIEF(three)}
-${jsonSpec(modSpec)}`
-    : `你是${p.name}，${p.identity}正和客人玩大话骰。${TONES[p.tone] ?? TONES.spicy}${p.style}${FACT_LINE}
-${p.flaws}${three ? TABLE_TALK : ''}
-${RULES_BRIEF(three)}
-${jsonSpec(modSpec)}`;
+// 擂台席（A2）：受控实验，连名字都不给——同一份字符串发给每个模型，否则实验作废
+const personaSystem = (p, three, modSpec = '') => seatSystem(p.arena ? '' : p.name, three, modSpec);
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
@@ -316,7 +312,8 @@ export async function personaLine(channel, { persona, task, facts }, fetchFn) {
     const raw = await chat(
       channel,
       {
-        system: `你是${persona.name}，${persona.identity}${TONES[persona.tone] ?? ''}${persona.style ?? ''}${FACT_LINE}`,
+        // 开场白也走同一条规矩：名字是标签，不是性格（用户裁决 2026-08-09）
+        system: `你在这张桌上的名字是「${persona.name}」。${FACT_LINE}`,
         user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身（一到两句，不要引号、不要解释、不要 JSON）。`,
         maxTokens: persona.gear?.maxTokens ?? 160,
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,

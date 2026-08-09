@@ -281,9 +281,14 @@ main {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0 1rem;
+  /* 底部那条带子是给绝对定位的印章行留的（三印 bottom:0.35rem、词条/戳 bottom:3.55rem）。
+     不留的话，短屏（375×667 实测）上居中的流内容会直接压进带子里——
+     算盘按钮上沿被「戳」盖住、正中被「斋」盖住，点哪儿都不是算盘。G1 的病根在这儿，
+     不是差 14px，是两套定位坐标系在短屏上撞车。 */
+  padding: 0 1rem var(--bottom-band, 3.4rem);
   position: relative;
 }
+main[data-band='mods'] { --bottom-band: 6.6rem; } /* 词条章/戳那一排也在，带子加宽一层 */
 #pot { font-size: 0.8rem; color: var(--lamp-dim); letter-spacing: 0.08em; }
 #pot b { color: var(--lamp); font-weight: 400; }
 .mark {
@@ -412,6 +417,10 @@ footer {
   transform: translateX(-50%);
   display: flex; gap: 1.4rem;
 }
+/* 印章行的空白（章与章之间那 1.4rem／0.9rem 的缝）不该吃点击：
+   它什么也不做，却挡着下面的东西。只有章本身收点击。 */
+#declareRow, #modRow { pointer-events: none; }
+#declareRow > *, #modRow > * { pointer-events: auto; }
 #actionRow { display: flex; gap: 0.55rem; }
 footer .meta-line { margin: 0 0 0.55rem; }
 .stamp {

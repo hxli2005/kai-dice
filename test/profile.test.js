@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadProfile, appendMatch, profileBrief, mindOf, openerFacts } from '../src/ui/profile.js';
+import { modelPersona } from '../src/ai/personas.js';
 
 const memStorage = (init = {}) => {
   const m = new Map(Object.entries(init));
@@ -130,4 +131,53 @@ test('钥匙迁移：三格全填的旧配置归客席', () => {
 test('客席身家默认 300（model: 前缀）', () => {
   const led = loadLedger(memStorage());
   assert.equal(balanceOf(led, 'model:some-model'), 300);
+});
+
+// ---------- 模型席：每个型号各记各的账（用户 2026-08-09 验证要求） ----------
+// 户头＝模型名。这条既是"换模型＝换人"的落点，也是"托管席与自带钥匙同一个模型即同一个人"的依据。
+
+test('模型独立记忆：主观层按型号分开，客观层照旧全馆共享', () => {
+  const s = memStorage();
+  const A = modelPersona('deepseek-v4-flash', { hosted: true });
+  const B = modelPersona('glm-5.2');
+  assert.notEqual(A.id, B.id);
+
+  const p = loadProfile(s);
+  appendMatch(p, { won: false, stats: STATS, notes: ['他算完才敢报'], personaId: A.id }, s);
+  mindOf(p, A.id).hypotheses = [{ text: '他压高价必虚', hits: 2 }];
+  appendMatch(p, { won: true, stats: { ...STATS, bluffRate: 0.1 }, notes: ['他从不盲'], personaId: B.id }, s);
+
+  const back = loadProfile(s);
+  // 主观层：各记各的——A 的笔记与假设不许漏进 B 的本子
+  assert.deepEqual(mindOf(back, A.id).notes, ['他算完才敢报']);
+  assert.deepEqual(mindOf(back, B.id).notes, ['他从不盲']);
+  assert.equal(mindOf(back, A.id).hypotheses.length, 1);
+  assert.deepEqual(mindOf(back, B.id).hypotheses, []);
+  // 客观层：全馆公共账本，换谁上桌都不冷启动（Q19）
+  assert.equal(back.matches, 2);
+  assert.equal(back.wins, 1);
+  assert.equal(back.stats.length, 2);
+  // 档案摘要给谁看，就只带谁的笔记
+  assert.match(profileBrief(back, A.id), /他算完才敢报/);
+  assert.ok(!profileBrief(back, A.id).includes('他从不盲'));
+});
+
+test('模型席：同一个模型不管谁付钱都是同一个人；身家各开各的户头', () => {
+  const hosted = modelPersona('deepseek-v4-flash', { hosted: true });
+  const byok = modelPersona('deepseek-v4-flash');
+  assert.equal(hosted.id, byok.id, '同名即同人——托管与自带钥匙共用一本账');
+  assert.equal(hosted.hosted, true);
+  assert.equal(byok.hosted, false);
+  // 素颜：提示词只给规则，没有性格剧本（人格捏造是被删掉的那部分）
+  assert.equal(hosted.bare, true);
+  assert.equal(hosted.flaws, undefined);
+  assert.equal(hosted.tone, undefined);
+  assert.equal(hosted.blurb.includes('deepseek-v4-flash'), true);
+  assert.equal(hosted.identity, undefined, '身份自述已随人格捏造一起删掉');
+  // 身家按户头走，两个不同型号各有各的钱
+  const led = { you: 100, personas: {}, bankrollApplied: {} };
+  assert.equal(balanceOf(led, hosted.id), 300);
+  led.personas[hosted.id] = 412;
+  assert.equal(balanceOf(led, hosted.id), 412);
+  assert.equal(balanceOf(led, modelPersona('glm-5.2').id), 300);
 });

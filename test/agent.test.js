@@ -181,18 +181,32 @@ test('createOpponent：决策日志自动回灌——第二手调用的提示词
   assert.match(prompts[1], /你自己这局刚做过：宣言了「抬」，嘴上说的是「抬了，跑不了」（当时心思：先把池做大）/);
 });
 
-test('Q28 素颜客席：无人设剧本、保留事实红线与规矩', async () => {
+// 提示词只管规则（用户裁决 2026-08-09）：**每个座位一份提示词**，名字是标签不是性格。
+// 化身与模型席除了那个名字，一个字都不该不一样——差别只许来自明牌的座位规则（工具可用性）。
+test('提示词只管规则：化身与模型席拿到同一份提示词，差的只有名字', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
-  const bare = { id: 'model:test-model', name: 'test-model', bare: true, gear: { calc: 'often', usesBlind: true } };
-  const { system } = buildPrompts(ob, '', bare);
-  assert.match(system, /以本名上桌/);
-  assert.match(system, /test-model/);
-  assert.match(system, /发给你的数据都是真的/); // 说话纪律不脱（Q49 后不再是编造禁令）
-  assert.match(system, /规则提要/);
-  assert.match(system, /严格输出一行 JSON/);
-  assert.ok(!system.includes('毛病')); // 无性格缺陷剧本
+  const model = { id: 'model:test-model', name: 'test-model', bare: true, gear: { calc: 'often', usesBlind: true } };
+  const sysModel = buildPrompts(ob, '', model).system;
+  const sysAvatar = buildPrompts(ob, '', PERSONAS.laolitou).system;
+
+  assert.match(sysModel, /名字是「test-model」/);
+  assert.match(sysAvatar, /名字是「老李头」/);
+  // 把名字换掉之后必须一字不差——多出来的任何一句都是偷塞的人格
+  assert.equal(
+    sysAvatar.replace('老李头', 'test-model'),
+    sysModel,
+    '化身的提示词不许比模型席多出任何东西',
+  );
+  // 留下的是规则、契约、三锁与内容底线
+  assert.match(sysModel, /规则提要/);
+  assert.match(sysModel, /严格输出一行 JSON/);
+  assert.match(sysModel, /信息边界[：:]/);
+  assert.match(sysModel, /不作人身攻击/); // Q6 安全线：任何身份都不豁免
+  // 删掉的是性格脚本
+  for (const gone of ['毛病', '记仇十年', '往死里嘲讽', '酒馆老板', '账房'])
+    assert.ok(!sysAvatar.includes(gone), `化身提示词里不该还有「${gone}」`);
 });
