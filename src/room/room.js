@@ -5,6 +5,7 @@
 
 import { createMatch } from '../engine.js';
 import { createOpponent, personaLine } from '../ai/agent.js';
+import { buildLedger } from '../ai/factcheck.js';
 import { silentSay } from '../ai/voice.js';
 import { PERSONAS } from '../ai/personas.js';
 import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
@@ -193,6 +194,7 @@ export function createRoomCore({
       const fact = (s) =>
         `${sealName(s)}：虚报率${Math.round(packs[s].bluffRate * 100)}%，开牌${packs[s].challenges}次中${packs[s].challengeHits}次，被开${packs[s].timesChallenged}次${packs[s].insight ? `，破绽「${packs[s].insight}」` : ''}`;
       verdict = await personaLine(ch, {
+        ledger: buildLedger(match.observe('A')), // F0b：对比判词的账要对得上事件流
         persona: PERSONAS.laolitou,
         task: '一场打完。你是桌上的主持人，写两三句「双人对比判词」——点名两位客人谁更怂、谁更虚，必须引用给你的真实数据，比出个高下，不许编。',
         facts: `名次：${end.standings.map((s) => sealName(s)).join(' > ')}；${fact('A')}；${fact('C')}`,

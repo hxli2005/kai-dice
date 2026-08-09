@@ -22,6 +22,12 @@ export function computeStats(events, you, myDiceByRound) {
     roundsAlive: 0, // 你参战的局数（出局后桌子还在打——F0：两个数不许混成一个）
     myBids: 0,
     myBluffs: 0,
+    // F0c 蒙报类目（Q46）：没看骰就报的价单列——它和"虚报"不是一回事，
+    // 混在一起会把"故意闭着眼报到天上"算成老实人（用户实测 bug）
+    seenBids: 0, // 看过骰之后报的手数（虚报率的分母）
+    blindBids: 0, // 未看骰就报的手数
+    blindBluffs: 0, // 其中零信息概率也 <50% 的（明知没底还往上抬）
+    blindWildest: null, // {round, bid, p} 蒙报极限度：最离谱的那一口
     timesChallenged: 0,
     myChallenges: 0,
     myChallengeHits: 0,
@@ -54,6 +60,8 @@ export function computeStats(events, you, myDiceByRound) {
   let depth = 0;
   let curBid = null; // 当前报价（算盘依赖度要判"算完这一手照没照着数走"）
   let calcPending = false;
+  let myCount = 0; // 我这一局有几颗骰（蒙报的零信息概率要用全场骰数）
+  let seenNow = false; // 报这一口时我到底看没看骰——按事件时序判，不按"这局最后有没有看"
   // 算完的下一手照没照着数走：开牌看当前报价站不站得住（低概率就开＝照走），
   // 抬价看自己接下来这口价（或仍在桌上的那口）站不站得住。ref 为空（盲局没记骰）就不判。
   const judgeCalc = (kind, bid) => {
@@ -75,11 +83,14 @@ export function computeStats(events, you, myDiceByRound) {
       depth = 0;
       curBid = null;
       calcPending = false;
+      seenNow = false;
       myFirstBidThisRound = true;
+      myCount = e.diceCount?.[you] ?? 0;
       oppCount = Object.entries(e.diceCount)
         .filter(([k]) => k !== you)
         .reduce((a, [, v]) => a + v, 0);
     }
+    if (e.type === 'peek' && e.player === you) seenNow = true;
     if (e.type === 'declare' && e.declaration === 'zhai') zhai = true;
     if (e.type === 'declare' && e.declaration === 'blind' && e.player === you) s.myBlinds++;
     if (e.type === 'declare' && e.declaration === 'raise' && e.player === you) s.myRaises++;
@@ -97,7 +108,16 @@ export function computeStats(events, you, myDiceByRound) {
           if (depth >= 4) cond.bigPotOpps++;
           else cond.smallPotOpps++;
         }
-        const mine = myDiceByRound[round];
+        // 蒙报单列（F0c）：没看骰的报价按"零信息"重算——全场骰子都未知，
+        // 这样"闭着眼报十个六"才会显出它的离谱，而不是因为算不出概率被当成没说谎
+        const mine = seenNow ? myDiceByRound[round] : null;
+        if (!mine) {
+          const bp = probBidTrue({ count: e.count, face: e.face }, [], myCount + oppCount, zhai);
+          s.blindBids++;
+          if (bp < 0.5) s.blindBluffs++;
+          if (!s.blindWildest || bp < s.blindWildest.p)
+            s.blindWildest = { round, bid: { count: e.count, face: e.face }, p: bp };
+        } else s.seenBids++;
         const pv = mine ? probBidTrue({ count: e.count, face: e.face }, mine, oppCount, zhai) : null;
         if (pv != null && myFirstBidThisRound) {
           cond.allFirstPs.push(pv);
@@ -159,7 +179,10 @@ export function computeStats(events, you, myDiceByRound) {
       postChalFirstP: avg(cond.postChalFirstPs),
       baseFirstP: avg(cond.allFirstPs),
     },
-    bluffRate: div(s.myBluffs, s.myBids),
+    // 虚报率的分母改为"看过骰的报价"（F0c）：没看骰的手不进这笔账——
+    // 旧口径下故意不看骰的人虚报率恒为 0，档案会把他写成老实人
+    bluffRate: div(s.myBluffs, s.seenBids),
+    blindBidRate: div(s.blindBids, s.myBids),
     challengedRate: div(s.timesChallenged, s.myBids),
     hitRate: div(s.myChallengeHits, s.myChallenges),
     // F6 算盘依赖度：算完照着数走的比例——纯心算的人这项永远是 0，那是他的隐身衣（Q45 明示接受）
@@ -187,6 +210,13 @@ export function condBrief(st) {
   }
   if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
     bits.push('被开过一次，下一局的首报就明显缩');
+  // F0c 蒙报：连骰都不看就往上抬，是最响的一种信号
+  if (st.blindBids >= 2)
+    bits.push(
+      `有 ${st.blindBids} 口价是没看骰就报的${
+        st.blindWildest ? `（最狠一口：第 ${st.blindWildest.round} 局 ${st.blindWildest.bid.count} 个 ${st.blindWildest.bid.face}）` : ''
+      }`,
+    );
   // F6 算盘依赖度：他信数还是信人——这是 Q45 新开的读心通道
   if (st.myCalcs >= 2 && st.calcFollowRate != null) {
     if (st.calcFollowRate >= 0.8)
@@ -197,6 +227,102 @@ export function condBrief(st) {
   return bits.join('；');
 }
 
+// ---------- F8 复盘室「他的小本子」（Q48）：双轨时间轴的数据层 ----------
+// 左轨＝桌面公开史实（引擎盖章），右轨＝当时的内心留档（belief/bait/算的私有结果）。
+// 硬法：**禁事后供词**——右轨只许来自决策日志，散场后不许再问模型"你当时怎么想"。
+// 纯函数，零调用：UI 只负责画，账在这里对。
+
+const ACT_EVENTS = new Set(['peek', 'calc', 'bid', 'declare', 'challenge', 'modAction']);
+const DECL_CN = { zhai: '斋', blind: '盲', raise: '抬' };
+
+// 决策日志与事件按时序 1:1 配对（同一席位的第 n 个动作 ↔ 第 n 条日志）
+function logQueues(logsBySeat) {
+  const q = {};
+  for (const [seat, logs] of Object.entries(logsBySeat ?? {})) q[seat] = [...(logs ?? [])];
+  return q;
+}
+
+// 算的私有结果：从当时喂给它的事实里取回它手上真有的那个数（不重算、不编）
+const calcPOf = (log) => log?.facts?.match(/为真的概率 (\d+%)/)?.[1] ?? null;
+
+export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you = 'A' } = {}) {
+  const queues = logQueues(logsBySeat);
+  const rounds = [];
+  let cur = null;
+  const push = (row) => cur?.rows.push(row);
+  for (const e of events) {
+    if (e.type === 'roundStart') {
+      cur = { round: e.round, rows: [], outcome: null, mult: 1, spotlight: false };
+      rounds.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (ACT_EVENTS.has(e.type)) {
+      const mine = e.player === you;
+      const log = mine ? null : queues[e.player]?.shift();
+      const bait = log?.speechMode === 'bait';
+      if (bait || e.type === 'challenge') cur.spotlight = true;
+      push({
+        seat: e.player,
+        who: nameOf(e.player),
+        kind: e.type,
+        text: publicText(e, nameOf),
+        inner: mine
+          ? null
+          : {
+              say: log?.say ?? '',
+              belief: log?.belief ?? '',
+              note: log?.note ?? '',
+              bait,
+              calcP: e.type === 'calc' ? null : calcPOf(log),
+              silent: !!log?.silentFallback,
+              auto: !!log?.auto, // 不问模型的固定动作（不玩盲的人设先掀盅）
+              dropped: log?.dropped ?? null,
+            },
+      });
+      continue;
+    }
+    if (e.type === 'reveal') {
+      cur.reveal = {
+        bid: e.bid,
+        challenger: e.challenger,
+        actual: e.actual,
+        stands: e.stands,
+        calza: !!e.calza,
+        exact: !!e.exact,
+        dice: e.dice,
+      };
+    }
+    if (e.type === 'roundEnd') {
+      cur.mult = e.mult ?? 1;
+      cur.outcome = { loser: e.loser, winner: e.winner, transfer: e.transfer, mult: e.mult ?? 1 };
+      // 戏眼（复用 F5 加权）：开牌、诈、高倍池、玩家被打脸——默认只展开这些
+      if ((e.mult ?? 1) >= 4 || e.loser === you) cur.spotlight = true;
+    }
+  }
+  return rounds;
+}
+
+function publicText(e, nameOf) {
+  const who = nameOf(e.player);
+  switch (e.type) {
+    case 'peek':
+      return `${who}掀盅看骰`;
+    case 'calc':
+      return `${who}当众拨算盘`;
+    case 'bid':
+      return `${who}报 ${e.count} 个 ${e.face}`;
+    case 'declare':
+      return `${who}宣言「${DECL_CN[e.declaration] ?? e.declaration}」`;
+    case 'challenge':
+      return `${who}拍桌开牌`;
+    case 'modAction':
+      return `${who}用了词条${e.face ? ` · 亮 ${e.face}` : ''}`;
+    default:
+      return who;
+  }
+}
+
 // F5 记忆加权：一场里最肥的那个池（≥×4）——这种局不许被忘掉
 export function bigPotBrief(st) {
   const top = (st.bigPots ?? []).reduce((a, b) => (!a || b.mult > a.mult ? b : a), null);
@@ -205,10 +331,13 @@ export function bigPotBrief(st) {
 }
 
 // 酒桌人格（§5.2，附:待定参数表）：按序优先匹配
+// F0c：宣言「盲」与"事实上没看骰"是两件事——前者是盲侠（下了注的），后者是蒙眼虎（连注都不下就敢喊）。
+// 「老实人」必须以看过骰为前提：闭着眼报到天上，不叫老实。
 export function persona(st) {
   if (st.myBlinds >= 2) return '盲侠';
+  if (st.blindBids >= 3 && st.blindBidRate > 0.5) return '蒙眼虎';
   if (st.bluffRate > 0.5) return '赌徒';
-  if (st.bluffRate < 0.15 && st.myBids >= 3) return '老实人';
+  if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3) return '老实人';
   if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3) return '缩头鹌鹑';
   if (st.hitRate >= 0.7 && st.avgTimeMs > 8000) return '会计';
   return '半张脸';
@@ -228,15 +357,21 @@ export function templateVerdict(st, won) {
     bits.push('池一深你就不敢开——小注掀我，大注受着');
   if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
     bits.push('被我开过一回，下一局你的首报就缩——这个毛病比虚报值钱');
-  if (st.bluffRate > 0.5) bits.push(`十句里${Math.round(st.bluffRate * 10)}句是空的，胆子不小`);
-  else if (st.bluffRate < 0.15 && st.myBids >= 3) bits.push('你几乎不说谎，所以你一抬价我就信');
+  if (st.blindBids >= 2 && st.blindWildest)
+    bits.push(
+      `你有${st.blindBids}口价是闭着眼报的——第${st.blindWildest.round}局那个${st.blindWildest.bid.count}个${st.blindWildest.bid.face}，你自己都不知道手里是什么`,
+    );
+  if (st.bluffRate > 0.5) bits.push(`看过骰的十句里${Math.round(st.bluffRate * 10)}句是空的，胆子不小`);
+  else if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3)
+    bits.push('你看过骰之后几乎不说谎，所以你一抬价我就信');
   if (st.myChallenges > 0 && st.hitRate < 0.34)
     bits.push(`你开我${st.myChallenges}次错${st.myChallenges - st.myChallengeHits}次，手比脑子快`);
   if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3)
     bits.push('一次都不敢开，我报什么你都得受着');
-  if (st.myCalcs >= 2 && st.calcFollowRate >= 0.8)
+  // 判词只许说有数据撑的话（F0b 同一条纪律）：没判定过的手不许被说成"照着数走"
+  if (st.myCalcs >= 2 && st.calcFollowRate != null && st.calcFollowRate >= 0.8)
     bits.push(`算了${st.myCalcs}次，次次照着数走——你在跟算盘打牌，我把谎放在"大概"里就够了`);
-  else if (st.myCalcs >= 2 && st.calcFollowRate <= 0.4)
+  else if (st.myCalcs >= 2 && st.calcFollowRate != null && st.calcFollowRate <= 0.4)
     bits.push(`算了${st.myCalcs}次，算完照样由着性子来——那算盘是拨给我看的`);
   if (bigPotBrief(st)) bits.push(bigPotBrief(st).replace('他', '你'));
   if (st.slowest && st.slowest.ms > 8000)

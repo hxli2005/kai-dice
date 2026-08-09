@@ -7,6 +7,7 @@
 import { allLegalBids, isLegalBid } from '../rules.js';
 import { obProb, coarseWord } from '../probability.js';
 import { OPS } from '../mods/catalog.js';
+import { buildLedger, checkFacts } from './factcheck.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { TONES, DEFAULT_PERSONA } from './personas.js';
@@ -25,9 +26,11 @@ const FACT_LINE =
 const RULES_BRIEF = (three) =>
   `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","note":"一句真实决策理由（记入档案，玩家看不到）"}
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","belief":"你此刻的真实判断（私密，不上屏；要具体到这一口价与这个人，别写套话）","speechMode":"straight 或 bait（bait＝这句台词是有意误导）","note":"一句真实决策理由（记入档案，玩家看不到）"}
 铁律一：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。
-铁律二（准数）：这一局没当众拨过算盘，就不许说出任何精确概率（"三成""37%"都算）——你算不出来的数说出口就是编。发给你的档案数字（虚报率、开牌命中之类）照引不误，那是真数据。粗话不要钱："基本稳""五五开""悬""纯扯"都是你的手感，随便说。`;
+铁律二（准数）：这一局没当众拨过算盘，就不许说出任何精确概率（"三成""37%"都算）——你算不出来的数说出口就是编。发给你的档案数字（虚报率、开牌命中之类）照引不误，那是真数据。粗话不要钱："基本稳""五五开""悬""纯扯"都是你的手感，随便说。
+铁律三（可以骗他你怎么想，不能骗他发生过什么）：**你的手牌、你的把握、你的意图**是你的自由——虚张、误导、把怀疑说成确定，全合法（"你这停顿就是心虚"想说就说）。但**发生过的事**一个字不许错：谁报过什么价、报过几次、谁掉了几颗骰、第几局、档案里的数——这些桌上有账，说错不叫演戏叫穿帮。
+铁律四（诈必须留档）：嘴上演戏时，speechMode 填 "bait"，belief 写你心里真实的判断（"其实五五开，钓他洗白"）。对外可以演，对内必须交底——belief 与 say 不一致是允许的，belief 空着或写套话不允许。`;
 
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
 const personaSystem = (p, three, modSpec = '') =>
@@ -104,17 +107,7 @@ const CALC_HABIT = {
   never: '你从不碰算盘：全凭手感，所以你嘴里永远没有准数——你也不觉得那玩意儿有用。',
 };
 
-// 引用校验（Q45）：没当众拨算盘就说出准数＝编数字。判据是"这个数在给你的事实里吗"——
-// 档案数字（虚报率 43%）照样能引（那是发给他的真数据，也正是被读感的来源）；
-// 凭空长出来的概率一律掐掉。「三成」这类中文说法是本桌概率的成语，未算即视为编。
-// 粗话（基本稳/五五开/悬/纯扯）永远免检。
-export function hasFakePrecision(text, allowedFrom = '') {
-  const s = String(text ?? '');
-  if (/[一二两三四五六七八九]\s*成(?!立|不|功|交|群)/.test(s) || /百分之/.test(s)) return true;
-  return [...s.matchAll(/(\d+)\s*[%％]/g)].some(
-    (m) => !new RegExp(`${m[1]}\\s*[%％]`).test(String(allowedFrom)),
-  );
-}
+export { hasFakePrecision } from './factcheck.js'; // 出口校验的一员，实现见 factcheck.js
 
 // 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
 const ownActDesc = (a, ob) => {
@@ -271,6 +264,9 @@ export function parseDecision(text, ob) {
                 : { type: 'challenge' },
       say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
       note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
+      // Q47 诈必须留档：对外可以演，对内必须交底（私密字段，永不上屏——只进决策日志与复盘室）
+      belief: typeof j.belief === 'string' ? j.belief.slice(0, 100) : '',
+      speechMode: j.speechMode === 'bait' ? 'bait' : 'straight',
     };
   } catch {
     return null;
@@ -279,7 +275,7 @@ export function parseDecision(text, ob) {
 
 // 一句话任务（开场白等）：人设声口、非 JSON、事实锚定——替代写死台词（台词只能出自角色）。
 // 失败返回 null（一句不说；沉默模式不代言）。
-export async function personaLine(channel, { persona, task, facts }, fetchFn) {
+export async function personaLine(channel, { persona, task, facts, ledger }, fetchFn) {
   try {
     const raw = await chat(
       channel,
@@ -292,8 +288,10 @@ export async function personaLine(channel, { persona, task, facts }, fetchFn) {
       },
       fetchFn,
     );
-    const line = raw.trim().replace(/^["「『]|["」』]$/g, '');
-    return line ? line.slice(0, 90) : null;
+    const line = raw.trim().replace(/^["「『]|["」』]$/g, '').slice(0, 90);
+    // F0b：开场白/主持词同样过出口校验——只许引用发给它的那些事实，编的一律不出口（宁可不说）
+    if (!line || checkFacts(line, ledger, { allowedFrom: facts }).length) return null;
+    return line;
   } catch {
     return null;
   }
@@ -323,14 +321,16 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     if (!Array.isArray(j.hypotheses)) return null;
     return j.hypotheses
       .slice(0, 4)
-      .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }));
+      .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+      // F0b：假设也是要被写进档案给玩家看的——引用了没发生过的事就不许立案
+      .filter((h) => h.text && !checkFacts(h.text, undefined, { allowedFrom: factText }).length);
   } catch {
     return null;
   }
 }
 
 // 结算 1 次调用（§3.1）：场终判词＋档案笔记＋全量复盘假设（§3.3 触发②）。失败返回 null。
-export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA, hypotheses = [] }, fetchFn) {
+export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA, hypotheses = [], ledger }, fetchFn) {
   try {
     const raw = await chat(
       channel,
@@ -350,11 +350,19 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
     );
     const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
     if (typeof j.verdict !== 'string') return null;
+    // F0b：报告卡是裁判层的脸面——判词里的数对不上账就整条不要，退模板判词（宁可平淡，不许记错）
+    const clean = (t, n) => {
+      const s = String(t ?? '').slice(0, n);
+      return s && !checkFacts(s, ledger, { allowedFrom: statsText }).length ? s : '';
+    };
     return {
-      verdict: j.verdict.slice(0, 120),
-      note: (j.note ?? '').slice(0, 80),
+      verdict: clean(j.verdict, 120) || null,
+      note: clean(j.note, 80),
       hypotheses: Array.isArray(j.hypotheses)
-        ? j.hypotheses.slice(0, 4).map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+        ? j.hypotheses
+            .slice(0, 4)
+            .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+            .filter((h) => h.text && !checkFacts(h.text, ledger, { allowedFrom: statsText }).length)
         : null,
     };
   } catch {
@@ -372,9 +380,14 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
     persona,
     async decide(ob) {
       const canPeek = ob.legal.some((a) => a.type === 'peek');
-      // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）
-      if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind)
-        return { action: { type: 'peek' } };
+      // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）。
+      // 这一手不问模型，但**照样落日志**——决策日志要与它的动作严格 1:1，
+      // 否则复盘室的双轨会从这里开始错位（F8 验收：逐字段对账一致）。
+      if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind) {
+        const auto = { action: { type: 'peek' }, say: '', note: '', belief: '', speechMode: 'straight' };
+        logs.push({ round: ob.round, facts: null, raw: null, ...auto, silentFallback: false, error: null, auto: true });
+        return auto;
+      }
       // 提示词拼装也进降级链：任何异常都不许把桌子冻住，最多退成沉默 bot
       let prompts = null;
       try {
@@ -415,16 +428,22 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
         }
       }
       const silentFallback = decision === null;
-      if (silentFallback) decision = { action: silent.decide(ob), say: '', note: '' };
-      // Q45 引用校验：这一局没当众拨过算盘，说出来的准数就是编的——当场掐掉（宿主会用事实模板顶上）。
-      // 决定去拨算盘的那一手同样管：那时数还没出来，说出口的准数只能是编的（算完的下一次调用才有）。
+      if (silentFallback)
+        decision = { action: silent.decide(ob), say: '', note: '', belief: '', speechMode: 'straight' };
+      // F0b 出口校验（Q46/Q47）：可核验的公共事实说错了就掐掉这句（宿主会用事实模板顶上）——
+      // 宁可少说一句，也不许它把桌上发生过的事记错。它怎么想、手里有什么，一个字不管。
+      const ledger = buildLedger(ob);
+      const opts = {
+        ownBid: decision.action?.type === 'bid' ? decision.action : null,
+        allowedFrom: prompts.user,
+        calced: !!ob.calced?.[ob.you],
+      };
       let dropped = null;
-      if (!ob.calced?.[ob.you]) {
-        for (const k of ['say', 'note'])
-          if (hasFakePrecision(decision[k], prompts.user)) {
-            dropped = `${dropped ? `${dropped},` : ''}${k}`;
-            decision = { ...decision, [k]: '' };
-          }
+      for (const k of ['say', 'note']) {
+        const bad = checkFacts(decision[k], ledger, opts);
+        if (!bad.length) continue;
+        dropped = `${dropped ? `${dropped};` : ''}${k}:${bad.join(',')}`;
+        decision = { ...decision, [k]: '' };
       }
       logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error, dropped });
       return { ...decision, silentFallback, error, dropped };

@@ -5,6 +5,7 @@ import { computeStats, persona, templateVerdict, condBrief, bigPotBrief } from '
 // 手工构造一局：A 报了一真一假，被 B 开掉
 const events = [
   { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
+  { type: 'peek', player: 'A' }, // F0c：看过骰才进虚报率的账
   { type: 'bid', player: 'A', count: 2, face: 4, elapsedMs: 3000 },
   { type: 'bid', player: 'B', count: 3, face: 4, elapsedMs: 1000 },
   { type: 'bid', player: 'A', count: 5, face: 6, elapsedMs: 9000 },
@@ -44,6 +45,7 @@ test('persona 与模板判词：可生成且引用真实局面', () => {
 // F0：三人桌一场——A 开过李（B）也开过飞（C），并被 C 开过一次；A 第 2 局末出局，桌子继续打第 3 局
 const trio = [
   { type: 'roundStart', round: 1, diceCount: { A: 1, B: 5, C: 5 } },
+  { type: 'peek', player: 'A' },
   { type: 'bid', player: 'A', count: 2, face: 4 },
   { type: 'bid', player: 'B', count: 8, face: 4 },
   { type: 'calc', player: 'A' },

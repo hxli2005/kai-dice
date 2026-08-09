@@ -28,7 +28,7 @@ export const PERSONAS = {
 - 自负：你算得准，所以你不信邪——算盘拨出来的数对你不利时，你偶尔偏要逆着开："我知道数难看，但你就是在装。"
 - 收网才抬：「抬」的章你轻易不拍——只有把人读死、要一口收走的那手才用。所以你一拍抬，等于把"我读死你了"写在脸上。你知道。你不改。`,
     // 装备（Q45）：常算——算盘当众拨，算完照样可以逆着数开；不用盲（稳健记仇）
-    gear: { calc: 'often', usesBlind: false },
+    gear: { calc: 'often', usesBlind: false, revealBait: 0.3 }, // revealBait＝揭诈频率 TODO(Q49 参数表)
     // 沉默模式的口（F2）：无通道时也要说出"我为什么开你"，全部由事实模板拼
     voice: { challenge: (f) => `${f.coarse}。${f.clause ? `${f.clause}。` : ''}开。` },
     strategy: { challengeThreshold: 0.25 }, // 沉默模式顶班时沿用的行为参数
@@ -54,7 +54,7 @@ export const PERSONAS = {
 - 盲上头：你迷信手感，爱不看骰直接盲报（池×2 才叫刺激）；盲赢一把你必吹半天，然后更收不住。
 - 爱抬：手痒。爱拍「抬」把池翻倍起哄，上头时逢局必抬——池子越大你嗓门越大。`,
     // 装备（§B.1／Q45）：从不碰算盘（身份锚点，不给他这个动作）、爱盲、决策快
-    gear: { calc: 'never', usesBlind: true },
+    gear: { calc: 'never', usesBlind: true, revealBait: 0.45 }, // 藏不住话：揭得比谁都勤
     voice: { challenge: (f) => `${f.clause ? `${f.clause}，` : ''}就这？开！` },
     strategy: { challengeThreshold: 0.35 }, // 沉默顶班：更冲动，容忍度低就开
     bankroll: 300, // Q25 已裁：街口薄底，仍比客人厚
@@ -84,6 +84,8 @@ PERSONAS.xiansheng = {
   gear: {
     calc: 'key',
     usesBlind: false,
+    revealBait: 0.15, // 账房不爱把牌摊开：一季揭一次
+
     model: 'deepseek-v4-pro',
     maxTokens: 500,
     timeoutMs: 15_000,

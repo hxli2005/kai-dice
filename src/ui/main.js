@@ -15,8 +15,9 @@ import { SEALS, PHRASES } from '../room/protocol.js';
 import { compileWish } from '../mods/compiler.js';
 import { examMod } from '../mods/exam.js';
 import { smokeMods } from '../mods/smoke.js';
-import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByRoundOf } from './report.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts } from './profile.js';
+import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByRoundOf, reviewTracks } from './report.js';
+import { buildLedger } from '../ai/factcheck.js';
+import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -410,7 +411,7 @@ function renderTrio(o) {
           info.name + (info.substituted ? '（老李头代打）' : info.kind === 'human' && !info.connected ? '（掉线）' : '');
     } else if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
     else {
-      const last = opponents[s]?.logs.at(-1);
+      const last = opponents[s]?.logs.findLast((l) => !l.auto); // 自动掀盅那一手不代表通道状态
       dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
     }
   }
@@ -571,7 +572,7 @@ function render() {
   const dot = $('brainDot');
   if (isTrio() || !chanForPersona(SEAT_PERSONA.B)) dot.className = 'brain hidden';
   else {
-    const last = opponent?.logs.at(-1);
+    const last = opponent?.logs.findLast((l) => !l.auto);
     dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
   }
 }
@@ -792,7 +793,7 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
     reflect(ch, { persona: ai.persona, factText: roundFactText(rv, re, s), hypotheses: mind.hypotheses })
       .then((hyps) => {
         if (hyps) {
-          mind.hypotheses = hyps;
+          mergeHypotheses(mind, hyps, profile.matches + 1); // F8：立案时间跟着假设走
           saveProfile(profile);
         }
       });
@@ -944,7 +945,14 @@ async function showReport(end) {
       ? `三人桌，名次：${end.standings.map(dispName).join(' > ')}。你只写你自己名下的账：${duelText('B')}。` +
         `客人参战 ${stats.roundsAlive} 局，全桌打了 ${end.rounds} 局。以下为全桌口径的公共数据（不是你一个人打出来的）：`
       : `${end.rounds}局${won ? '客人赢' : '客人输'}；`) +
-    `虚报率${pct(stats.bluffRate)}；` +
+    `虚报率${pct(stats.bluffRate)}（只算他看过骰之后报的 ${stats.seenBids} 口）；` +
+    (stats.blindBids
+      ? `没看骰就报的有 ${stats.blindBids} 口${
+          stats.blindWildest
+            ? `，最狠一口是第 ${stats.blindWildest.round} 局的 ${stats.blindWildest.bid.count} 个 ${stats.blindWildest.bid.face}`
+            : ''
+        }；`
+      : '') +
     (isTrio()
       ? `他全场开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；全场被开${stats.timesChallenged}次`
       : `开牌${stats.myChallenges}次命中${stats.myChallengeHits}次；被开${stats.timesChallenged}次`) +
@@ -978,7 +986,13 @@ async function showReport(end) {
             : `<dt>局数</dt><dd>你参战 ${stats.roundsAlive} 局 · 全桌 ${end.rounds} 局</dd>`
         }
         <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}${sandbox ? '（沙盒·不记账）' : ''}</dd>
-        <dt>虚报率</dt><dd>${pct(stats.bluffRate)}</dd>
+        <dt>虚报率</dt><dd>${pct(stats.bluffRate)}${stats.seenBids ? `（看过骰的 ${stats.seenBids} 口）` : '（没看过骰）'}</dd>
+        ${
+          // F0c：蒙报单列——闭着眼报的价不进虚报率，但更要写在脸上
+          stats.blindBids
+            ? `<dt>蒙报</dt><dd>${stats.blindBids} 口${stats.blindWildest ? ` · 最狠 ${stats.blindWildest.bid.count} 个 ${stats.blindWildest.bid.face}` : ''}</dd>`
+            : ''
+        }
         <dt>开牌命中</dt><dd>${
           // F0：谁的账记谁头上——三人桌按对手拆开
           isTrio()
@@ -1004,12 +1018,14 @@ async function showReport(end) {
       <button class="ghost" id="lobbyBtn">换桌</button>
       <button class="primary again" id="againBtn">再来一局</button>
     </div>
+    <div class="review-row"><button class="linkish" id="reviewBtn">看看他当时怎么想的 →</button></div>
     <div class="small-note">${sandbox ? '实验局 · 不入榜不入账不入档案' : '截屏即可分享 · 这一场已记进他的本子'} · kai-dice.pages.dev</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
     ov.querySelector('#lobbyBtn').addEventListener('click', () => {
       ov.classList.add('hidden');
       showLobby();
     });
+    ov.querySelector('#reviewBtn').addEventListener('click', () => openReview(o.events));
   };
   renderCard(byok ? `${opponent.persona.name}在写你的档案……` : templateVerdict(stats, won));
 
@@ -1022,25 +1038,108 @@ async function showReport(end) {
       statsText,
       persona: opponent.persona,
       hypotheses: mindB.hypotheses,
+      ledger: buildLedger(o), // F0b：判词里的账要对得上事件流，对不上就退模板
     });
     if (r) {
       ({ verdict, note } = r);
       // §3.3 触发②：场终全量复盘——修订后的规律假设入主观层（沙盒不喂）
-      if (r.hypotheses && !sandbox) mindB.hypotheses = r.hypotheses;
+      if (r.hypotheses && !sandbox) mergeHypotheses(mindB, r.hypotheses, profile.matches + 1);
     }
     renderCard(verdict ?? templateVerdict(stats, won));
   }
   if (sandbox) return; // 沙盒到此为止：判词照说，档案一字不写
-  // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）
+  // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）＋本场的诈留档（F7）
   for (const s of seats.slice(1)) {
-    if (s === 'B') continue; // 主笔（B 席）的经 appendMatch 记
     const ai = opponents[s];
-    const extra = ai.logs.map((l) => l.note).filter(Boolean).slice(-2);
     const mind = mindOf(profile, ai.persona.id);
+    recordBaits(mind, ai.logs, profile.matches + 1); // 说一套想一套的时刻，下场可被自己揭底
+    if (s === 'B') continue; // 主笔（B 席）的笔记经 appendMatch 记
+    const extra = ai.logs.map((l) => l.note).filter(Boolean).slice(-2);
     mind.notes = [...mind.notes, ...extra].slice(-30);
   }
   const aiNotes = opponent.logs.map((l) => l.note).filter(Boolean).slice(-2);
   profile = appendMatch(profile, { won, stats, notes: [...aiNotes, note], personaId: opponent.persona.id });
+}
+
+// ---------- F8 复盘室「他的小本子」（Q48）：场终自选深潜 ----------
+// 硬法：**禁事后供词**——右轨每一个字都来自当时的决策日志，散场后不再问模型"你当时怎么想"
+// （事后合理化＝制造回忆）。零新增调用：全是模板与字段。
+const PEEK_PUBLIC_KEY = 'kai.peekpub.v1'; // 反身彩蛋开关（默认开）
+const peekIsPublic = () => localStorage.getItem(PEEK_PUBLIC_KEY) !== 'off';
+
+function openReview(events) {
+  const d = $('drawer');
+  d.classList.remove('hidden');
+  d.scrollTop = 0;
+  const logsBySeat = Object.fromEntries(seats.slice(1).map((s) => [s, opponents[s]?.logs ?? []]));
+  const tracks = reviewTracks(events, { logsBySeat, nameOf: dispName, you: 'A' });
+  // 反身彩蛋：翻本子是公开事件——你看他的心，他知道你看过（默认开，可关）
+  if (!sandbox && peekIsPublic()) {
+    for (const s of seats.slice(1)) mindOf(profile, SEAT_PERSONA[s].id).peeks += 1;
+    saveProfile(profile);
+  }
+  const innerHtml = (r) => {
+    if (!r.inner) return '<div class="tr-inner mine">（你的手，你自己知道）</div>';
+    const bits = [];
+    if (r.inner.say) bits.push(`<b>说：</b>${r.inner.say}`);
+    if (r.inner.belief) bits.push(`<b>想：</b>${r.inner.belief}`);
+    else if (r.inner.note) bits.push(`<b>想：</b>${r.inner.note}`);
+    if (r.inner.calcP) bits.push(`<b>算：</b>${r.inner.calcP}（只他自己看得见）`);
+    if (r.inner.auto) bits.push('<i>（不用想：他不玩盲，上桌先掀盅）</i>');
+    else if (r.inner.silent) bits.push('<i>（这一手没开口——通道断了，纯算数行棋）</i>');
+    if (r.inner.dropped) bits.push('<i>（这一手它说错了账，那句话被拦下了）</i>');
+    return `<div class="tr-inner${r.inner.bait ? ' bait' : ''}">${
+      r.inner.bait ? '<span class="bait-tag">诈</span>' : ''
+    }${bits.join('<br>') || '（没留话）'}</div>`;
+  };
+  const roundHtml = (t) => {
+    const out = t.outcome;
+    const head = `第 ${t.round} 局${t.mult > 1 ? ` · 池 ×${t.mult}` : ''}${
+      out ? ` · ${dispName(out.loser)}掉一颗骰` : ''
+    }`;
+    return `<details class="rv-round" ${t.spotlight ? 'open' : ''}>
+      <summary>${head}${t.spotlight ? '<i class="spot">戏眼</i>' : ''}</summary>
+      ${t.rows
+        .map(
+          (r) => `<div class="tr-row">
+            <div class="tr-pub">${r.text}</div>
+            ${innerHtml(r)}
+          </div>`,
+        )
+        .join('')}
+      ${
+        t.reveal
+          ? `<div class="tr-row"><div class="tr-pub">摊牌：${
+              t.reveal.calza ? '掐' : '开'
+            }「${t.reveal.bid.count} 个 ${t.reveal.bid.face}」，实有 ${t.reveal.actual} 个</div><div class="tr-inner mine">——</div></div>`
+          : ''
+      }
+    </details>`;
+  };
+  // 假设的一生（跨场层核心）：立案 → 证据 → 反例 → 死亡
+  const lifeHtml = (per) => {
+    const mind = mindOf(profile, per.id);
+    const card = (h, dead) => `<div class="hyp-card${dead ? ' dead' : ''}">
+      <p class="hyp-text">「${h.text}」</p>
+      <p class="hyp-life">立案：第 ${h.since ?? '?'} 场　证据 ${h.hits ?? 0}${
+        h.misses?.length ? `　反例 ${h.misses.length}（${h.misses.join('、')}）` : ''
+      }${dead ? `　<b>第 ${h.died} 场撤案</b>` : ''}</p>
+    </div>`;
+    const alive = (mind.hypotheses ?? []).map((h) => card(h, false)).join('');
+    const dead = (mind.dead ?? []).slice(-4).map((h) => card(h, true)).join('');
+    if (!alive && !dead) return '';
+    return `<div class="book"><div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}的假设</div>${alive}${dead}</div>`;
+  };
+  d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
+    <h2>他的小本子</h2>
+    <p class="p-idline">左边是桌上发生的事（引擎盖的章），右边是他当时心里记下的。这些字都是当时留的——散场之后没人再问过他一句。</p>
+    ${tracks.map(roundHtml).join('')}
+    <h2>假设的一生</h2>
+    ${seats.slice(1).map((s) => lifeHtml(SEAT_PERSONA[s])).join('') || '<p class="dim-line">他还没对你立过案。</p>'}
+    <p class="dim-line" style="margin-top:1rem">${
+      peekIsPublic() ? '你翻过这本子——这事他知道（可在设置里关掉）。' : '你翻本子的事没告诉他（设置里已关）。'
+    }</p>`;
+  d.querySelector('#closeDrawer').addEventListener('click', () => d.classList.add('hidden'));
 }
 
 // ---------- 档案渲染件（玩家页与局内抽屉共用） ----------
@@ -1126,6 +1225,7 @@ function openDrawer(section, inLobby = false) {
       <li>三印的代价（倍率对全桌双向生效，赢多输也多）：盲＝没看骰就能宣、宣了整局不看，池×2　｜　斋＝首报者宣，1 不作癞子，池×1.5　｜　抬＝轮到你拍章，池×2，每人每局一次。</li>
       <li>第 6 手报价起进深水：池自动再 ×2。倍率全部相乘。</li>
       <li><b>算盘</b>：桌面平时不显示概率。轮到你时可拨一次算盘（本局限一次）——算出来的准数只有你看得见，但"你在算"全桌都看得见。他们也守同一条规矩。</li>
+      <li><b>小本子</b>：一场打完可以翻开看他当时怎么想的（说的一套、想的一套都在）。**翻本子是公开的**——他知道你研究过他，下回可能拿这个开你玩笑（不想让他知道，设置里可以关）。</li>
       <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
@@ -1154,6 +1254,7 @@ function openDrawer(section, inLobby = false) {
     <div class="btnrow"><button class="primary" id="savePassBtn">保存</button></div>
     <div id="passTest" class="test-line"></div>
     <p class="dim-line">自带 API？在大厅的「客席」卡上填钥匙，你的模型以本名上桌。</p>
+    <p class="dim-line" style="margin-top:1rem"><button id="peekPubBtn" class="linkish">翻小本子这件事：${peekIsPublic() ? '他知道（点此改为不告诉他）' : '不告诉他（点此改为公开）'}</button></p>
     <p class="dim-line" style="margin-top:1.4rem"><button id="wipeBtn" class="linkish">清空本地记录（档案·账本·战绩）</button></p>`
     }
     <p class="dim-line" style="margin-top:1rem"><a class="linkish" href="about.html" target="_blank">完整说明 →</a></p>`;
@@ -1166,6 +1267,11 @@ function openDrawer(section, inLobby = false) {
     if (inLobby) return;
     const o = ob();
     if (o.turn === 'A' && !o.over && !busy) armIdle();
+  });
+  // 反身彩蛋开关（F8）：翻本子要不要算公开事件
+  d.querySelector('#peekPubBtn')?.addEventListener('click', () => {
+    localStorage.setItem(PEEK_PUBLIC_KEY, peekIsPublic() ? 'off' : 'on');
+    openDrawer(section, inLobby);
   });
   // 清档重开：两段式确认；只清游戏记录，暗号/客席钥匙/设备号保留
   d.querySelector('#wipeBtn')?.addEventListener('click', (e) => {
@@ -2034,7 +2140,16 @@ function speakOpener(ledger) {
   if (!ch) return;
   const gen = matchGen;
   const facts = openerFacts(profile, ledger); // 素材抽成纯函数（可测：Q14 节拍是否真落地）
+  const mind = mindOf(profile, per.id);
+  if (mind.peeks > 0) facts.push(`他翻过你的小本子 ${mind.peeks} 次`); // F8 反身彩蛋
+  // F7 揭诈时刻（Q47）：偶尔把上一场留档的一句诈自己揭了——调味不主食，频率随人设
+  const bait = mind.baits?.at(-1);
+  if (bait && Math.random() < (per.gear?.revealBait ?? 0.25))
+    facts.push(
+      `上一场第 ${bait.round} 局你嘴上说的是「${bait.say}」，心里想的其实是「${bait.belief}」——这一句你可以自己揭出来`,
+    );
   personaLine(ch, {
+    ledger: buildLedger(ob()), // F0b：开场白也过出口校验（只许引用给它的事实）
     persona: per,
     task: profile.matches
       ? '开场白：老客回来了，开一局。第一句必须引用下面旧账里的一条具体事实——让他知道这儿记着他。'

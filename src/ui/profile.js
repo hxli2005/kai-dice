@@ -12,7 +12,8 @@ const PROFILE_KEY = 'kai.profile.v1';
 const BYOK_KEY = 'kai.byok.v1';
 
 function emptyMind() {
-  return { notes: [], hypotheses: [], stats: [], record: { plays: 0, beat: 0, wins: 0 } };
+  // baits/dead/peeks 为 F7/F8 新增：诈的留档、假设的尸体、玩家翻本子的次数（反身彩蛋）
+  return { notes: [], hypotheses: [], dead: [], baits: [], peeks: 0, stats: [], record: { plays: 0, beat: 0, wins: 0 } };
 }
 
 function emptyProfile() {
@@ -47,7 +48,32 @@ export function mindOf(profile, personaId) {
   m.stats ??= [];
   m.record ??= { plays: 0, beat: 0, wins: 0 };
   m.record.wins ??= 0; // 旧档补位：场胜数（榜的胜率列）
+  m.dead ??= []; // 旧档补位（F8）：假设的坟场
+  m.baits ??= []; // 旧档补位（F7）：诈的留档
+  m.peeks ??= 0; // 旧档补位（F8）：他知道你翻过几回本子
   return m;
+}
+
+// F8 假设的一生：立案（since）→ 证据累积 → 反例 → 死亡（消失即放弃，留尸体）。
+// 档案是活文档不是快照——被自己撤下的假设也是学问（"我曾以为你只在斋局说真话"）。
+export function mergeHypotheses(mind, next, matchNo) {
+  if (!Array.isArray(next)) return;
+  const prev = mind.hypotheses ?? [];
+  const bySince = new Map(prev.map((h) => [h.text, h.since]));
+  mind.hypotheses = next.map((h) => ({ ...h, since: bySince.get(h.text) ?? matchNo }));
+  const alive = new Set(mind.hypotheses.map((h) => h.text));
+  const dead = prev.filter((h) => !alive.has(h.text)).map((h) => ({ ...h, died: matchNo }));
+  mind.dead = [...(mind.dead ?? []), ...dead].slice(-12);
+}
+
+// F7 揭诈时刻：把本场"说一套想一套"的时刻留下来，供复盘室与下场开场引用。
+// 只收留了档的（speechMode=bait 且 belief 有内容）——没留档的不算诈，算故障（Q47）。
+export function recordBaits(mind, logs, matchNo) {
+  const fresh = (logs ?? [])
+    .filter((l) => l.speechMode === 'bait' && l.say && l.belief)
+    .map((l) => ({ round: l.round, say: l.say, belief: l.belief, matchNo }));
+  if (fresh.length) mind.baits = [...(mind.baits ?? []), ...fresh].slice(-8);
+  return fresh.length;
 }
 
 export function saveProfile(profile, storage = localStorage) {
@@ -105,6 +131,7 @@ export function openerFacts(profile, ledger) {
   if (last.myBlinds >= 2) facts.push(`上一场他盲了 ${last.myBlinds} 把`);
   if (last.myCalcs === 0) facts.push('上一场他一次算盘都没拨');
   else if (last.myCalcs >= 2) facts.push(`上一场他拨了 ${last.myCalcs} 次算盘`);
+  if (last.blindBids >= 2) facts.push(`上一场他有 ${last.blindBids} 口价是没看骰就报的`); // F0c
   if (bigPotBrief(last)) facts.push(`上一场${bigPotBrief(last)}`); // F5：×4 以上的池必须被记住
   if (last.slowest && last.slowest.ms > 8000)
     facts.push(`上一场第 ${last.slowest.round} 局他停了半天才报 ${last.slowest.bid.count} 个 ${last.slowest.bid.face}`);
