@@ -123,9 +123,14 @@ function officialChannelOf(per) {
   return {
     baseUrl: `${location.origin}/api/llm`,
     apiKey: pass, // 空＝托管免费档
-    model: per?.gear?.model ?? 'deepseek-chat', // Q18 原版演员按人设钉（代理端白名单校验）
+    model: per?.gear?.model ?? HOSTED_MODEL, // 座位钉的模型（代理端按上游清单校验；不钉就用托管那个）
     format: 'openai',
     headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
+    // 官方通道现在全是思考型模型（v4-flash／v4-pro）。**不关思维链就没法玩**：
+    // 2026-08-09 生产实测，max_tokens=320 时思维链把 320 个 token 全部想光，
+    // finish_reason=length、正文为空 → 每一手都 bad-output → 整场退沉默 bot。
+    // 关掉之后 1.9s／81 token／JSON 完整。先生当年（v4-pro）踩的是同一个坑。
+    extra: { thinking: { type: 'disabled' } },
   };
 }
 // OpenRouter（A1）：按其惯例带来源标识头。key 仍不出设备——浏览器直连，我方服务器不经手。
@@ -670,7 +675,11 @@ async function onBid() {
 // hit-test 回它自己，谁盖住了就当场在控制台喊，实机试玩时躲不掉。
 const CORE_VERBS = ['calcBtn', 'bidBtn', 'openBtn', 'blindBtn', 'zhaiBtn', 'raiseBtn', 'cntUp', 'cntDown'];
 // 大厅／抽屉／弹层本来就该盖住牌桌——那不是误触，是遮罩。会误报的规矩没人看，所以先让开。
-const overlayUp = () => ['lobby', 'drawer', 'overlay'].some((id) => $(id) && !$(id).classList.contains('hidden'));
+// 大厅／抽屉／弹层／新手指引本来就该盖住牌桌——那不是误触，是遮罩。
+// 会误报的规矩没人看，所以先让开。
+const overlayUp = () =>
+  ['lobby', 'drawer', 'overlay'].some((id) => $(id) && !$(id).classList.contains('hidden')) ||
+  !!$('coach');
 export function hitTestVerbs() {
   if (overlayUp()) return [];
   const bad = [];
@@ -1501,7 +1510,7 @@ function openGuestConfig() {
     <label>Base URL</label><input id="gBase" value="${g.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <p class="dim-line">一把钥匙开一屋子模型：<button class="linkish" id="gOR">用 OpenRouter</button>　·　<button class="linkish" id="gDS">用 DeepSeek</button></p>
     <label>API Key</label><input id="gKey" type="password" value="${g.apiKey}">
-    <label>Model</label><input id="gModel" value="${g.model}" placeholder="deepseek-chat">
+    <label>Model</label><input id="gModel" value="${g.model}" placeholder="${HOSTED_MODEL}">
     <div id="orBox" class="hidden">
       <div class="btnrow" style="margin-top:0.5rem"><button class="ghost" id="orLoad">拉一份现在的模型清单</button></div>
       <input id="orFilter" class="hidden" placeholder="筛一筛：claude / deepseek / 便宜 / 免费">

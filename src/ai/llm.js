@@ -64,7 +64,13 @@ export async function chat(
           }
         : {
             url: `${url}/chat/completions`,
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}`, ...extraHeaders },
+            // 没钥匙就**别发这个头**：空的 `Bearer ` 到了服务端会被规范化成 `Bearer`，
+            // 看起来像"带了一个叫 Bearer 的暗号"——免费托管档就是这么被自己挡在门外的（实测 401）。
+            headers: {
+              'content-type': 'application/json',
+              ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+              ...extraHeaders,
+            },
             body: {
               model,
               max_tokens: maxTokens,

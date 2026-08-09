@@ -107,7 +107,9 @@ export default {
       const origin = request.headers.get("Origin");
       if (origin && origin !== url.origin) return json({ error: "此暗号只在官方域有效" }, 403);
       if (!env.DEEPSEEK_KEY) return json({ error: "服务端未配置 key" }, 503);
-      const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+      // `\s*` 不是 `\s+`：客户端若发了个空的 `Bearer `，代理这边收到的可能是光秃秃的 `Bearer`——
+      // 用 `\s+` 剥不掉，就会把 "Bearer" 本身当成暗号判 401，免费档整个进不来（实测踩过）。
+      const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s*/i, "").trim();
       // 两档：有暗号＝原班人马全开、日限 400；没暗号＝免费托管档、只放行托管模型、日限 60。
       const friend = !!(env.FRIEND_PASS && pass && pass === env.FRIEND_PASS);
       if (pass && !friend) return json({ error: "暗号不对" }, 401);
@@ -150,8 +152,11 @@ export default {
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
       // 模型服务端白名单（Q18 原版演员按人设钉）：名单外一律钉回默认——暗号持有者也改不了成本档。
       // 免费档更严：只准托管那一个模型，谁也别想用免费口子点贵的。
-      const MODEL_ALLOW = friend ? ["deepseek-chat", "deepseek-v4-pro", HOSTED_MODEL] : [HOSTED_MODEL];
-      if (!MODEL_ALLOW.includes(body.model)) body.model = friend ? "deepseek-chat" : HOSTED_MODEL;
+      // 名单以**上游 /api/llm/models 查到的为准**，不照抄历史里的名字：
+      // 2026-08-09 核对发现上游只有 deepseek-v4-flash 与 deepseek-v4-pro 两个 id，
+      // 而化身一直钉着 "deepseek-chat"——名单外的一律钉回托管模型，别让它去敲一个不存在的门。
+      const MODEL_ALLOW = friend ? [HOSTED_MODEL, "deepseek-v4-pro"] : [HOSTED_MODEL];
+      if (!MODEL_ALLOW.includes(body.model)) body.model = HOSTED_MODEL;
       const upstream = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_KEY}` },

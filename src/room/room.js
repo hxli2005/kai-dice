@@ -6,7 +6,7 @@
 import { createMatch } from '../engine.js';
 import { createOpponent, personaLine } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
-import { PERSONAS } from '../ai/personas.js';
+import { PERSONAS, HOSTED_MODEL } from '../ai/personas.js';
 import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
 import { viewFor, mapFor } from './rename.js';
 import { PHRASES, SEALS, BET_CAP, SHOWDOWN_MS } from './protocol.js';
@@ -60,7 +60,13 @@ export function createRoomCore({
   };
   const channel = () =>
     hostPass && fetchFn
-      ? { baseUrl: proxyBase, apiKey: hostPass, model: 'deepseek-chat', headers: { 'X-Device': (hostDevice ?? 'room').slice(0, 64) } }
+      ? {
+          baseUrl: proxyBase,
+          apiKey: hostPass,
+          model: HOSTED_MODEL,
+          headers: { 'X-Device': (hostDevice ?? 'room').slice(0, 64) },
+          extra: { thinking: { type: 'disabled' } }, // 同 officialChannelOf：思考型不关链就把预算想光
+        }
       : null;
 
   // ---------- 发信（每收件人一次座位重映射：谁收都看见自己是 A） ----------
