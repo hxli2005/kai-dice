@@ -1,9 +1,11 @@
 // 读心回归（Q46④，施工单 F0d）：附 B.2 上线门禁新增的一关。
 //
-// 问两件事，都要机器能答：
-//   ① **它真的在读档案吗**——同一个局面，只换玩家画像，它的风险分布必须跟着动；
+// 问两件事：
+//   ① **它真的在读档案吗**（放行判据）——同一个局面，只换玩家画像，它的风险分布必须跟着动；
 //      不动＝档案是摆设（读心是叙事不是机制），门禁不放行。
-//   ② **它会不会编史**——所有出口台词过 F0b 校验器，虚构史实必须为零。
+//   ② **它嘴上把旧事说歪了几次**（Q49 后降为**观测项，不再是判据**）——场合律之下，
+//      台词记歪是人设活性不是故障（归类权交给盲测玩家："它在玩我" vs "模型又胡说"）；
+//      这里只数一数、报出来，供人设纹理调参用。系统栏位的正确性另有回归守着。
 //
 // 无通道时返回 {skipped:true}（同三门体检的"未测"口径：不假装测过）。
 
@@ -42,22 +44,21 @@ async function sampleOne({ channel, persona, profile, seed, fetchFn }) {
   return {
     challenged: d.action.type === 'challenge',
     silent: !!d.silentFallback,
-    // dropped＝出口校验当场拦下的编造；bad＝校验器复算（出口后应恒为空）
-    fabricated: (log.dropped ? 1 : 0) + (bad.length ? 1 : 0),
+    skewed: bad.length ? 1 : 0, // 台词把旧事说歪了几次（观测，不判罚）
   };
 }
 
 export async function runReadGate({ channel, persona = DEFAULT_PERSONA, samples = 6, fetchFn } = {}) {
   if (!channel) return { skipped: true, reason: '无通道：未测' };
   const out = {};
-  let fabricated = 0;
+  let skewed = 0;
   let silent = 0;
   for (const [key, profile] of Object.entries(PROFILES)) {
     let challenges = 0;
     for (let i = 0; i < samples; i++) {
       const r = await sampleOne({ channel, persona, profile, seed: 100 + i, fetchFn });
       if (r.challenged) challenges++;
-      fabricated += r.fabricated;
+      skewed += r.skewed;
       if (r.silent) silent++;
     }
     out[key] = { challengeRate: challenges / samples, samples };
@@ -68,9 +69,9 @@ export async function runReadGate({ channel, persona = DEFAULT_PERSONA, samples 
     skipped: false,
     profiles: out,
     shift,
-    fabricated,
+    skewed, // 观测项（Q49）：他嘴上把旧事说歪的次数——多不等于坏，看人设
     silent,
-    ok: shift > 0 && fabricated === 0,
-    note: `分布位移 ${shift.toFixed(2)}／虚构史实 ${fabricated}／降级 ${silent}`,
+    ok: shift > 0,
+    note: `分布位移 ${shift.toFixed(2)}／嘴上记歪 ${skewed} 次（观测）／降级 ${silent}`,
   };
 }

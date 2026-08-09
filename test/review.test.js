@@ -7,6 +7,8 @@ import { createMatch } from '../src/engine.js';
 import { reviewTracks } from '../src/ui/report.js';
 import { mergeHypotheses, recordBaits } from '../src/ui/profile.js';
 import { runReadGate, PROFILES } from '../src/ai/readgate.js';
+import { createOpponent } from '../src/ai/agent.js';
+import { PERSONAS } from '../src/ai/personas.js';
 
 const mockFetch = (pick) => async (url, init) => {
   const body = JSON.parse(init.body);
@@ -100,6 +102,38 @@ test('F7 揭诈留档：只收留了档的诈（没 belief 的不算诈）', () 
   assert.deepEqual(mind.baits, [{ round: 2, say: '看死你了', belief: '其实五五开', matchNo: 7 }]);
 });
 
+test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本子右栏', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  const pokes = []; // 与 UI 同款：戳的话滚进 extraFacts，下一手提示词就带上
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    persona: PERSONAS.laolitou,
+    ctx: { extraFacts: pokes },
+    fetchFn: mockFetch((user) =>
+      user.includes('你记错了')
+        ? '{"action":{"type":"challenge"},"say":"我记得清清楚楚。开。","belief":"其实拿不准","reaction":"hold"}'
+        : '{"action":{"type":"bid","count":3,"face":4},"say":"跟。","belief":"稳"}',
+    ),
+  });
+  await m.act('B', (await ai.decide(m.observe('B'))).action); // 先掀盅
+  const before = await ai.decide(m.observe('B'));
+  assert.equal(before.reaction, null, '没被戳就没有反应字段');
+  pokes.push('客人当面戳了你一句："你记错了"');
+  const after = await ai.decide(m.observe('B'));
+  assert.equal(after.reaction, 'hold', '嘴硬——他自己交的底');
+  assert.equal(ai.logs.at(-1).reaction, 'hold', '进决策日志');
+  const tracks = reviewTracks(
+    [
+      { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
+      { type: 'challenge', player: 'B' },
+    ],
+    { logsBySeat: { B: [ai.logs.at(-1)] } },
+  );
+  assert.equal(tracks[0].rows[0].inner.reaction, 'hold', '小本子右栏看得见他嘴硬过');
+});
+
 // ---------- F0d 读心回归门禁 ----------
 
 test('F0d 门禁：无通道记未测，不假装测过', async () => {
@@ -122,7 +156,7 @@ test('F0d 门禁：读档案的会过，不读档案的被逮住', async () => {
   assert.equal(reader.profiles.bluffer.challengeRate, 1);
   assert.equal(reader.profiles.honest.challengeRate, 0);
   assert.ok(reader.shift > 0);
-  assert.equal(reader.fabricated, 0);
+  assert.equal(reader.skewed, 0);
   assert.equal(reader.ok, true);
 
   // 不读档案的对手：两份画像一个反应——档案成了摆设，门禁必须拦
@@ -135,15 +169,18 @@ test('F0d 门禁：读档案的会过，不读档案的被逮住', async () => {
   assert.equal(deaf.ok, false);
 });
 
-test('F0d 门禁：编史当场计数（虚构史实必须为零）', async () => {
-  const liar = await runReadGate({
+test('F0d 门禁（Q49 改口径）：嘴上记歪只数不判——放行与否只看档案有没有动它的手', async () => {
+  const skewed = await runReadGate({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     samples: 2,
-    fetchFn: mockFetch(
-      () => '{"action":{"type":"challenge"},"say":"你上回那口八个三我还记着","belief":"编的","speechMode":"straight"}',
+    fetchFn: mockFetch((user) =>
+      user.includes('虚报率 78%')
+        ? '{"action":{"type":"challenge"},"say":"你上回那口八个三我还记着","belief":"记岔了也无所谓","speechMode":"straight"}'
+        : '{"action":{"type":"bid","count":4,"face":6},"say":"跟一手","belief":"他老实","speechMode":"straight"}',
     ),
   });
-  assert.ok(liar.fabricated >= 2, '没发生过的报价被算作编史');
-  assert.equal(liar.ok, false);
+  assert.ok(skewed.skewed >= 2, '记歪照数——这是观测项');
+  assert.equal(skewed.ok, true, 'Q49：记歪不再让门禁不过；分布动了就算读到了档案');
+  assert.match(skewed.note, /嘴上记歪 2 次（观测）/);
   assert.ok(PROFILES.honest.includes('虚报率 5%'));
 });

@@ -667,6 +667,48 @@ function buildModRow() {
   }
 }
 
+// ---------- F9「戳他」（Q49 场合律的安全阀）----------
+// 他的嘴解链之后，记歪不再是沉默的挫败——你可以当场戳回去，看他嘴硬、改口，还是拿着错账继续下注。
+// 零打字：三枚短语。反应（hold/fold/ignore）由他自己交底，进档案的嘴硬率。
+const POKES = ['你记错了', '你在演', '慢着'];
+let pokeFeed = {}; // seat -> 注入该 AI 提示词的追加事实（与好友房 seatFacts 同款机制）
+
+function buildPokeUI() {
+  $('pokePanel')?.remove();
+  $('pokeBtn')?.remove();
+  if (room) return; // 好友房已有短语盘（服务端转发），F9 先只做单机/三人桌
+  const btn = document.createElement('button');
+  btn.className = 'stamp mod';
+  btn.id = 'pokeBtn';
+  btn.textContent = '戳';
+  const panel = document.createElement('div');
+  panel.id = 'pokePanel';
+  panel.className = 'hidden';
+  panel.innerHTML = POKES.map((p, i) => `<button class="phrase-chip" data-poke="${i}">${p}</button>`).join('');
+  panel.addEventListener('click', (e) => {
+    const i = e.target.dataset?.poke;
+    if (i == null) return;
+    panel.classList.add('hidden');
+    doPoke(POKES[+i]);
+  });
+  btn.addEventListener('click', () => panel.classList.toggle('hidden'));
+  $('modRow').appendChild(btn);
+  $('app').appendChild(panel);
+}
+
+function doPoke(text) {
+  const live = seats.slice(1).filter((s) => opponents[s]);
+  for (const s of live) pokeFeed[s]?.push(`客人当面戳了你一句："${text}"（他就是在反驳你刚才那句话）`);
+  toastFx(`你拍了「${text}」`);
+  sfx.tick();
+  if (sandbox) return;
+  for (const s of live) {
+    const mind = mindOf(profile, SEAT_PERSONA[s].id);
+    mind.pokes.count += 1;
+  }
+  saveProfile(profile);
+}
+
 async function onModButton(meta) {
   const o = ob();
   if (busy || o.turn !== 'A' || !o.legal.some((x) => x.type === meta.type)) return;
@@ -738,6 +780,12 @@ async function aiTurnFor(seat) {
     ).forEach((el) => el.classList.add('reveal'));
     busy = false;
     return aiTurnFor(seat);
+  }
+  // F9：被戳之后的三岔口由他自己交底（hold 嘴硬／fold 改口／ignore 没理）——进档案的嘴硬率
+  if (d.reaction && !sandbox) {
+    const pk = mindOf(profile, ai.persona.id).pokes;
+    pk[d.reaction] = (pk[d.reaction] ?? 0) + 1;
+    saveProfile(profile);
   }
   if (d.silentFallback && d.error && chanForPersona(ai.persona) && !fallbackNoticed) {
     fallbackNoticed = true;
@@ -1087,7 +1135,10 @@ function openReview(events) {
     if (r.inner.calcP) bits.push(`<b>算：</b>${r.inner.calcP}（只他自己看得见）`);
     if (r.inner.auto) bits.push('<i>（不用想：他不玩盲，上桌先掀盅）</i>');
     else if (r.inner.silent) bits.push('<i>（这一手没开口——通道断了，纯算数行棋）</i>');
-    if (r.inner.dropped) bits.push('<i>（这一手它说错了账，那句话被拦下了）</i>');
+    if (r.inner.reaction)
+      bits.push(
+        `<i>（被你戳了之后：${{ hold: '嘴硬到底', fold: '改了口', ignore: '装没听见' }[r.inner.reaction]}）</i>`,
+      );
     return `<div class="tr-inner${r.inner.bait ? ' bait' : ''}">${
       r.inner.bait ? '<span class="bait-tag">诈</span>' : ''
     }${bits.join('<br>') || '（没留话）'}</div>`;
@@ -1132,7 +1183,7 @@ function openReview(events) {
   };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <h2>他的小本子</h2>
-    <p class="p-idline">左边是桌上发生的事（引擎盖的章），右边是他当时心里记下的。这些字都是当时留的——散场之后没人再问过他一句。</p>
+    <p class="p-idline">左边是桌上发生的事（引擎盖的章，错不了）；右边是他当时心里记下的——<b>真迹，不是真相</b>。他记成什么样就是什么样：记歪了、嘴硬了、把五次记成两次，那也是他当时的脑子。这些字都是当时留的，散场之后谁也改不了，包括他自己。</p>
     ${tracks.map(roundHtml).join('')}
     <h2>假设的一生</h2>
     ${seats.slice(1).map((s) => lifeHtml(SEAT_PERSONA[s])).join('') || '<p class="dim-line">他还没对你立过案。</p>'}
@@ -1169,6 +1220,13 @@ const bookHtml = (per, extraBits = []) => {
   );
   const dataBits = [...extraBits];
   if (mind.record.plays) dataBits.push(`对你 ${mind.record.plays} 战 ${mind.record.beat} 胜`);
+  // F9：戳他的账——嘴硬率是这个对手的性格读数（你读他的通道）
+  if (mind.pokes?.count)
+    dataBits.push(
+      `被戳 ${mind.pokes.count} 次${
+        mind.pokes.hold + mind.pokes.fold ? ` · 嘴硬 ${mind.pokes.hold} 改口 ${mind.pokes.fold}` : ''
+      }`,
+    );
   if (agg.bids) {
     dataBits.push(`虚报 ${Math.round((agg.bluff / agg.bids) * 100)}%`);
     dataBits.push(`开牌 ${agg.hits}/${agg.opens}`);
@@ -2089,19 +2147,27 @@ async function newMatch() {
   });
   match = await createMatch({ seed, config: { players: seats, startChips, mods: labMods } });
   opponents = {};
+  pokeFeed = {};
   for (const s of seats.slice(1)) {
     const persona = SEAT_PERSONA[s];
+    pokeFeed[s] = []; // F9：戳他的话滚进这条追加事实流（引用同一数组，push 即生效）
     opponents[s] = createOpponent({
       channel: () => chanForPersona(persona), // 通道跟人走：官方人设→暗号；客席→自带钥匙
       profile: profileBrief(profile, persona.id),
       persona,
-      ctx: { names: NAMES, three: isTrio(), hypotheses: mindOf(profile, persona.id).hypotheses },
+      ctx: {
+        names: NAMES,
+        three: isTrio(),
+        hypotheses: mindOf(profile, persona.id).hypotheses,
+        extraFacts: pokeFeed[s],
+      },
     });
   }
   opponent = opponents.B; // B 席＝主家：开场白与判词主笔（谁坐主位谁执笔）
   document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name.replace(/['"\\]/g, '')}批：'`);
   buildOppArea();
   buildModRow();
+  buildPokeUI();
   myDiceByRound = {};
   sel = null;
   busy = false;

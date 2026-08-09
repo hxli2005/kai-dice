@@ -36,7 +36,9 @@ test('F0b 台账：报价史从事件流复算，掉骰数按引擎口径', asyn
   assert.equal(toNum('十二'), 12);
 });
 
-test('F0b bug①：报价序列不许被转写（"两次九个六"当场掐掉）', async () => {
+// 以下三条是校验器本身的单元测试。Q49 之后它的岗位从"拦他的嘴"改为
+// "守系统栏位＋当观测尺子"——判据没变，用处变了。
+test('校验器：报价序列的三种歪法都认得出', async () => {
   const m = await ladderMatch();
   const led = buildLedger(m.observe('B'));
   assert.deepEqual(checkFacts('你九个六都喊上了', led), [], '真发生过的价可以引');
@@ -46,7 +48,7 @@ test('F0b bug①：报价序列不许被转写（"两次九个六"当场掐掉�
   assert.match(checkFacts('你那口七个五呢', led)[0], /bid-not-in-history/, '没发生过的价＝编');
 });
 
-test('F0b bug②：骰数不许混记（"掉两颗骰"是故障不是心理战）', async () => {
+test('校验器：骰数与局号的越界都认得出', async () => {
   const m = await ladderMatch();
   const led = buildLedger(m.observe('B'));
   assert.deepEqual(checkFacts('这局你掉一颗骰', led), []);
@@ -55,7 +57,7 @@ test('F0b bug②：骰数不许混记（"掉两颗骰"是故障不是心理战�
   assert.match(checkFacts('第 9 局你就露怯了', led)[0], /round/, '还没打到的局不许引用');
 });
 
-test('F0b 自由表演区：手牌与内心随便吹，一个字不管（Q47）', async () => {
+test('校验器：手牌与内心永远不在它的管辖内（Q47/Q49）', async () => {
   const m = await ladderMatch();
   const led = buildLedger(m.observe('B'));
   for (const line of [
@@ -86,7 +88,7 @@ test('F8 对账前提：决策日志与 AI 的动作严格 1:1（自动掀盅也
   assert.equal(ai.logs[0].auto, true, '自动掀盅标 auto——它不代表通道状态');
 });
 
-test('F0b 出口校验接进决策链：说错事实的那句被掐掉并留痕', async () => {
+test('Q49 场合律：他把旧账记歪照样出口（台词侧解链），留档照留', async () => {
   const m = await ladderMatch();
   const ai = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
@@ -97,11 +99,36 @@ test('F0b 出口校验接进决策链：说错事实的那句被掐掉并留痕'
   });
   const d = await ai.decide(m.observe('B'));
   assert.equal(d.action.type, 'challenge');
-  assert.equal(d.say, '', '事实说错＝不许出口');
-  assert.match(d.dropped, /say:bid-count/);
-  // 留档不受影响：对外可以不说，对内必须交底（Q47）
+  assert.equal(d.say, '你两次九个六，开。', '记歪是他的活性，不是故障——不再拦');
+  assert.equal(d.dropped, undefined, '不再有"被掐掉"这回事');
+  // 留档降为素材而非判据，但一个字不少（小本子与揭诈要用）
   assert.equal(d.belief, '其实五五开');
   assert.equal(d.speechMode, 'bait');
+  // 而校验器本身留着：它现在只给系统栏位与观测用（下一条测试就是它的岗位）
+  assert.match(checkFacts(d.say, buildLedger(m.observe('B')))[0], /bid-count/);
+});
+
+test('Q49 系统场合零容忍：报告数据面的数字由引擎盖章，与台账逐条对得上', async () => {
+  // 台词可以记歪，报告卡不行。数据面全部由 computeStats 从事件流复算——
+  // 用户报的 bug①（10-9-8 被转写）与 bug②（掉一骰说成两颗）在这一层永远不许再现。
+  const m = await ladderMatch();
+  await m.act('B', { type: 'challenge' }); // 摊牌，产生一局结算
+  const events = m.observe('A').events;
+  const led = buildLedger(m.observe('A'));
+  const st = computeStats(events, 'A', {});
+  // 报价史：条数与内容与台账一致（A 报了 2 口）
+  assert.equal(led.seq.length, 3);
+  assert.equal(st.myBids, 2);
+  // 掉骰：一局一颗，账面 diceCount 自证
+  const re = events.findLast((e) => e.type === 'roundEnd');
+  const lost = Object.values(re.diceCount).reduce((a, b) => a + b, 0);
+  assert.equal(lost, 9, '十颗骰掉一颗');
+  // 报告卡的数据面文本（引擎组装，不经模型）过一遍校验器：零违规
+  const dataText =
+    `${st.rounds} 局；虚报率 ${Math.round(st.bluffRate * 100)}%；` +
+    `开牌 ${st.myChallenges} 次命中 ${st.myChallengeHits} 次；被开 ${st.timesChallenged} 次；` +
+    `蒙报 ${st.blindBids} 口；拨算盘 ${st.myCalcs} 次`;
+  assert.deepEqual(checkFacts(dataText, led), [], `数据面不许出现台账里没有的数：${dataText}`);
 });
 
 test('F0b 留档字段：belief/speechMode 进 schema 与决策日志', async () => {

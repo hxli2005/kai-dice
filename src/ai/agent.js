@@ -7,7 +7,6 @@
 import { allLegalBids, isLegalBid } from '../rules.js';
 import { obProb, coarseWord } from '../probability.js';
 import { OPS } from '../mods/catalog.js';
-import { buildLedger, checkFacts } from './factcheck.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { TONES, DEFAULT_PERSONA } from './personas.js';
@@ -16,21 +15,22 @@ import { TONES, DEFAULT_PERSONA } from './personas.js';
 // tableTalk：三人桌台词双层制（§2.5）——裁判层不许编 / 牌手层允许诈 / 各为其利 / 禁围剿
 const TABLE_TALK = `
 这是三人桌（你、客人、另一个对手），额外规矩：
-- 关于你自己的手牌与意图，你可以虚张、误导、演戏（"我劝你别开，我这把是真的"）——说话是玩法。
-- 关于可查证的事实（谁报过什么、战绩、档案、结算），一字不许编。
+- 说话是玩法：手牌、意图、你对局势的判断，虚张误导演戏都行（"我劝你别开，我这把是真的"）。
 - 各为其利：你只为自己赢。对另一个对手的凶狠不得低于对客人，不许跟任何人联手针对第三方。
 - 每手最多一句话，开牌时刻可以多说。`;
-// 三块共用件：事实红线 / 规则提要 / 输出契约——官方人设与素颜客席同规矩，差别只在性格
+// 三块共用件：说话纪律 / 规则提要 / 输出契约——官方人设与素颜客席同规矩，差别只在性格。
+// Q49 场合律：这里管的是"怎么读人、怎么骂人"，不管"说得对不对"——
+// 桌上的账由系统盖章（他的嘴碰不到那些数字），他记歪记仇是他的活性。
 const FACT_LINE =
-  '你收到的全是真实数据，禁止编造数字。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。只评价打法，不作人身攻击，不用脏话。';
+  '发给你的数据都是真的。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。只评价打法，不作人身攻击，不用脏话。';
 const RULES_BRIEF = (three) =>
   `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
 {"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","belief":"你此刻的真实判断（私密，不上屏；要具体到这一口价与这个人，别写套话）","speechMode":"straight 或 bait（bait＝这句台词是有意误导）","note":"一句真实决策理由（记入档案，玩家看不到）"}
 铁律一：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。
-铁律二（准数）：这一局没当众拨过算盘，就不许说出任何精确概率（"三成""37%"都算）——你算不出来的数说出口就是编。发给你的档案数字（虚报率、开牌命中之类）照引不误，那是真数据。粗话不要钱："基本稳""五五开""悬""纯扯"都是你的手感，随便说。
-铁律三（可以骗他你怎么想，不能骗他发生过什么）：**你的手牌、你的把握、你的意图**是你的自由——虚张、误导、把怀疑说成确定，全合法（"你这停顿就是心虚"想说就说）。但**发生过的事**一个字不许错：谁报过什么价、报过几次、谁掉了几颗骰、第几局、档案里的数——这些桌上有账，说错不叫演戏叫穿帮。
-铁律四（诈必须留档）：嘴上演戏时，speechMode 填 "bait"，belief 写你心里真实的判断（"其实五五开，钓他洗白"）。对外可以演，对内必须交底——belief 与 say 不一致是允许的，belief 空着或写套话不允许。`;
+铁律二（你的嘴是你自己的，Q49 场合律）：台词没有审查——误判、过度自信、言行不一、记仇、偏见、把旧账记歪，全是你这个人的一部分，说就是了。数字也一样：没拨算盘你手上就没有准数，你要硬说一个"三成"，那是你在演，别指望它准。桌上的账本、结算和报告卡由系统盖章（那儿一个字都不许错），你不必替系统当会计。
+铁律三（留档，不是审查）：belief 写你心里此刻真实的判断，speechMode 在你有意误导时填 "bait"。这不管你说什么——它只是把当时的你留下来（客人散场后能翻看，且**任何人都不能事后改写**）。所以别写套话：写具体到这一口价、这个人的那句心里话。
+如果客人刚戳了你（说你记错了／说你在演／叫你慢着），你爱怎么接怎么接——嘴硬、改口、装没听见都行，拿着你那本错账继续下注也行。只在 reaction 里留一个词交底："hold"（嘴硬）、"fold"（改口认了）或 "ignore"（没理他）。`;
 
 // 素颜客席（Q28）：模型以本名上桌，无人设——脱的是性格，规矩一件不少
 const personaSystem = (p, three, modSpec = '') =>
@@ -107,7 +107,6 @@ const CALC_HABIT = {
   never: '你从不碰算盘：全凭手感，所以你嘴里永远没有准数——你也不觉得那玩意儿有用。',
 };
 
-export { hasFakePrecision } from './factcheck.js'; // 出口校验的一员，实现见 factcheck.js
 
 // 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
 const ownActDesc = (a, ob) => {
@@ -264,9 +263,11 @@ export function parseDecision(text, ob) {
                 : { type: 'challenge' },
       say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
       note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
-      // Q47 诈必须留档：对外可以演，对内必须交底（私密字段，永不上屏——只进决策日志与复盘室）
+      // 留档字段（Q47／Q49：留档不是审查）：永不上屏，只进决策日志与复盘室
       belief: typeof j.belief === 'string' ? j.belief.slice(0, 100) : '',
       speechMode: j.speechMode === 'bait' ? 'bait' : 'straight',
+      // F9「戳他」：被反驳后的三岔口——嘴硬/改口/没理，进档案的嘴硬率与读心通道
+      reaction: ['hold', 'fold', 'ignore'].includes(j.reaction) ? j.reaction : null,
     };
   } catch {
     return null;
@@ -275,7 +276,7 @@ export function parseDecision(text, ob) {
 
 // 一句话任务（开场白等）：人设声口、非 JSON、事实锚定——替代写死台词（台词只能出自角色）。
 // 失败返回 null（一句不说；沉默模式不代言）。
-export async function personaLine(channel, { persona, task, facts, ledger }, fetchFn) {
+export async function personaLine(channel, { persona, task, facts }, fetchFn) {
   try {
     const raw = await chat(
       channel,
@@ -288,10 +289,8 @@ export async function personaLine(channel, { persona, task, facts, ledger }, fet
       },
       fetchFn,
     );
-    const line = raw.trim().replace(/^["「『]|["」』]$/g, '').slice(0, 90);
-    // F0b：开场白/主持词同样过出口校验——只许引用发给它的那些事实，编的一律不出口（宁可不说）
-    if (!line || checkFacts(line, ledger, { allowedFrom: facts }).length) return null;
-    return line;
+    // Q49：开场白也是他的场合——不再对账（他把上回的账记歪，是他这个人的事）
+    return raw.trim().replace(/^["「『]|["」』]$/g, '').slice(0, 90) || null;
   } catch {
     return null;
   }
@@ -322,15 +321,14 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     return j.hypotheses
       .slice(0, 4)
       .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
-      // F0b：假设也是要被写进档案给玩家看的——引用了没发生过的事就不许立案
-      .filter((h) => h.text && !checkFacts(h.text, undefined, { allowedFrom: factText }).length);
+      .filter((h) => h.text); // Q49：他的本子是他的场合，假设错得离谱也是他的一部分
   } catch {
     return null;
   }
 }
 
 // 结算 1 次调用（§3.1）：场终判词＋档案笔记＋全量复盘假设（§3.3 触发②）。失败返回 null。
-export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA, hypotheses = [], ledger }, fetchFn) {
+export async function settleVerdict(channel, { won, statsText, persona = DEFAULT_PERSONA, hypotheses = [] }, fetchFn) {
   try {
     const raw = await chat(
       channel,
@@ -350,19 +348,16 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
     );
     const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
     if (typeof j.verdict !== 'string') return null;
-    // F0b：报告卡是裁判层的脸面——判词里的数对不上账就整条不要，退模板判词（宁可平淡，不许记错）
-    const clean = (t, n) => {
-      const s = String(t ?? '').slice(0, n);
-      return s && !checkFacts(s, ledger, { allowedFrom: statsText }).length ? s : '';
-    };
+    // Q49：判词是他的意见话、假设是他的本子——都不再对账。
+    // 报告卡的数据面（局数/虚报率/蒙报/开牌命中…）由引擎渲染，压根不经他的嘴。
     return {
-      verdict: clean(j.verdict, 120) || null,
-      note: clean(j.note, 80),
+      verdict: j.verdict.slice(0, 120) || null,
+      note: (j.note ?? '').slice(0, 80),
       hypotheses: Array.isArray(j.hypotheses)
         ? j.hypotheses
             .slice(0, 4)
             .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
-            .filter((h) => h.text && !checkFacts(h.text, ledger, { allowedFrom: statsText }).length)
+            .filter((h) => h.text)
         : null,
     };
   } catch {
@@ -430,23 +425,12 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       const silentFallback = decision === null;
       if (silentFallback)
         decision = { action: silent.decide(ob), say: '', note: '', belief: '', speechMode: 'straight' };
-      // F0b 出口校验（Q46/Q47）：可核验的公共事实说错了就掐掉这句（宿主会用事实模板顶上）——
-      // 宁可少说一句，也不许它把桌上发生过的事记错。它怎么想、手里有什么，一个字不管。
-      const ledger = buildLedger(ob);
-      const opts = {
-        ownBid: decision.action?.type === 'bid' ? decision.action : null,
-        allowedFrom: prompts.user,
-        calced: !!ob.calced?.[ob.you],
-      };
-      let dropped = null;
-      for (const k of ['say', 'note']) {
-        const bad = checkFacts(decision[k], ledger, opts);
-        if (!bad.length) continue;
-        dropped = `${dropped ? `${dropped};` : ''}${k}:${bad.join(',')}`;
-        decision = { ...decision, [k]: '' };
-      }
-      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error, dropped });
-      return { ...decision, silentFallback, error, dropped };
+      // Q49 场合律：**他说话零审查**——台词侧的出口拦截已解除。记歪、嘴硬、夸大、言行不一
+      // 都是这个对手的活性，不是故障（判据交给盲测玩家："它在玩我" vs "模型又胡说"）。
+      // 系统场合（结算/报告数据面/档案客观层/表盘）另有把关：那些数字根本不经过他的嘴，
+      // 由引擎盖章渲染——错了才是 bug（见 test/factcheck.test.js 的数据面回归）。
+      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, silentFallback, error });
+      return { ...decision, silentFallback, error };
     },
   };
 }

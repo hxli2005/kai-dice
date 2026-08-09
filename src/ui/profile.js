@@ -12,8 +12,12 @@ const PROFILE_KEY = 'kai.profile.v1';
 const BYOK_KEY = 'kai.byok.v1';
 
 function emptyMind() {
-  // baits/dead/peeks 为 F7/F8 新增：诈的留档、假设的尸体、玩家翻本子的次数（反身彩蛋）
-  return { notes: [], hypotheses: [], dead: [], baits: [], peeks: 0, stats: [], record: { plays: 0, beat: 0, wins: 0 } };
+  // baits/dead/peeks/pokes：诈的留档、假设的尸体、玩家翻本子的次数（反身彩蛋）、被戳后的三岔口（F9）
+  return {
+    notes: [], hypotheses: [], dead: [], baits: [], peeks: 0,
+    pokes: { count: 0, hold: 0, fold: 0, ignore: 0 },
+    stats: [], record: { plays: 0, beat: 0, wins: 0 },
+  };
 }
 
 function emptyProfile() {
@@ -51,6 +55,7 @@ export function mindOf(profile, personaId) {
   m.dead ??= []; // 旧档补位（F8）：假设的坟场
   m.baits ??= []; // 旧档补位（F7）：诈的留档
   m.peeks ??= 0; // 旧档补位（F8）：他知道你翻过几回本子
+  m.pokes ??= { count: 0, hold: 0, fold: 0, ignore: 0 }; // 旧档补位（F9）：戳他之后他怎么接
   return m;
 }
 

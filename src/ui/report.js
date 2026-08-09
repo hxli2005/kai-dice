@@ -277,7 +277,7 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
               calcP: e.type === 'calc' ? null : calcPOf(log),
               silent: !!log?.silentFallback,
               auto: !!log?.auto, // 不问模型的固定动作（不玩盲的人设先掀盅）
-              dropped: log?.dropped ?? null,
+              reaction: log?.reaction ?? null, // F9：被戳之后他怎么接
             },
       });
       continue;

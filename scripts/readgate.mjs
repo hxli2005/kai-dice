@@ -26,5 +26,6 @@ console.log(`人设：${persona.name}　样本：${samples}/画像`);
 console.log(`老实人画像 → 开牌率 ${r.profiles.honest.challengeRate}`);
 console.log(`赌徒画像　 → 开牌率 ${r.profiles.bluffer.challengeRate}`);
 console.log(r.note);
-console.log(r.ok ? '✓ 过：档案确实在动它的手，且没编史' : '✗ 不过：分布没动（档案是摆设）或出现虚构史实');
+console.log(r.ok ? '✓ 过：档案确实在动它的手' : '✗ 不过：换了画像它纹丝不动——档案成了摆设');
+console.log('（嘴上记歪只是观测项：Q49 场合律之下那是人设活性，不判罚）');
 process.exit(r.ok ? 0 : 1);

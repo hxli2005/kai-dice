@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
 import { chat } from '../src/ai/llm.js';
-import { buildPrompts, parseDecision, createOpponent, hasFakePrecision } from '../src/ai/agent.js';
+import { buildPrompts, parseDecision, createOpponent } from '../src/ai/agent.js';
 import { PERSONAS } from '../src/ai/personas.js';
 
 const mockFetch = (handler) => async (url, init) => {
@@ -63,7 +63,7 @@ test('Q45 算盘：拨过才给准数，且"算"进得了叙事（何时算＝�
   const { user, system } = buildPrompts(ob, '');
   assert.match(user, /你这局拨过算盘：按你的骰子算，此话为真的概率 \d+%/);
   assert.match(user, /只算骰面，不算人/);
-  assert.match(system, /没当众拨过算盘，就不许说出任何精确概率/);
+  assert.match(system, /没拨算盘你手上就没有准数/, 'Q49：规矩仍在说明书里，只是不再当场拦嘴');
   // 对手侧：拨算盘是公开动作，必须进局面叙事
   const { user: userA } = buildPrompts(m.observe('A'), '');
   assert.match(userA, /对方当众拨了算盘/);
@@ -86,27 +86,25 @@ test('Q45 算频：老李头常算给候选、阿飞从不碰算盘（身份锚�
   assert.match(never, /你从不碰算盘/);
 });
 
-test('Q45 引用校验：没算过就报准数＝编，当场掐掉；档案里给过的数照引不误', async () => {
+test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是他自己的（机制不变：他手上仍没有准数）', async () => {
   const m = await createMatch({ seed: 9 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
-  // 未算却报出准数 → say/note 被掐掉
-  const liar = createOpponent({
+  const bragger = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     persona: { ...PERSONAS.laolitou, gear: { ...PERSONAS.laolitou.gear, usesBlind: true } },
     fetchFn: mockFetch(() => ({
-      choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"三成。开。","note":"只有 12% 真"}' } }],
+      choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"三成。开。","note":"我看他虚","belief":"其实没底"}' } }],
     })),
   });
-  const d = await liar.decide(m.observe('B'));
-  assert.equal(d.action.type, 'challenge');
-  assert.equal(d.say, '');
-  assert.equal(d.note, '');
-  assert.match(d.dropped ?? '', /say/);
-  // 档案里发给他的数字（虚报率 43%）不算编——引用校验只掐凭空长出来的数
-  assert.equal(hasFakePrecision('你虚报率 43%，还敢报', '上一场客人虚报率43%，开牌2次'), false);
-  assert.equal(hasFakePrecision('这话 87% 真', '上一场客人虚报率43%'), true);
-  assert.equal(hasFakePrecision('这话很悬，我不接', ''), false, '粗话免检');
+  const d = await bragger.decide(m.observe('B'));
+  assert.equal(d.say, '三成。开。', 'Q49：台词侧不再拦截');
+  assert.equal(d.note, '我看他虚');
+  assert.equal(d.belief, '其实没底', '留档照留——它是素材，不是判据');
+  // 机制没松：他没拨算盘，提示词里给的仍然只是粗档手感
+  const { user } = buildPrompts(m.observe('B'), '', PERSONAS.laolitou);
+  assert.match(user, /你没拨算盘，只有手感/);
+  assert.ok(!/此话为真的概率 \d+%/.test(user));
 });
 
 test('parseDecision：合法动作通过，非法与坏输出拒绝', async () => {
@@ -193,7 +191,7 @@ test('Q28 素颜客席：无人设剧本、保留事实红线与规矩', async (
   const { system } = buildPrompts(ob, '', bare);
   assert.match(system, /以本名上桌/);
   assert.match(system, /test-model/);
-  assert.match(system, /禁止编造数字/); // 红线不脱
+  assert.match(system, /发给你的数据都是真的/); // 说话纪律不脱（Q49 后不再是编造禁令）
   assert.match(system, /规则提要/);
   assert.match(system, /严格输出一行 JSON/);
   assert.ok(!system.includes('毛病')); // 无性格缺陷剧本
