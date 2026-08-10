@@ -75,7 +75,7 @@ export function pinSampling(channel) {
 
 // 一场：两个 AI 客户端坐同一张引擎桌（§4 结构红利——引擎不知道对面是谁）。
 // seats: {A:{channel,label}, B:{channel,label}}；budget 可选（A4：跑爆就当场收手）
-export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget } = {}) {
+export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget, relaySpeech = true } = {}) {
   const ids = ['A', 'B'];
   const m = await createMatch({ seed, config: { players: ids } });
   // 让它们互相听得见（2026-08-10 修）。此前擂台没传 ctx，两个模型从头到尾收不到对方一个字——
@@ -91,7 +91,7 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget 
       channel: pinSampling(seats[id].channel),
       profile: '',
       persona: ARENA_SEAT,
-      ctx: { extraFacts: heard[id] },
+      ctx: relaySpeech ? { extraFacts: heard[id] } : {},
       fetchFn,
     });
   const backup = createSilentBot(ARENA_SEAT.strategy);
@@ -114,7 +114,9 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget 
     bud?.charge?.(d.meta ?? {}, seats[p].price); // 逐发记账（A4）
 
     // 把这一手说的话递给对家（滚动窗口，只留最近几句——省 token，也省得越滚越长）
-    if (d.say && !d.silentFallback) {
+    // relaySpeech=false 是**对照臂**：其余全同、只关这一个开关，用来把"格式失败涨了"
+    // 归到该归的地方（是转发台词的代价，还是别的）。两臂的数只能这样比才算数。
+    if (relaySpeech && d.say && !d.silentFallback) {
       const other = p === 'A' ? 'B' : 'A';
       heard[other].push(`第 ${ob.round} 局，对方${sayContext(d.action)}时说：「${d.say}」`);
       if (heard[other].length > 6) heard[other].shift();
@@ -180,7 +182,7 @@ export async function playMirrorPair({ seed, x, y, fetchFn, budget } = {}) {
 // ⚠️ 但并发不是白拿的：开太高会撞上游限流，而限流会以**超时/格式失败**的形式落到合规层，
 // 把"这个模型听不听话"污染成"我们打太急了"。所以默认保守，且并发数要写进战报的实验设置。
 export async function runArena({
-  pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair, concurrency = 1,
+  pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair, concurrency = 1, relaySpeech = true,
 } = {}) {
   // 摊平成一个个独立的场（镜像的第二遍＝同种子、互换座位）
   const jobs = [];
@@ -201,7 +203,7 @@ export async function runArena({
       if (i >= jobs.length) return;
       if (budget?.runExceeded?.()) return; // 整批触顶：收摊，别再开新场
       const j = jobs[i];
-      const r = await playMatch({ seed: j.seed, seats: j.seats, fetchFn, budget });
+      const r = await playMatch({ seed: j.seed, seats: j.seats, fetchFn, budget, relaySpeech });
       out[i] = r;
       onMatch?.(r);
       const k = j.pair.join('\u0000');

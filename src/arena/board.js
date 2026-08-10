@@ -56,6 +56,10 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push('');
   out.push('**实验设置**（改任何一条，跨批次的数就不能比了）：');
   out.push(`- 系统提示词：全席逐字相同（无身份、无模型名）`);
+  if (run.relaySpeech != null)
+    out.push(
+      `- 台词转发：${run.relaySpeech ? '开——对家说过的话进提示词（只转 say，belief 不外传）' : '**关**（对照臂：两个模型互相听不见）'}`,
+    );
   if (run.concurrency != null)
     out.push(
       `- 并发：同时跑 ${run.concurrency} 场` +

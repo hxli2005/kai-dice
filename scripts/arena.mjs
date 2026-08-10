@@ -41,6 +41,8 @@ const perMatchUsd = flag('per-match') ? +flag('per-match') : null;
 // 并发跑场（场与场独立）。**保守默认**：开太高会撞上游限流，而限流会以超时/格式失败
 // 的形式落到合规层，把"这个模型听不听话"污染成"我们打太急了"。
 const concurrency = Math.max(1, +(flag('concurrency', 4) || 4));
+// 对照臂：--no-relay 关掉「把对家台词转发进提示词」，其余全同
+const relaySpeech = !has('no-relay');
 
 const base = process.env.OPENROUTER_BASE ?? OPENROUTER_BASE; // 本地假服务器可覆盖（集成自测用）
 
@@ -172,6 +174,7 @@ const matches = await runArena({
   seed0,
   budget,
   concurrency,
+  relaySpeech,
   onMatch: (m) => {
     done += 1;
     const line =
@@ -192,7 +195,7 @@ const spread = flavorSpread(rows);
 const cache = cacheReport(rows);
 const at = new Date().toISOString().slice(0, 16).replace('T', ' ');
 const board = renderBoard(rows, {
-  run: { seed0, games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency },
+  run: { seed0, games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech },
   integrity,
   cache,
   spread,
@@ -224,7 +227,7 @@ writeFileSync(
     {
       at,
       entrants: entrants.map((e) => ({ label: e.label, ...e.meta })),
-      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, handEstimate: HAND_ESTIMATE },
+      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, handEstimate: HAND_ESTIMATE },
       estimate: est,
       spent: budget.spent(),
       integrity,

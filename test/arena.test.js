@@ -491,3 +491,17 @@ test('台词转发：对家说过的话进得了提示词，belief 永不外传'
   // 私有留档不许外传（§3 三锁）
   for (const u of users) assert.ok(!u.includes('其实我五五开'), 'belief 永不外传');
 });
+
+test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', async () => {
+  const seen = [];
+  await playMatch({
+    seed: 11,
+    seats: { A: seat('mx'), B: seat('my') },
+    relaySpeech: false,
+    fetchFn: fakeChannel({ seen, say: '你这手牌怕是不硬' }),
+  });
+  const users = seen.map((r) => r.body.messages[1].content);
+  for (const u of users) assert.ok(!u.includes('你这手牌怕是不硬'), '关了就是一个字都不许漏进去');
+  // 其余照旧：规则、局面、动作叙事都还在
+  assert.ok(users.some((u) => /本局进程/.test(u)), '对照臂只关台词转发，别的不动');
+});
