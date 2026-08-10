@@ -21,6 +21,11 @@ import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } f
 import { renderBoard } from '../src/arena/board.js';
 
 const argv = process.argv.slice(2);
+// 参赛者是否显式指定了后端（`id@tag`）。**没指定就是不可复现的**：
+// /endpoints 的顺序不稳定，同一条命令两次跑可能落到不同后端与量化档（实测 streamlake/fp8
+// 与 novita/fp8 轮着来），跨批次比对时那就是一个偷偷变化的自变量（Q52②）。
+const tagOverrideOf = (label) =>
+  argv.some((a) => typeof a === 'string' && a.includes(`${label}@`));
 const flag = (name, dflt = null) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? (argv[i + 1]?.startsWith('--') ? true : argv[i + 1]) : dflt;
@@ -132,7 +137,10 @@ for (const e of entrants) {
         console.log(`  ! ${e.label} 首选后端 ${e.meta.tag} 不可达，改锁 ${tag}`);
       e.channel = ch;
       e.meta.tag = tag;
-      console.log(`  ✓ ${e.label}${tag ? `（锁 ${tag}）` : '（未锁后端）'}`);
+      console.log(
+        `  ✓ ${e.label}${tag ? `（锁 ${tag}）` : '（未锁后端）'}` +
+          (tagOverrideOf(e.label) ? '' : tag ? `　← 未显式指定，本次自动选中；要复现这一批请写 ${e.label}@${tag}` : ''),
+      );
       ok = true;
       break;
     } catch (err) {
