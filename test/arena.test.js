@@ -501,7 +501,10 @@ test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', 
     fetchFn: fakeChannel({ seen, say: '你这手牌怕是不硬' }),
   });
   const users = seen.map((r) => r.body.messages[1].content);
-  for (const u of users) assert.ok(!u.includes('你这手牌怕是不硬'), '关了就是一个字都不许漏进去');
-  // 其余照旧：规则、局面、动作叙事都还在
+  // 认转发通道的特征串。不能直接搜台词本身——**自己说过的话本来就会经 ownLog 回灌给自己**
+  // （那是同局嘴手不断裂用的，与转发无关），搜文本会把两者混为一谈。
+  for (const u of users) assert.ok(!/第 \d+ 局，对方.*时说：/.test(u), '关了就一句都不许转发进来');
+  // 其余照旧：规则、局面、动作叙事、自我回灌都不动
   assert.ok(users.some((u) => /本局进程/.test(u)), '对照臂只关台词转发，别的不动');
+  assert.ok(users.some((u) => /你自己这局刚做过/.test(u)), '自我回灌不受影响');
 });
