@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《开！》三方向同刻对比</title>
+<link rel="stylesheet" href="screens.css">
+<style>
+:root{
+  --page:#0b0b0d; --panel:#141417; --line:#26262b; --txt:#d8d8dd; --dim:#8a8a93;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--page);color:var(--txt);font-family:var(--sys);line-height:1.55;padding:18px 24px 40px;overflow-x:hidden}
+
+/* ── 顶栏 ── */
+.bar{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.bar h1{font-size:19px;font-weight:800;letter-spacing:.03em;white-space:nowrap}
+.bar .q{color:var(--dim);font-size:12px}
+.seg{display:flex;border:1px solid var(--line);background:var(--panel)}
+.seg b{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:#5d5d66;padding:7px 10px;border-right:1px solid var(--line);font-weight:500;align-self:center}
+.seg button{background:none;border:0;border-right:1px solid var(--line);color:var(--dim);font-family:var(--sys);font-size:12.5px;
+  padding:7px 15px;cursor:pointer;letter-spacing:.05em}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--txt)}
+.seg button[aria-pressed="true"]{background:#e8c26a;color:#14100a;font-weight:700}
+.bar .spacer{margin-left:auto}
+.bar a{color:var(--dim);font-size:12px;text-decoration:none;border-bottom:1px solid #33333a}
+.bar a:hover{color:#e8c26a}
+kbd{font-family:var(--mono);font-size:10px;background:#1c1c21;border:1px solid #2e2e35;border-bottom-width:2px;
+  padding:1px 5px;color:#8a8a93}
+
+/* ── 三列 ── */
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px;align-items:start}
+.card{border:1px solid var(--line);background:var(--panel);padding:12px 12px 14px;display:flex;flex-direction:column;gap:9px}
+.chead{display:flex;align-items:baseline;gap:9px}
+.chead .tag{font-family:var(--mono);font-size:10px;letter-spacing:.2em;border:1px solid;padding:2px 7px}
+.chead .nm{font-size:15px;font-weight:800;letter-spacing:.02em}
+.chead .st{margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:#5d5d66}
+.cstruct{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#6f6f79}
+.stage{display:flex;justify-content:center;background:#000;border:1px solid #1e1e23}
+.stage .frame{border:0}
+.note{font-size:12px;color:#a9a9b2;min-height:34px;border-left:2px solid;padding-left:9px}
+
+/* ── 决策表 ── */
+.tbl{margin-top:20px;width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th,.tbl td{border:1px solid var(--line);padding:7px 10px;vertical-align:top;text-align:left}
+.tbl thead th{background:var(--panel);font-weight:700;font-size:13px;letter-spacing:.02em}
+.tbl thead th:first-child{width:112px}
+.tbl tbody th{background:#101014;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:#7c7c86;font-weight:500;white-space:nowrap}
+.tbl td{color:#b0b0b9}
+.tbl .win{color:#fff}
+.tbl .win::before{content:'▲ ';color:#7de08a}
+.tbl .warn{color:#ffb9ae}
+.tbl .warn::before{content:'▼ ';color:#ff6a55}
+.tbl tr.ask td{color:#e8c26a;font-weight:600}
+.foot{margin-top:18px;border:1px solid var(--line);background:var(--panel);padding:14px 16px;font-size:12.5px;color:#a9a9b2;line-height:1.75}
+.foot h3{font-size:12px;letter-spacing:.16em;color:var(--dim);font-weight:600;margin-bottom:7px;font-family:var(--mono)}
+.foot em{font-style:normal;color:#fff}
+.foot b{color:#e8c26a}
+@media(max-width:1000px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>三方向同刻对比</h1>
+  <span class="q">同一份对局数据 · 同一刻 · 三种读法</span>
+  <div class="seg" id="segView"><b>视口</b>
+    <button data-v="mobile" aria-pressed="true">手机 390×844</button>
+    <button data-v="desktop" aria-pressed="false">桌面 1440×900</button>
+  </div>
+  <div class="seg" id="segState"><b>此刻</b>
+    <button data-s="idle" aria-pressed="true">正常</button>
+    <button data-s="think" aria-pressed="false">AI 思考</button>
+    <button data-s="open" aria-pressed="false">开牌瞬间</button>
+  </div>
+  <span class="spacer"></span>
+  <span class="q"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切状态 · <kbd>M</kbd><kbd>D</kbd> 切视口</span>
+  <a href="directions.html">全部 18 屏 ↗</a>
+</div>
+
+<div class="cols" id="cols"></div>
+
+<table class="tbl">
+  <thead><tr><th>决策轴</th>
+    <th style="color:#ffb43c">A · 复古CRT赌博机</th>
+    <th style="color:#35c6e8">B · 冷峻模型实验场</th>
+    <th style="color:#ffe029">C · 鲜艳街机擂台</th></tr></thead>
+  <tbody>
+    <tr><th>结构</th><td>单柱纵轴，桌面靠侧板扩展</td><td>横向三栏，天然吃宽屏</td><td>左右镜像，天然吃宽屏</td></tr>
+    <tr><th>视觉焦点</th><td>巨大辉光报价读数</td><td>被排成命题的 CLAIM 行（唯一敢把主数字做小的）</td><td>对峙血条＋斜切报价横幅</td></tr>
+    <tr><th>推理可见度</th><td>低——塞进桌面侧板的纸带</td><td class="win">最高——belief 通道占一整栏，正常态就在</td><td class="warn">最低——只有一个对白框</td></tr>
+    <tr><th>"被读"靠什么</th><td>机器的动静（它摇没摇计数器）</td><td>数据（虚报率／活跃假设／双轨对照）</td><td>喊话与掉血</td></tr>
+    <tr><th>开牌爽感</th><td>中——判定带压读数＋红灯全亮</td><td class="warn">低——一条 CLAIM TRUE 结果栏</td><td class="win">最高——闪白＋双方骰面同屏炸开</td></tr>
+    <tr><th>截图传播性<br><span style="color:#5d5d66">（H2）</span></th><td>中——机器有辨识度</td><td class="warn">低——像后台，没人想发朋友圈</td><td class="win">最高——最像一款游戏</td></tr>
+    <tr><th>手机适配</th><td class="win">最好——它本来就是竖的</td><td>需塌成上中下三段</td><td>需重排，KO 演出要另做一版</td></tr>
+    <tr><th>施工量</th><td>中——器物多（数字轮／护盖扳闸／纸带）</td><td class="win">最小——全是表格、线与等宽字</td><td class="warn">大——描边斜体、斜切、KO 全屏演出</td></tr>
+    <tr><th>字体依赖<br><span style="color:#5d5d66">（§6.5）</span></th><td>展示字要子集化</td><td class="win">只要系统等宽，webfont 预算可为 0</td><td class="warn">最重——描边斜体撑整个调性，非做不可</td></tr>
+    <tr><th>合规风险<br><span style="color:#5d5d66">（§6.8）</span></th><td class="warn">需盯——三者中最接近赌博机形态</td><td class="win">最低</td><td>低——街机不是赌场</td></tr>
+    <tr><th>最怕什么</th><td>变成怀旧皮：气质够了，读心没地方长</td><td>冷到没人想截图——直接毒 H2</td><td>吵到盖过"读"的细腻，变成普通对战游戏</td></tr>
+    <tr class="ask"><th>它回答的问题</th><td>"我在跟一台机器赌"</td><td>"我在观测一个模型"</td><td>"我要赢它"</td></tr>
+  </tbody>
+</table>
+
+<div class="foot">
+  <h3>看 完 这 张 表 之 后</h3>
+  <p>三套没有一套全赢，<em>而且输赢的位置正好错开</em>：B 最能兑现 H1（被读上头），C 最能兑现 H2（台词与切片是核心传播物），A 在气质与手机适配上最省事。<b>DESIGN §7.1 的两个假设分别指向两个不同的方向，这就是这次选型真正的难处</b>——不是哪个好看。</p>
+  <p style="margin-top:9px">可缝的地方（不是折中，是结构上真能嫁接的一处）：<em>A 的桌面侧板本来就是空的容器</em>，把左侧那条打印纸带换成 B 的 belief 双通道流，A 就同时拿到了机器气质与推理常驻；手机版仍保持 A 的单柱，推理退回复盘室。代价是桌面与手机的信息量差距被拉大——<b>要不要接受这个差距，是选 A 之前该先回答的问题</b>。</p>
+  <p style="margin-top:9px">C 是唯一一个"选了就得配美术资源"的方向（描边斜体展示字＋KO 演出）。按 §6.5 的 100KB webfont 预算，它是三者里唯一会真的把预算吃满的。</p>
+</div>
+
+<script src="screens.js"></script>
+<script>
+const V = {mobile:[390,844], desktop:[1440,900]};
+const NOTE = {
+  A:{idle:'辉光读数最亮，两根扳把待扳，「开」上盖着红黄护盖。',
+     think:'整块面板断电——不是灰按钮，是失电斜纹板。只有指示灯与计数器在动。',
+     open:'骰面全亮（§6.3 拍三：骰面第一），判定带只压在读数上，不盖任何骰子。'},
+  B:{idle:'CLAIM 待检验，置信轨空着；右栏 belief 停在它上一手的想法。',
+     think:'右栏 token 逐行流出，操作区退成虚线框，置信轨走到 64%。',
+     open:'左右双轨在同一时间刻度上对齐，红框标出它嘴上说的与心里写的差在哪。'},
+  C:{idle:'血条 5 : 5，斜切报价横幅压顶，报/开两个巨钮占满底部。',
+     think:'它那半边亮起并浮出"它 在 算"，你这半边掉饱和、按钮变虚线。',
+     open:'闪白 → 双方骰面同屏炸开 → 「开！」冲进画面，你掉一格血。'}
+};
+let view='mobile', state='idle';
+
+function layout(){
+  const [w,h] = V[view];
+  const stages = document.querySelectorAll('.stage');
+  if(!stages.length) return;
+  const availW = stages[0].clientWidth - 2;
+  const availH = Math.max(220, innerHeight - 300);
+  const s = Math.max(.16, Math.min(availW/w, availH/h, 1));
+  document.querySelectorAll('.card').forEach((card,i)=>{
+    const d = DIRS[i];
+    card.querySelector('.stage').innerHTML =
+      `<div class="frame ${d.cls}" style="width:${Math.round(w*s)}px;height:${Math.round(h*s)}px">
+         <div class="inner" style="width:${w}px;height:${h}px;transform:scale(${s})">${d.fn(state, view==='mobile')}</div>
+       </div>`;
+    card.querySelector('.st').textContent = (view==='mobile'?'390×844':'1440×900') + ' · ×' + s.toFixed(2);
+    const n = card.querySelector('.note');
+    n.textContent = NOTE[d.k][state];
+    n.style.borderColor = d.color;
+  });
+}
+
+document.getElementById('cols').innerHTML = DIRS.map(d=>`
+  <div class="card">
+    <div class="chead">
+      <span class="tag" style="color:${d.color};border-color:${d.color}">${d.k}</span>
+      <span class="nm">${d.name}</span>
+      <span class="st"></span>
+    </div>
+    <div class="cstruct">${d.one}</div>
+    <div class="stage"></div>
+    <div class="note"></div>
+  </div>`).join('');
+
+function press(seg, attr, val){
+  document.querySelectorAll(`#${seg} button`).forEach(b=>b.setAttribute('aria-pressed', String(b.dataset[attr]===val)));
+}
+document.getElementById('segView').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  view = b.dataset.v; press('segView','v',view); layout();
+});
+document.getElementById('segState').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state = b.dataset.s; press('segState','s',state); layout();
+});
+addEventListener('keydown', e=>{
+  const k = e.key.toLowerCase();
+  const map = {'1':'idle','2':'think','3':'open'};
+  if(map[k]){ state = map[k]; press('segState','s',state); layout(); }
+  if(k==='m'||k==='d'){ view = k==='m'?'mobile':'desktop'; press('segView','v',view); layout(); }
+});
+addEventListener('resize', layout);
+layout();
+</script>
+</body>
+</html>

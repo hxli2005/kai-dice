@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>素颜擂台 · 复盘</title>
+<!--
+  跑批复盘台（内部工具）。用途：**扫完 20 场，挑出值得写的那几场，然后摘引。**
+  不做播放动画——那是 replay.html 的事；这里是给人读和抄的。
+
+  每场摘要里的四个信号，是按"找素材"排的，不是按"评强弱"排的：
+    诈 = 打了 speechMode:bait 且有留档的句数（说一套想一套，最好看的料）
+    忆 = 留档里引用了本场更早局面的句数（它在一场之内改主意的证据）
+    顶 = 沉默 bot 顶班的手数（**这些手不是模型打的**，摘引前必须避开）
+    深 = 最长一条心里话的字数（想得多的那几手往往就是戏眼）
+
+  归属纪律照旧（C4）：顶班的手在流水里标红并且不显示台词——它压根没说过那句话。
+-->
+<style>
+  :root {
+    --bg: #14120f; --panel: #1c1915; --hair: #302b24;
+    --ink: #ede6d8; --dim: #9d9384; --brass: #c99a48;
+    --think: #8fa8b8; --red: #b5503a;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --serif: "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.75 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .top { position: sticky; top: 0; z-index: 5; background: var(--bg);
+         border-bottom: 1px solid var(--hair); padding: .7rem 1rem;
+         display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+  .top h1 { font-size: .9rem; letter-spacing: .2em; color: var(--brass); font-weight: 400; margin: 0 1rem 0 0; }
+  button, select, input[type=file] { background: #24201b; color: var(--ink); border: 1px solid var(--hair);
+           border-radius: 3px; padding: .3rem .6rem; font: inherit; font-size: .8rem; cursor: pointer; }
+  button:hover { border-color: var(--brass); }
+  button.on { border-color: var(--brass); color: var(--brass); }
+  .stat { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin-left: auto; }
+
+  .cols { display: grid; grid-template-columns: 21rem 1fr; gap: 0; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+  .list { border-right: 1px solid var(--hair); }
+  .row { display: block; width: 100%; text-align: left; background: none; border: 0;
+         border-bottom: 1px solid var(--hair); border-radius: 0; padding: .6rem .9rem; cursor: pointer; }
+  .row:hover { background: var(--panel); }
+  .row.sel { background: var(--panel); box-shadow: inset 3px 0 0 var(--brass); }
+  .row .hd { display: flex; justify-content: space-between; gap: .5rem; font-family: var(--mono); font-size: .74rem; }
+  .row .hd .idx { color: var(--dim); }
+  .row .hd .win { color: var(--brass); }
+  .row .vs { font-size: .8rem; color: var(--ink); margin: .15rem 0; }
+  .row .sig { font-family: var(--mono); font-size: .7rem; color: var(--dim); display: flex; gap: .8rem; }
+  .row .sig b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .row .sig .warn b { color: var(--red); }
+
+  .pane { padding: 1rem 1.4rem 6rem; max-width: 46rem; }
+  .rd { font-family: var(--mono); font-size: .74rem; color: var(--brass); letter-spacing: .18em;
+        margin: 1.8rem 0 .6rem; border-top: 1px solid var(--hair); padding-top: .8rem; }
+  .hand { margin: .9rem 0; }
+  .hand .who { font-family: var(--mono); font-size: .72rem; color: var(--dim); }
+  .hand .who .act { color: var(--brass); margin-left: .5rem; }
+  .hand .who .tag { color: var(--red); border: 1px solid currentColor; border-radius: 2px;
+                    padding: 0 .25rem; font-size: .64rem; margin-left: .4rem; }
+  .hand .say { font-family: var(--serif); font-size: 1.08rem; color: var(--ink); margin: .2rem 0; }
+  .hand .think { font-family: var(--mono); font-size: .8rem; color: var(--think); line-height: 1.7; }
+  .hand .think::before { content: "想 "; color: var(--brass); }
+  .hand.mute { color: var(--red); font-family: var(--mono); font-size: .78rem; }
+  .open { color: var(--red); font-family: var(--mono); font-size: .82rem; margin: .7rem 0; }
+  .empty { color: var(--dim); padding: 3rem 1rem; text-align: center; }
+  code { font-family: var(--mono); font-size: .78rem; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>素颜擂台 · 复盘</h1>
+  <input type="file" id="file" accept="application/json">
+  <button id="fBait">只看诈的手</button>
+  <button id="fRecall">只看引用旧局的手</button>
+  <button id="copy">复制本场流水</button>
+  <span class="stat" id="stat">拖入 run.json，或用 ?run=…</span>
+</div>
+
+<div class="cols">
+  <div class="list" id="list"></div>
+  <div class="pane" id="pane"><div class="empty">左边挑一场</div></div>
+</div>
+
+<script type="module">
+const $ = (i) => document.getElementById(i);
+const DEC = new Set(['bid', 'challenge', 'peek', 'calc', 'declare', 'modAction']);
+const W = { zhai: '斋', blind: '盲', raise: '抬' };
+const esc = (s) => String(s ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+// 留档里提到本场更早的局＝它在一场之内改了主意的证据
+const RECALL = /上局|上一局|上一手|第\s*[0-9一二三四五六七八九]+\s*局|刚才|之前(他|你|对方)/;
+const act = (a, e) =>
+  e.type === 'bid' ? `报 ${e.count} 个 ${e.face}`
+  : e.type === 'challenge' ? '开！'
+  : e.type === 'calc' ? '拨算盘'
+  : e.type === 'peek' ? '掀盅'
+  : e.type === 'declare' ? `宣「${W[e.declaration] ?? e.declaration}」`
+  : e.type;
+
+let RUN = null, cur = 0, onlyBait = false, onlyRecall = false;
+
+// 把事件流与两边的决策日志对齐成一条可读的流水（决策事件与日志严格 1:1）
+function weave(m) {
+  const q = { A: [...(m.logs.A ?? [])], B: [...(m.logs.B ?? [])] };
+  const out = [];
+  let rd = 0;
+  for (const e of m.events) {
+    if (e.type === 'roundStart') { rd = e.round; out.push({ kind: 'rd', round: rd }); continue; }
+    if (e.type === 'reveal') { out.push({ kind: 'open', e, round: rd }); continue; }
+    if (!DEC.has(e.type) || !e.player) continue;
+    const l = q[e.player].shift() ?? null;
+    out.push({ kind: 'hand', e, l, round: rd, who: m.seats[e.player] });
+  }
+  return out;
+}
+
+function summarize(m) {
+  const rows = weave(m);
+  let bait = 0, recall = 0, mute = 0, deep = 0, rounds = 0, hands = 0;
+  for (const r of rows) {
+    if (r.kind === 'rd') rounds = r.round;
+    if (r.kind !== 'hand' || !r.l) continue;
+    hands++;
+    if (r.l.silentFallback) { mute++; continue; }
+    if (r.l.speechMode === 'bait' && r.l.belief) bait++;
+    if (RECALL.test(r.l.belief ?? '')) recall++;
+    deep = Math.max(deep, (r.l.belief ?? '').length);
+  }
+  return { rows, bait, recall, mute, deep, rounds, hands };
+}
+
+function drawList() {
+  $('list').innerHTML = RUN.matches
+    .map((m, i) => {
+      const s = summarize(m);
+      const win = m.aborted ? `中断:${m.aborted}` : m.winner ? m.seats[m.winner].split('/')[1] : '未终局';
+      return `<button class="row ${i === cur ? 'sel' : ''}" data-i="${i}">
+        <div class="hd"><span class="idx">#${String(i + 1).padStart(2, '0')} · seed ${m.seed}</span><span class="win">${esc(win)} 胜</span></div>
+        <div class="vs">${esc(m.seats.A.split('/')[1])} <span style="color:var(--dim)">先手 vs</span> ${esc(m.seats.B.split('/')[1])}</div>
+        <div class="sig">
+          <span>局 <b>${s.rounds}</b></span><span>手 <b>${s.hands}</b></span>
+          <span>诈 <b>${s.bait}</b></span><span>忆 <b>${s.recall}</b></span>
+          <span class="${s.mute ? 'warn' : ''}">顶 <b>${s.mute}</b></span>
+          <span>深 <b>${s.deep}</b></span>
+        </div></button>`;
+    })
+    .join('');
+  for (const b of $('list').querySelectorAll('.row')) b.onclick = () => { cur = +b.dataset.i; drawList(); drawPane(); };
+}
+
+function drawPane() {
+  const m = RUN.matches[cur];
+  const s = summarize(m);
+  const keep = (r) => {
+    if (r.kind !== 'hand') return !onlyBait && !onlyRecall;
+    if (!r.l) return false;
+    if (onlyBait && !(r.l.speechMode === 'bait' && r.l.belief)) return false;
+    if (onlyRecall && !RECALL.test(r.l.belief ?? '')) return false;
+    return true;
+  };
+  const html = s.rows.filter(keep).map((r) => {
+    if (r.kind === 'rd') return `<div class="rd">第 ${r.round} 局</div>`;
+    if (r.kind === 'open') {
+      const e = r.e;
+      return `<div class="open">开牌：实有 ${e.actual} 个 ${e.bid.face}，${e.stands ? '成立' : '不成立'} → ${esc(m.seats[e.loser])} 掉一颗骰</div>`;
+    }
+    const { e, l, who } = r;
+    if (!l) return '';
+    if (l.silentFallback)
+      return `<div class="hand mute">⚠️ ${esc(who.split('/')[1])} ${act(l.action, e)} — 这一手是沉默 bot 顶的（${esc(l.outcome ?? l.error ?? '降级')}），不是它打的，别摘引</div>`;
+    return `<div class="hand">
+      <div class="who">${esc(who.split('/')[1])}<span class="act">${act(l.action, e)}</span>${l.speechMode === 'bait' ? '<span class="tag">诈</span>' : ''}${RECALL.test(l.belief ?? '') ? '<span class="tag" style="color:var(--brass)">忆</span>' : ''}</div>
+      ${l.say ? `<div class="say">「${esc(l.say)}」</div>` : ''}
+      ${l.belief ? `<div class="think">${esc(l.belief)}</div>` : ''}
+    </div>`;
+  }).join('');
+  $('pane').innerHTML = html || '<div class="empty">这一场没有符合筛选的手</div>';
+  $('stat').textContent =
+    `#${cur + 1}/${RUN.matches.length} · ${s.rounds} 局 ${s.hands} 手 · 诈 ${s.bait} · 忆 ${s.recall} · 顶 ${s.mute}`;
+}
+
+// 复制成纯文本，直接往稿子里贴
+$('copy').onclick = () => {
+  const m = RUN.matches[cur];
+  const s = summarize(m);
+  const t = [`# ${m.seats.A} vs ${m.seats.B}（seed ${m.seed}）`, ''];
+  for (const r of s.rows) {
+    if (r.kind === 'rd') { t.push('', `── 第 ${r.round} 局 ──`); continue; }
+    if (r.kind === 'open') { t.push(`  ▸ 开牌：实有 ${r.e.actual} 个 ${r.e.bid.face}，${r.e.stands ? '成立' : '不成立'} → ${m.seats[r.e.loser]} 掉骰`); continue; }
+    const { e, l, who } = r;
+    if (!l) continue;
+    if (l.silentFallback) { t.push(`[${who}] ${act(l.action, e)} — 沉默 bot 顶班，非模型输出`); continue; }
+    t.push(`[${who}] ${act(l.action, e)}${l.speechMode === 'bait' ? ' 〔诈〕' : ''}`);
+    if (l.say) t.push(`  说：${l.say}`);
+    if (l.belief) t.push(`  想：${l.belief}`);
+  }
+  navigator.clipboard.writeText(t.join('\n')).then(() => {
+    $('copy').textContent = '已复制';
+    setTimeout(() => ($('copy').textContent = '复制本场流水'), 1200);
+  });
+};
+
+$('fBait').onclick = () => { onlyBait = !onlyBait; $('fBait').classList.toggle('on', onlyBait); drawPane(); };
+$('fRecall').onclick = () => { onlyRecall = !onlyRecall; $('fRecall').classList.toggle('on', onlyRecall); drawPane(); };
+
+function load(j) { RUN = j; cur = 0; drawList(); drawPane(); }
+$('file').onchange = (e) => e.target.files[0]?.text().then((t) => load(JSON.parse(t)));
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => { e.preventDefault(); e.dataTransfer.files[0]?.text().then((t) => load(JSON.parse(t))); });
+const q = new URLSearchParams(location.search).get('run');
+if (q) fetch(q).then((r) => r.json()).then(load).catch((e) => ($('stat').textContent = '加载失败：' + e.message));
+</script>
+</body>
+</html>

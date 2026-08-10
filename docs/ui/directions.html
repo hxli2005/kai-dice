@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《开！》新 UI 三方向高保真静态稿</title>
+<link rel="stylesheet" href="screens.css">
+<style>
+:root{
+  --page:#0b0b0d; --panel:#141417; --line:#26262b; --txt:#d8d8dd; --dim:#8a8a93;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--page);color:var(--txt);font-family:var(--sys);line-height:1.6;padding:40px 32px 120px}
+.wrap{max-width:1600px;margin:0 auto}
+h1{font-size:28px;letter-spacing:.04em;font-weight:800}
+.sub{color:var(--dim);font-size:13px;margin-top:8px;max-width:900px}
+.sub b{color:var(--txt);font-weight:600}
+.contract{margin-top:22px;border:1px solid var(--line);background:var(--panel);padding:16px 18px;font-size:12.5px;color:var(--dim);display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 26px}
+.contract b{color:#e8c26a;font-weight:600}
+
+section.dir{margin-top:64px;border-top:1px solid var(--line);padding-top:32px}
+.dirhead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.tag{font-family:var(--mono);font-size:11px;letter-spacing:.2em;border:1px solid;padding:3px 9px}
+.dirhead h2{font-size:24px;font-weight:800;letter-spacing:.02em}
+.dirhead .one{color:var(--dim);font-size:13px}
+.why{margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px 24px}
+.why div{border-left:2px solid var(--line);padding-left:12px}
+.why h4{font-size:11px;letter-spacing:.16em;color:var(--dim);font-weight:600;margin-bottom:5px}
+.why p{font-size:13px;color:#b6b6be}
+.why em{font-style:normal;color:#fff;border-bottom:1px solid currentColor}
+
+.row{margin-top:30px}
+.rowlabel{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--dim);margin-bottom:12px}
+.strip{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+.cell{}
+.cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--dim);margin-bottom:7px}
+.cap b{color:#e8c26a;font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>《开！》新 UI · 三方向高保真静态稿</h1>
+  <p class="sub">同一份真实对局内容，三套<b>结构不同</b>的方案——不是三套换色。每套 6 屏：390×844 手机 ／ 1440×900 桌面 × 正常／思考／开牌。桌面稿按 0.52 缩放贴出，手机稿原尺寸。</p>
+
+  <div class="contract">
+    <div><b>对手</b> DeepSeek-V3（事实性标注，非官方无关联）</div>
+    <div><b>当前报价</b> 4 个 5（它报的，等你响应）</div>
+    <div><b>你的手牌</b> ⑤⑤③①⑥ — 含一颗飞，实握 3 个 5</div>
+    <div><b>主操作</b> 报 / 开</div>
+    <div><b>次级</b> 盲 · 斋 · 抬 · 算 · 戳</div>
+    <div><b>开牌结果</b> 桌上 5 个 5 → 报价成立 → 你开你输，掉一颗骰</div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script src="screens.js"></script>
+<script>
+document.getElementById('out').innerHTML = DIRS.map(d=>`
+  <section class="dir ${d.cls}">
+    <div class="dirhead">
+      <span class="tag" style="color:${d.color};border-color:${d.color}">方向 ${d.k}</span>
+      <h2>${d.name}</h2>
+      <span class="one">${d.one}</span>
+    </div>
+    <div class="why">${d.why.map(([h,p])=>`<div><h4>${h}</h4><p>${p}</p></div>`).join('')}</div>
+
+    <div class="row">
+      <div class="rowlabel">手 机 · 390 × 844 · 原 尺 寸</div>
+      <div class="strip">${STATES.map(([s,label])=>`
+        <div class="cell"><div class="cap"><b>${d.k}</b> · 手机 · ${label}</div>
+        ${frame(d.fn(s,true), MOB[0], MOB[1], 1, d.cls)}</div>`).join('')}</div>
+    </div>
+
+    <div class="row">
+      <div class="rowlabel">桌 面 · 1440 × 900 · 缩 放 ${DS}</div>
+      <div class="strip">${STATES.map(([s,label])=>`
+        <div class="cell"><div class="cap"><b>${d.k}</b> · 桌面 · ${label}</div>
+        ${frame(d.fn(s,false), DESK[0], DESK[1], DS, d.cls)}</div>`).join('')}</div>
+    </div>
+  </section>`).join('');
+</script>
+</body>
+</html>
