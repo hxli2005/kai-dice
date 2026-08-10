@@ -21,24 +21,23 @@ import { createMatch } from '../engine.js';
 import { createOpponent } from '../ai/agent.js';
 import { createSilentBot } from '../ai/silent.js';
 import { isOpenRouter, providerLock } from '../ai/openrouter.js';
+import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS } from '../ai/personas.js';
 
 // 钉死的采样参数（纪律③）。**这不是调参，是钉子**：改了它，跨批次的数就不能比了。
 // max_tokens 单独走 gear（chat 的 maxTokens 参数），别在这儿重复下发。
 export const SAMPLING = Object.freeze({
   temperature: 0.8,
   top_p: 1,
-  // 思考型模型：统一关掉思维链再比（省钱也省钟，且避免"谁的思维链更长"混进方差）。
-  // reasoning.mandatory 的模型关不掉——那就让它的格式失败率如实见榜（A3 合规层）。
-  reasoning: { enabled: false },
 });
 
 // 每手输出＝小 JSON ＋ 一句台词 ＋ 留档。**别再紧了**——注释早写着这句，我们还是犯了：
 // 400 的预算下，deepseek-v4-pro 有 25 手 finish_reason=length（输出中位 231、p90 377、
 // 29 手顶到 400），而 gpt-5.6-luna 最大才 213，一次都没碰到。同一个上限，话多的那个被
 // 系统性砍断，然后它的"格式失败率"上了榜——那不是它不守契约，是我们的盒子装不下它。
-// 800 是按被截断的分布留了余量；**若 `finish=length` 还出现就继续加**，别反过来怪模型。
-export const MAX_TOKENS = 800;
-export const TIMEOUT_MS = 30_000; // 擂台是离屏跑的，不吃 §2.5-bis 的 ≤4s 节拍预算
+// 真实 OpenRouter 冒烟：默认推理会把 800、1600 乃至裸 4096 全吃光。总信封统一 3072；
+// 能力层把其中至多 2048 划给推理、保留约 1024 给 JSON。若仍 length，记在我们头上。
+export const MAX_TOKENS = DECISION_MAX_TOKENS;
+export const TIMEOUT_MS = DECISION_TIMEOUT_MS; // 擂台离屏跑，不吃产品内的节拍预算
 
 // 擂台席位：一个没有脸的座位。三个 gear 的取值都必须是"中性"的——
 // calc:'free'＝给算盘但不给算频剧本（算不算是模型自己的 tell，Q45 的原生分化）；
@@ -84,17 +83,16 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
   // 让它们互相听得见（2026-08-10 修）。此前擂台没传 ctx，两个模型从头到尾收不到对方一个字——
   // 于是「牌手层允许诈」（DESIGN §3）在擂台上完全空转，bait 率数的是**对着不存在的听众演戏**。
   //
-  // 走宿主转发，**不动引擎**：台词不是动作，不该进事件流（§2.1 引擎只认 observe/act）；
-  // 而 extraFacts 本就是宿主往提示词里塞真实事实的既有通道（好友房短语盘、玩家的「戳」同款）。
-  // 只转 say，**belief 永不外传**——那是私有留档（§3 三锁）。
-  const heard = { A: [], B: [] };
+  // 走宿主的引语分区，**不动引擎**：台词不是动作，不进公开事件流。
+  // 引语保留本场全量、标明说话人与当时动作；belief 仍是私有留档，永不外传。
+  const dialogue = { A: [], B: [] };
   const ai = {};
   for (const id of ids)
     ai[id] = createOpponent({
       channel: pinSampling(seats[id].channel),
       profile: '',
       persona: ARENA_SEAT,
-      ctx: relaySpeech ? { extraFacts: heard[id] } : {},
+      ctx: relaySpeech ? { dialogue: dialogue[id] } : {},
       fetchFn,
     });
   const backup = createSilentBot(ARENA_SEAT.strategy);
@@ -116,16 +114,13 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
     const d = await ai[p].decide(ob);
     bud?.charge?.(d.meta ?? {}, seats[p].price); // 逐发记账（A4）
 
-    // 把这一手说的话递给对家（滚动窗口，只留最近几句——省 token，也省得越滚越长）
-    // relaySpeech=false 是**对照臂**：其余全同、只关这一个开关，用来把"格式失败涨了"
-    // 归到该归的地方（是转发台词的代价，还是别的）。两臂的数只能这样比才算数。
-    if (relaySpeech && d.say && !d.silentFallback) {
-      const other = p === 'A' ? 'B' : 'A';
-      heard[other].push(`第 ${ob.round} 局，对方${sayContext(d.action)}时说：「${d.say}」`);
-      if (heard[other].length > 6) heard[other].shift();
-    }
     try {
       await m.act(p, d.action, { elapsedMs: null }); // 不喂用时（见文件头自决）
+      // relaySpeech=false 仍是只关引语转发的对照臂。只有已被引擎接受的动作才留台词。
+      if (relaySpeech && d.say && !d.silentFallback) {
+        const item = { round: ob.round, speaker: p, kind: 'speech', action: { ...d.action }, text: d.say };
+        for (const id of ids) dialogue[id].push(structuredClone(item));
+      }
     } catch {
       // 走到这儿说明 parseDecision 的合法性校验漏了——记在我们头上（rejects），不算模型的合规失败。
       // 沉默 bot 顶一手把桌子推下去；顶不动就收摊，绝不空转到 maxSteps。
@@ -158,15 +153,6 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
     aborted,
   };
 }
-
-// 转发台词时带上它当时在做什么——嘴和手对不对得上，本来就是可读的东西
-const sayContext = (a) =>
-  a?.type === 'bid' ? `报 ${a.count} 个 ${a.face}`
-  : a?.type === 'challenge' ? '开牌'
-  : a?.type === 'calc' ? '拨算盘'
-  : a?.type === 'peek' ? '掀盅'
-  : a?.type === 'declare' ? `宣言「${{ zhai: '斋', blind: '盲', raise: '抬' }[a.declaration] ?? a.declaration}」`
-  : '行动';
 
 // 镜像对（纪律②）：同一副骰种打两遍，第二遍互换座位。
 // 座位 A 的骰子序列只由 seed 决定，所以两遍里"A 手上的那副牌"是同一副——

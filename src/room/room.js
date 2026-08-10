@@ -4,7 +4,7 @@
 // 本模块零平台依赖（注入 send/schedule/fetch），DO 只是薄壳；node 测试用假 socket 全场走通。
 
 import { createMatch } from '../engine.js';
-import { createOpponent, personaLine } from '../ai/agent.js';
+import { createOpponent, personaLine, stateIdOf } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
 import { defaultAiPersona, HOSTED_MODEL, IDLE_LINES } from '../ai/personas.js';
 import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
@@ -48,7 +48,8 @@ export function createRoomCore({
   let pumping = false;
   let cancelNag = null;
   const cancelSub = {};
-  const seatFacts = { B: [], A: [], C: [] }; // 注入 AI 提示词的追加事实（短语/旁注/代打），滚动窗口
+  const roomEvents = { B: [], A: [], C: [] }; // 房间服务端盖章的本场全量公开事件
+  const dialogue = { B: [], A: [], C: [] }; // 本场全量牌桌引语，与引擎/房间事实分桶
   let opponents = {};
 
   const sealName = (s) => (seats[s].kind === 'ai' ? seats[s].name : (seats[s].seal ?? (s === 'A' ? '主' : '客')));
@@ -65,7 +66,6 @@ export function createRoomCore({
           apiKey: hostPass,
           model: HOSTED_MODEL,
           headers: { 'X-Device': (hostDevice ?? 'room').slice(0, 64) },
-          extra: { thinking: { type: 'disabled' } }, // 同 officialChannelOf：思考型不关链就把预算想光
         }
       : null;
 
@@ -95,31 +95,33 @@ export function createRoomCore({
     if (!match) return;
     for (const s of HUMANS) if (seats[s].conn != null) sendTo(s, { t: 'ob', ob: match.observe(s) });
   };
-  const say = (text) => text && broadcast({ t: 'say', seat: 'B', text });
+  const say = (text, speaker = 'B', action = null, round = match?.observe(speaker)?.round ?? null) => {
+    if (!text) return;
+    broadcast({ t: 'say', seat: speaker, text });
+    for (const s of Object.keys(dialogue))
+      dialogue[s].push({ round, speaker, kind: 'speech', action, text });
+  };
 
   // ---------- AI（一号机本席 + 掉线代打） ----------
+  const promptCtxFor = (seat) => ({
+    names: namesFor(seat),
+    three: true,
+    dialogue: dialogue[seat],
+    roomEvents: roomEvents[seat],
+    control: seat === 'B' ? null : { mode: 'substitute', seat },
+  });
   function ensureOpponent(seat) {
     if (opponents[seat]) return opponents[seat];
-    const base =
-      seat === 'B'
-        ? [
-            `你是这张好友房桌上的主持人：桌上除你外是两位人类客人（${sealName('A')} 与 ${sealName('C')}），你同时读他们两个、当面对比、看热闹不嫌事大——但只为自己赢（各为其利，不许联手围剿任何人）。称呼他们用名章：${sealName('A')}、${sealName('C')}。`,
-          ]
-        : [`你在替掉线的客人（${sealName(seat)}）代打这一席——按你的打法打，但别忘了说明你是代打。`];
-    seatFacts[seat] = base;
     opponents[seat] = createOpponent({
       channel,
       profile: '', // 好友房无跨设备档案：AI 对两位客人都从本房现场读起（房内多场连续）
       persona: defaultAiPersona(),
-      ctx: { names: namesFor(seat), three: true, extraFacts: seatFacts[seat] },
+      ctx: promptCtxFor(seat),
     });
     return opponents[seat];
   }
-  const pushFact = (line) => {
-    for (const s of Object.keys(seatFacts)) {
-      seatFacts[s].push(line);
-      if (seatFacts[s].length > 8) seatFacts[s].splice(1, 1); // 保留首行职责说明，滚动其余
-    }
+  const pushRoomEvent = (event) => {
+    for (const s of Object.keys(roomEvents)) roomEvents[s].push(structuredClone(event));
   };
 
   const controllerOf = (s) => (seats[s].kind === 'ai' || seats[s].substituted ? 'ai' : 'human');
@@ -164,7 +166,7 @@ export function createRoomCore({
       sideDelta[from] -= BET_CAP;
       sideDelta[to] += BET_CAP;
       broadcast({ t: 'betResult', bettor: b.bettor, on: b.on, hit, amount: BET_CAP });
-      pushFact(`旁注结算：看客${sealName(b.bettor)}押${sealName(b.on)}赢这拍开牌，${hit ? '押中了' : '押空了'}（${hit ? '+' : '−'}${BET_CAP}）。`);
+      pushRoomEvent({ type: 'betResult', bettor: b.bettor, on: b.on, hit, delta: hit ? BET_CAP : -BET_CAP });
     }
     bets = [];
   }
@@ -243,8 +245,12 @@ export function createRoomCore({
         const t0 = now();
         const d = await ai.decide(ob);
         if (gen !== matchGen || phase !== 'playing') break;
+        if (controllerOf(seat) !== 'ai') break;
+        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) continue;
         await sleep(aiPaceMs - (now() - t0));
         if (gen !== matchGen || phase !== 'playing') break;
+        if (controllerOf(seat) !== 'ai') break;
+        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) continue;
         try {
           await match.act(seat, d.action, { elapsedMs: now() - t0 });
         } catch {
@@ -252,7 +258,7 @@ export function createRoomCore({
         }
         // F2 沉默模式的"被读"底线：没暗号的房间（沉默主持）开牌时也得说出为什么——事实模板，零编造
         const line = d.say || (d.action.type === 'challenge' ? silentSay(defaultAiPersona(), ob) : '');
-        if (line) say(seat === 'B' ? line : `（代打${sealName(seat)}）${line}`);
+        if (line) say(seat === 'B' ? line : `（代打${sealName(seat)}）${line}`, seat, d.action, ob.round);
         pushObs();
         drainEvents();
       }
@@ -268,6 +274,8 @@ export function createRoomCore({
     seenEvents = 0;
     lastRevealAt = 0;
     opponents = {};
+    for (const items of Object.values(roomEvents)) items.length = 0;
+    for (const items of Object.values(dialogue)) items.length = 0;
     match = await createMatch({
       seed: (now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
       config: { players: ['A', 'B', 'C'], startChips: { ...roomChips } },
@@ -371,7 +379,7 @@ export function createRoomCore({
         const id = msg.id | 0;
         if (!(id >= 0 && id < PHRASES.length)) return;
         broadcast({ t: 'phrase', seat, id });
-        pushFact(`${sealName(seat)}拍了短语「${PHRASES[id]}」。`);
+        pushRoomEvent({ type: 'phrase', actor: seat, text: PHRASES[id] });
         return;
       }
       case 'bet': {
@@ -385,7 +393,7 @@ export function createRoomCore({
         if (bets.some((b) => b.bettor === seat)) return send(connId, { t: 'err', msg: '这拍已押过' });
         bets.push({ bettor: seat, on });
         broadcast({ t: 'bet', bettor: seat, on, amount: BET_CAP });
-        pushFact(`看客${sealName(seat)}公开押${sealName(on)}赢下一拍开牌（${BET_CAP} 注）。`);
+        pushRoomEvent({ type: 'bet', bettor: seat, on, amount: BET_CAP });
         return;
       }
       default:

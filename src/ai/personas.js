@@ -24,10 +24,17 @@ export const HOSTED_MODEL = 'deepseek-v4-flash'; // 托管席（零配置免费�
 // 官方通道钉的型号（Q51：只保 1–2 个控成本，其余走 BYOK）。顺序即卡序。
 export const OFFICIAL_MODELS = [HOSTED_MODEL, 'deepseek-v4-pro'];
 
-// 每个型号自己的接口参数。**这是技术参数，不是性格**——
-// v4-pro 不关思维链会吃空 token 预算回空（2026-08-09 实测），所以它得多给一点、多等一会儿。
+// 决策调用的完成信封：推理 token 与最终 JSON 共用 `max_tokens`。
+// 真实 OpenRouter 冒烟表明，800/1600/4096 的裸上限都可能被默认推理全部吃完；
+// 通用信封给 3072，OpenRouter 能力层再把其中至多 2048 划给推理，至少留约 1024 落答案。
+export const DECISION_MAX_TOKENS = 3072;
+export const DECISION_TIMEOUT_MS = 60_000;
+
+// 每个型号自己的完成信封。**这是技术参数，不是性格**：
+// 不再强制关闭推理，只给推理型型号足够的 token 和时间把结果写完。
 const TECH = {
-  'deepseek-v4-pro': { maxTokens: 500, timeoutMs: 15_000, extra: { thinking: { type: 'disabled' } } },
+  'deepseek-v4-flash': { maxTokens: DECISION_MAX_TOKENS, timeoutMs: DECISION_TIMEOUT_MS },
+  'deepseek-v4-pro': { maxTokens: DECISION_MAX_TOKENS, timeoutMs: DECISION_TIMEOUT_MS },
 };
 
 // 一个型号 ＝ 一张卡 ＝ 一个户头。
@@ -50,7 +57,14 @@ export function modelPersona(model, { hosted = false, official = false } = {}) {
     hosted,
     official: hosted || official,
     // 工具全开：算不算、看不看骰，都由它自己决定——那是原生 tell，不是我们配的
-    gear: { calc: 'free', usesBlind: true, model, ...(TECH[model] ?? {}) },
+    gear: {
+      calc: 'free',
+      usesBlind: true,
+      model,
+      maxTokens: DECISION_MAX_TOKENS,
+      timeoutMs: DECISION_TIMEOUT_MS,
+      ...(TECH[model] ?? {}),
+    },
     strategy: { challengeThreshold: 0.3 }, // 只在通道断了、沉默 bot 顶班时才用得上
     bankroll: 0, // Q88：身家＝净转移，谁都没有发下来的本金
   };

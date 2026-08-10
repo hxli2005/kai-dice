@@ -1,12 +1,11 @@
 // 读心回归的真通道跑法（F0d）：机器只能证明"分布动了、没编史"，动得对不对靠人看。
 //   KAI_BASE=https://kai-dice.pages.dev/api/llm KAI_KEY=暗号 npm run readgate
-//   自带钥匙： KAI_BASE=https://api.deepseek.com/v1 KAI_KEY=sk-... KAI_MODEL=xxx KAI_THINK=on npm run readgate
+//   自带钥匙： KAI_BASE=https://api.deepseek.com/v1 KAI_KEY=sk-... KAI_MODEL=xxx npm run readgate
 
 import { runReadGate } from '../src/ai/readgate.js';
 import { PERSONAS, HOSTED_MODEL } from '../src/ai/personas.js';
 
-// 官方通道是思考型模型：不关思维链，预算会被想光（见 officialChannelOf 的注）。
-// 自带钥匙指到别家时用 KAI_THINK=on 关掉这个开关。
+// 默认保留模型原生推理；只有做历史对照实验时才可显式 KAI_THINK=off。
 const base = process.env.KAI_BASE ?? 'https://kai-dice.pages.dev/api/llm';
 const channel = process.env.KAI_KEY
   ? {
@@ -14,11 +13,11 @@ const channel = process.env.KAI_KEY
       apiKey: process.env.KAI_KEY,
       model: process.env.KAI_MODEL ?? HOSTED_MODEL,
       format: process.env.KAI_FORMAT ?? 'openai',
-      ...(process.env.KAI_THINK === 'on' ? {} : { extra: { thinking: { type: 'disabled' } } }),
+      ...(process.env.KAI_THINK === 'off' ? { extra: { thinking: { type: 'disabled' } } } : {}),
     }
   : null;
 
-const persona = PERSONAS[process.env.KAI_PERSONA ?? 'laolitou'];
+const persona = PERSONAS[process.env.KAI_PERSONA ?? `model:${HOSTED_MODEL}`] ?? PERSONAS[`model:${HOSTED_MODEL}`];
 const samples = +(process.env.KAI_SAMPLES ?? 6);
 
 const r = await runReadGate({ channel, persona, samples });

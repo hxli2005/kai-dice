@@ -181,6 +181,40 @@ export function profileBrief(p, personaId = `model:${HOSTED_MODEL}`, withNotes =
   return head + habits + calc + bigPot + (notes ? `你的旧笔记：${notes}` : '');
 }
 
+// 决策提示词专用的分桶档案：程序统计与模型自记分开，不再拼成一段无来源文本。
+// profileBrief 仍供页面和其他人话场景使用；这个函数只负责数据契约。
+export function profilePromptData(p, personaId = `model:${HOSTED_MODEL}`) {
+  const mind = p.minds?.[personaId];
+  const verified = [];
+  if (p.matches) {
+    verified.push({
+      scope: 'career',
+      matches: p.matches,
+      wins: p.wins,
+      resets: p.resets ?? 0,
+    });
+    const last = p.stats.at(-1);
+    if (last) {
+      verified.push({
+        scope: 'lastMatch',
+        bluffRate: last.bluffRate,
+        challenges: last.myChallenges,
+        challengeHits: last.myChallengeHits,
+        calcs: last.myCalcs ?? null,
+        calcFollowRate: last.calcFollowRate ?? null,
+        bigPot: bigPotBrief(last) || null,
+      });
+    }
+  }
+  return {
+    verified,
+    subjective: {
+      notes: [...(mind?.notes ?? [])].slice(-5),
+      hypotheses: structuredClone(mind?.hypotheses ?? []),
+    },
+  };
+}
+
 // 次场开场白的事实素材（§5.3-bis／Q14 硬节拍）：全部裁判层中性口径，主家 LLM 亲口引用。
 // 抽成纯函数是为了可测（Q43 编码侧自查项：这条节拍到底有没有真落地）。
 export function openerFacts(profile, ledger) {

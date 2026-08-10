@@ -22,6 +22,7 @@ import { callCost, createBudget, estimateRun, cacheReport, HAND_ESTIMATE } from 
 import { renderBoard } from '../src/arena/board.js';
 import {
   normalizeModel,
+  requestFeatures,
   pickDefaults,
   providerLock,
   fetchModels,
@@ -35,18 +36,24 @@ function fakeDecide(user, { aggressive = false, say, belief } = {}) {
   const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
   if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
   if (aggressive && /当众拨算盘/.test(user)) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
-  const cur = user.match(/报「(\d+) 个 (\d+)」/);
-  const canChallenge = /可选动作：开牌/.test(user);
+  const cur = user.match(/当前报价：(?:你|对方)报(\d+)个(\d+)/);
+  const canChallenge = /开牌（\{"type":"challenge"\}）/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
     return fix({ action: { type: 'challenge' }, say: '开。', belief: '他撑不住' });
-  const cand = user.match(/头几档：(\d+)个(\d+)/);
-  if (cand)
+  if (/报价（\{"type":"bid"/.test(user)) {
+    const total = +(user.match(/报价边界：总骰(\d+)/)?.[1] ?? 10);
+    const minFace = user.includes('斋：是') ? 1 : 2;
+    let count = cur ? +cur[1] : 2;
+    let face = cur ? +cur[2] + 1 : minFace;
+    if (face > 6) { count += 1; face = minFace; }
+    if (count > total) return fix({ action: { type: 'challenge' }, say: '开。', belief: '没得抬了' });
     return fix({
-      action: { type: 'bid', count: +cand[1], face: +cand[2] },
-      say: `${cand[1]}个${cand[2]}`,
+      action: { type: 'bid', count, face },
+      say: `${count}个${face}`,
       belief: '往上顶一格',
       speechMode: aggressive ? 'bait' : 'straight',
     });
+  }
   return fix({ action: { type: 'challenge' }, say: '开。', belief: '没得抬了' });
 }
 
@@ -63,6 +70,7 @@ const fakeChannel = (opts = {}) => async (url, init) => {
       usage: {
         prompt_tokens: 1000,
         completion_tokens: 60,
+        completion_tokens_details: opts.reasoningTokens == null ? undefined : { reasoning_tokens: opts.reasoningTokens },
         cost: 0.001,
         prompt_tokens_details: { cached_tokens: opts.cached ?? 0 },
       },
@@ -108,13 +116,13 @@ test('A2：采样钉死＋供应商路由锁＋用量回报，逐发下到请求
   const m = await playMatch({
     seed: 7,
     seats: { A: seat('mx'), B: seat('my') },
-    fetchFn: fakeChannel({ seen }),
+    fetchFn: fakeChannel({ seen, reasoningTokens: 321 }),
   });
   assert.ok(m.over, '假模型应能把一场打完');
   const body = seen[0].body;
   assert.equal(body.temperature, SAMPLING.temperature);
   assert.equal(body.top_p, SAMPLING.top_p);
-  assert.deepEqual(body.reasoning, { enabled: false }, '统一关思维链：不比谁的链更长');
+  assert.equal(body.reasoning, undefined, '不强制开关推理，保留模型原生特征');
   assert.equal(body.max_tokens, MAX_TOKENS, 'A4 降本二：max_tokens 收紧且钉死');
   assert.deepEqual(body.provider, { order: ['fakeprov/fp8'], allow_fallbacks: false }, 'A2 纪律③：锁后端');
   assert.deepEqual(body.usage, { include: true }, 'A4：要回执账单，不靠估算');
@@ -330,7 +338,7 @@ test('A1：模型清单动态拉取并归一化（价格/上下文/思考型旗�
         context_length: 131072,
         pricing: { prompt: '0.0000001', completion: '0.0000006', input_cache_read: '0.00000001' },
         top_provider: { max_completion_tokens: 8192 },
-        supported_parameters: ['max_tokens', 'seed'],
+        supported_parameters: ['max_tokens', 'seed', 'response_format'],
         architecture: { output_modalities: ['text'] },
         reasoning: { mandatory: false, default_enabled: false },
       },
@@ -338,8 +346,10 @@ test('A1：模型清单动态拉取并归一化（价格/上下文/思考型旗�
         id: 'x/thinker',
         name: 'Thinker',
         pricing: { prompt: '0.00001', completion: '0.00005' },
+        top_provider: { max_completion_tokens: 8192 },
+        supported_parameters: ['reasoning', 'response_format'],
         architecture: { output_modalities: ['text'] },
-        reasoning: { mandatory: true, default_enabled: true },
+        reasoning: { mandatory: true, default_effort: 'high', supported_efforts: ['high', 'low'] },
       },
       {
         id: 'x/painter',
@@ -361,6 +371,19 @@ test('A1：模型清单动态拉取并归一化（价格/上下文/思考型旗�
   assert.equal(models[0].promptPrice, 1e-7);
   assert.equal(models[0].cacheReadPrice, 1e-8);
   assert.equal(models[1].reasoningMandatory, true, '思考型的旗子来自清单自己，不靠我们猜');
+  assert.equal(models[1].reasoningDefaultEnabled, true, 'default_effort 也代表默认会思考，不能漏标');
+  assert.deepEqual(requestFeatures(models[0]), {
+    decisionExtra: { response_format: { type: 'json_object' } },
+  }, '支持推理但默认关闭的型号不被强行开思考');
+  assert.deepEqual(requestFeatures(models[1]), {
+    reasoningProfile: {
+      enabled: true,
+      maxTokens: 2048,
+      minCompletionTokens: 3072,
+      maxCompletionTokens: 8192,
+    },
+    decisionExtra: { response_format: { type: 'json_object' } },
+  });
   // 负价＝价格不定：归一成 null，别让它排到便宜档第一名
   assert.equal(models[2].promptPrice, null);
   assert.equal(models[2].priceKnown, false);
@@ -368,6 +391,35 @@ test('A1：模型清单动态拉取并归一化（价格/上下文/思考型旗�
   assert.equal(models[0].priceKnown, true);
   // 预置只能当预选：清单里没有的一律不显示（名单腐烂了也不会冒出幽灵）
   assert.deepEqual(pickDefaults(models, ['x/cheap', 'x/ghost']).map((m) => m.id), ['x/cheap']);
+});
+
+test('A1：能力协商给思考留预算、给答案留余量，并只在决策调用锁 JSON', async () => {
+  const modelInfo = normalizeModel({
+    id: 'x/thinker',
+    pricing: { prompt: '0.000001', completion: '0.000002' },
+    top_provider: { max_completion_tokens: 8192 },
+    architecture: { output_modalities: ['text'] },
+    supported_parameters: ['reasoning', 'response_format'],
+    reasoning: { default_effort: 'high', supported_efforts: ['high', 'low'] },
+  });
+  const seen = [];
+  const m = await createMatch({ seed: 4 });
+  const ai = createOpponent({
+    channel: pinSampling(openrouterChannel({
+      apiKey: 'k',
+      model: modelInfo.id,
+      modelInfo,
+      providerTag: 'fake/fp8',
+    })),
+    persona: { ...ARENA_SEAT, gear: { ...ARENA_SEAT.gear, maxTokens: 16 } },
+    fetchFn: fakeChannel({ seen, reasoningTokens: 321 }),
+  });
+  const d = await ai.decide(m.observe('A'));
+  assert.equal(d.outcome, 'ok');
+  assert.equal(seen[0].body.max_tokens, 3072, '16 token 的调用也要扩成推理＋答案的完整信封');
+  assert.deepEqual(seen[0].body.reasoning, { max_tokens: 2048 });
+  assert.deepEqual(seen[0].body.response_format, { type: 'json_object' });
+  assert.equal(d.meta.reasoningTokens, 321, '推理用量要进回执，才能判断是否真的给足');
 });
 
 test('A1：供应商锁与来源标识头；官方通道不掺和', () => {
@@ -487,9 +539,12 @@ test('台词转发：对家说过的话进得了提示词，belief 永不外传'
   const users = seen.map((r) => r.body.messages[1].content);
   const heard = users.filter((u) => u.includes('对方') && u.includes('你这手牌怕是不硬'));
   assert.ok(heard.length > 0, '对家的台词必须进得了提示词——否则「牌手层允许诈」是空转');
-  assert.ok(heard.some((u) => /第 \d+ 局，对方(报|开牌|拨算盘|掀盅|宣言)/.test(u)), '要带上它当时在做什么');
-  // 私有留档不许外传（§3 三锁）
-  for (const u of users) assert.ok(!u.includes('其实我五五开'), 'belief 永不外传');
+  assert.ok(heard.some((u) => /第\d+局，对方(报\d+个\d+|开牌|拨算盘|看骰|宣.)时说/.test(u)), '要带上它当时在做什么');
+  // belief 可回灌给说话者自己，但绝不能混入公开引语传给对家。
+  for (const u of users) {
+    const quotes = u.match(/【牌桌发言[\s\S]*?(?=\n\n【|$)/)?.[0] ?? '';
+    assert.ok(!quotes.includes('其实我五五开'), 'belief 永不外传');
+  }
 });
 
 test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', async () => {
@@ -503,10 +558,10 @@ test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', 
   const users = seen.map((r) => r.body.messages[1].content);
   // 认转发通道的特征串。不能直接搜台词本身——**自己说过的话本来就会经 ownLog 回灌给自己**
   // （那是同局嘴手不断裂用的，与转发无关），搜文本会把两者混为一谈。
-  for (const u of users) assert.ok(!/第 \d+ 局，对方.*时说：/.test(u), '关了就一句都不许转发进来');
+  for (const u of users) assert.ok(!u.includes('【牌桌发言'), '关了就一句都不许转发进来');
   // 其余照旧：规则、局面、动作叙事、自我回灌都不动
-  assert.ok(users.some((u) => /本局进程/.test(u)), '对照臂只关台词转发，别的不动');
-  assert.ok(users.some((u) => /你自己这局刚做过/.test(u)), '自我回灌不受影响');
+  assert.ok(users.some((u) => /【公开历史｜本场完整/.test(u)), '对照臂只关台词转发，别的不动');
+  assert.ok(users.some((u) => /本局自我留档/.test(u)), '自我回灌不受影响');
 });
 
 // ---------- 截断归因：我们的预算不许算成它的合规失败 ----------
@@ -536,4 +591,24 @@ test('被 max_tokens 截断另立类目，不计入格式失败', async () => {
   const row = rows.find((r) => r.label === 'x');
   assert.ok(row.compliance.truncatedRate > 0, '榜上单独一列');
   assert.equal(row.compliance.formatFailRate, 0, '不许混进格式失败');
+});
+
+test('推理吃完整个信封、正文为空时也归因 truncated，不算网络错误', async () => {
+  const m = await createMatch({ seed: 31 });
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://x.test/v1', apiKey: 'k', model: 'thinker' },
+    persona: ARENA_SEAT,
+    fetchFn: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '' }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 1000, completion_tokens: 3072 },
+      }),
+    }),
+  });
+  const d = await ai.decide(m.observe('A'));
+  assert.equal(d.outcome, 'truncated');
+  assert.equal(d.silentFallback, true);
+  assert.equal(d.meta.finish, 'length');
 });

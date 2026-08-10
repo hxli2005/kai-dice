@@ -106,11 +106,11 @@ test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本�
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
-  const pokes = []; // 与 UI 同款：戳的话滚进 extraFacts，下一手提示词就带上
+  const dialogue = []; // 与 UI 同款：戳的话进引语分区，下一手即可见
   const ai = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     persona: { ...PERSONAS['model:deepseek-v4-flash'], gear: { ...PERSONAS['model:deepseek-v4-flash'].gear, usesBlind: false } },
-    ctx: { extraFacts: pokes },
+    ctx: { dialogue },
     fetchFn: mockFetch((user) =>
       user.includes('你记错了')
         ? '{"action":{"type":"challenge"},"say":"我记得清清楚楚。开。","belief":"其实拿不准","reaction":"hold"}'
@@ -120,7 +120,7 @@ test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本�
   await m.act('B', (await ai.decide(m.observe('B'))).action); // 先掀盅
   const before = await ai.decide(m.observe('B'));
   assert.equal(before.reaction, null, '没被戳就没有反应字段');
-  pokes.push('客人当面戳了你一句："你记错了"');
+  dialogue.push({ round: 1, speaker: 'A', kind: 'poke', text: '你记错了' });
   const after = await ai.decide(m.observe('B'));
   assert.equal(after.reaction, 'hold', '嘴硬——他自己交的底');
   assert.equal(ai.logs.at(-1).reaction, 'hold', '进决策日志');

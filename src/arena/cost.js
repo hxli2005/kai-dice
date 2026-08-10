@@ -133,5 +133,5 @@ export const thinkingNote = (model) =>
   model?.reasoningMandatory
     ? '思考型（强制，关不掉）：慢且贵，且会吃掉 max_tokens 预算'
     : model?.reasoning
-      ? '思考型（默认开，擂台已统一关闭）'
+      ? '思考型（保留模型原生设置）'
       : '';

@@ -374,7 +374,10 @@ export async function createMatch({ seed, config = {} } = {}) {
       round,
       over,
       turn,
+      firstBidder,
+      bidCount: bids.length,
       zhai,
+      peeked: { ...peeked },
       blind: { ...blind },
       raises: { ...raises },
       calced: { ...calced }, // 谁拨过算盘＝公开事实（Q45）；算出来的数各自私有

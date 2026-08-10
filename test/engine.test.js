@@ -37,13 +37,18 @@ test('最小抬价 = 有序枚举首项', () => {
 
 // ---------- 玩家接口与信息隔离 ----------
 
-test('observe：未看骰前 yourDice 为 null；schema 中不存在对方骰面', async () => {
+test('observe：快照带首报/报价数/看骰状态，但永不泄露对方骰面', async () => {
   const m = await createMatch({ seed: 7 });
   const obA = m.observe('A');
   assert.equal(obA.yourDice, null);
+  assert.equal(obA.firstBidder, 'A');
+  assert.equal(obA.bidCount, 0);
+  assert.deepEqual(obA.peeked, { A: false, B: false });
   await m.act('A', { type: 'peek' });
-  const dice = m.observe('A').yourDice;
+  const afterPeek = m.observe('A');
+  const dice = afterPeek.yourDice;
   assert.equal(dice.length, 5);
+  assert.equal(afterPeek.peeked.A, true);
   assert.ok(!JSON.stringify(m.observe('B')).match(/"yourDice":\[/), 'B 未看骰不应有任何骰面');
   // 公开事件流里在摊牌前不含任何骰面
   for (const e of m.observe('B').events) assert.ok(e.type !== 'reveal');

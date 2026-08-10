@@ -14,7 +14,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
-import { runArena, roundRobin, SAMPLING, MAX_TOKENS, pinSampling } from '../src/arena/arena.js';
+import { runArena, roundRobin, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
 import { chat } from '../src/ai/llm.js';
 import { summarize, routingIntegrity, flavorSpread } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
@@ -101,7 +101,7 @@ for (const raw of wanted) {
   entrants.push({
     label: id,
     price: model,
-    channel: openrouterChannel({ apiKey, model: id, providerTag: tag, base }),
+    channel: openrouterChannel({ apiKey, model: id, modelInfo: model, providerTag: tag, base }),
     endpoints, // 体检轮换用：首选端点可能在你的数据策略下不可达
     meta: { tag, quant, thinking: thinkingNote(model) },
   });
@@ -115,8 +115,8 @@ for (const raw of wanted) {
 }
 
 // ---- 参赛体检（Q91）：用**钉死的那套设置**各发一发试试 ----
-// 教训来自 2026-08-10 的冒烟：gemini-3.6-flash 的思维链强制开，我们钉的 reasoning:{enabled:false}
-// 被它直接 400 回绝——30 手全失败，沉默 bot 替它打完两场，而榜上还挂着它的"胜率 100%"。
+// 不再强制关闭推理：那会压平思考型模型的原生特征，有的型号还会直接 400 拒绝。
+// 体检仍使用真实比赛请求，避免沉默 bot 替失败型号上榜。
 // 打不通就当场淘汰：**宁可少一个参赛者，也不许让沉默 bot 顶着别人的名字上榜。**
 console.log('\n参赛体检（用钉死的设置各发一发）…');
 const fit = [];
@@ -132,7 +132,15 @@ for (const e of entrants) {
   for (const tag of tags.length ? tags : [null]) {
     const ch = { ...e.channel, providerTag: tag };
     try {
-      await chat(pinSampling(ch), { system: '回复 ok', user: 'ok', maxTokens: 16, timeoutMs: 20_000 });
+      const pinned = pinSampling(ch);
+      const raw = await chat(pinned, {
+        system: '连通测试。严格输出一行 JSON：{"ok":true}',
+        user: '输出指定 JSON。',
+        maxTokens: MAX_TOKENS,
+        timeoutMs: TIMEOUT_MS,
+        extra: pinned.decisionExtra,
+      });
+      if (JSON.parse(raw)?.ok !== true) throw new Error('health bad json');
       if (tag !== e.meta.tag)
         console.log(`  ! ${e.label} 首选后端 ${e.meta.tag} 不可达，改锁 ${tag}`);
       e.channel = ch;
@@ -150,7 +158,7 @@ for (const e of entrants) {
   if (!ok) {
     console.error(`  ✗ ${e.label} 打不通：${lastErr}`);
     console.error(
-      '    → 淘汰。若是 400，多半它不接受钉死的采样参数（如思维链强制开）；' +
+      '    → 淘汰。若是 400，多半它不接受钉死的采样参数；' +
         '若是 404，是所有后端在你的数据策略下都不可达（见 openrouter.ai/settings/privacy）。',
     );
   } else fit.push(e);

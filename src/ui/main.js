@@ -4,11 +4,12 @@
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
 import { obProb, obProbExact, coarseWord } from '../probability.js';
-import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent.js';
+import { createOpponent, settleVerdict, reflect, personaLine, stateIdOf } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
+import { createSilentBot } from '../ai/silent.js';
 import { chat } from '../ai/llm.js';
 import { PERSONAS, HOSTED_MODEL, modelPersona, IDLE_LINES, defaultAiPersona } from '../ai/personas.js';
-import { OPENROUTER_BASE, isOpenRouter, originHeaders, fetchModels, perMillion } from '../ai/openrouter.js';
+import { OPENROUTER_BASE, isOpenRouter, originHeaders, fetchModels, perMillion, requestFeatures } from '../ai/openrouter.js';
 import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
 import { OPS } from '../mods/catalog.js';
 import { joinRoom, createRemoteRoom } from './net.js';
@@ -18,7 +19,7 @@ import { examMod } from '../mods/exam.js';
 import { smokeMods } from '../mods/smoke.js';
 import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByRoundOf, reviewTracks } from './report.js';
 import { buildLedger } from '../ai/factcheck.js';
-import { loadProfile, appendMatch, profileBrief, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
+import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -126,11 +127,6 @@ function officialChannelOf(per) {
     model: per?.gear?.model ?? HOSTED_MODEL, // 座位钉的模型（代理端按上游清单校验；不钉就用托管那个）
     format: 'openai',
     headers: { 'X-Device': deviceId() }, // 设备日配额（§9.3）
-    // 官方通道现在全是思考型模型（v4-flash／v4-pro）。**不关思维链就没法玩**：
-    // 2026-08-09 生产实测，max_tokens=320 时思维链把 320 个 token 全部想光，
-    // finish_reason=length、正文为空 → 每一手都 bad-output → 整场退沉默 bot。
-    // 关掉之后 1.9s／81 token／JSON 完整。三号机（v4-pro）踩的是同一个坑。
-    extra: { thinking: { type: 'disabled' } },
   };
 }
 // OpenRouter（A1）：按其惯例带来源标识头。key 仍不出设备——浏览器直连，我方服务器不经手。
@@ -176,7 +172,16 @@ async function testPass() {
 }
 async function testGuest(cfg) {
   try {
-    await chat(withGuestHeaders(cfg), { system: '连通测试', user: '回复一个字', maxTokens: 4, timeoutMs: 8000 });
+    const ch = withGuestHeaders(cfg);
+    const gear = modelPersona(cfg.model)?.gear ?? {};
+    const raw = await chat(ch, {
+      system: '连通测试。严格输出一行 JSON：{"ok":true}',
+      user: '输出指定 JSON。',
+      maxTokens: gear.maxTokens,
+      timeoutMs: gear.timeoutMs,
+      extra: ch.decisionExtra,
+    });
+    if (JSON.parse(raw)?.ok !== true) throw new Error('bad-output');
     return { ok: true, msg: '已连通' };
   } catch (e) {
     return { ok: false, msg: friendlyError(e?.message ?? '') };
@@ -615,7 +620,9 @@ function armIdle() {
     const o = ob();
     if (o.turn !== 'A' || o.over || busy) return;
     // 挂机提示（§1.4）：全席共用一份中性文案——原来一人一套的催话台词是角色台词，Q87 已删
-    speak(IDLE_LINES[Math.floor(Math.random() * IDLE_LINES.length)], 'B');
+    const line = IDLE_LINES[Math.floor(Math.random() * IDLE_LINES.length)];
+    rememberDialogue('B', null, line);
+    speak(line, 'B');
     idleTimer = setTimeout(nag, IDLE_MS);
   };
   idleTimer = setTimeout(nag, IDLE_MS);
@@ -731,7 +738,13 @@ function buildModRow() {
 // 他的嘴解链之后，记歪不再是沉默的挫败——你可以当场戳回去，看他嘴硬、改口，还是拿着错账继续下注。
 // 零打字：三枚短语。反应（hold/fold/ignore）由他自己交底，进档案的嘴硬率。
 const POKES = ['你记错了', '你在演', '慢着'];
-let pokeFeed = {}; // seat -> 注入该 AI 提示词的追加事实（与好友房 seatFacts 同款机制）
+let dialogueFeed = {}; // seat -> 该 AI 听到的本场全量牌桌引语（非引擎事实）
+
+function rememberDialogue(speaker, action, text, kind = 'speech', round = ob()?.round ?? null) {
+  if (!text) return;
+  const item = { round, speaker, kind, action, text };
+  for (const s of seats.slice(1)) dialogueFeed[s]?.push(structuredClone(item));
+}
 
 function buildPokeUI() {
   $('pokePanel')?.remove();
@@ -758,7 +771,7 @@ function buildPokeUI() {
 
 function doPoke(text) {
   const live = seats.slice(1).filter((s) => opponents[s]);
-  for (const s of live) pokeFeed[s]?.push(`客人当面戳了你一句："${text}"（他就是在反驳你刚才那句话）`);
+  if (live.length) rememberDialogue('A', null, text, 'poke');
   toastFx(`你拍了「${text}」`);
   sfx.tick();
   if (sandbox) return;
@@ -826,9 +839,20 @@ async function aiTurnFor(seat) {
     d = await ai.decide(o);
   } catch (e) {
     // 决策链任何漏网异常都不许冻桌：退沉默 bot 行棋，桌子继续转
-    d = { action: createSilentBot(ai.persona.strategy).decide(o), say: '', silentFallback: true, error: e?.message ?? 'decide-crash' };
+    d = {
+      action: createSilentBot(ai.persona.strategy).decide(o),
+      say: '',
+      observedStateId: stateIdOf(o, { dialogue: dialogueFeed[seat] }),
+      silentFallback: true,
+      error: e?.message ?? 'decide-crash',
+    };
   }
   if (gen !== matchGen) return; // 已离桌/换场：在途决策作废
+  if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), { dialogue: dialogueFeed[seat] })) {
+    busy = false;
+    render();
+    return driveTurn();
+  }
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
     await match.act(seat, d.action);
@@ -856,6 +880,11 @@ async function aiTurnFor(seat) {
   const floor = 350 + Math.random() * 500;
   await wsleep(Math.max(0, floor - (performance.now() - t0)));
   if (gen !== matchGen) return;
+  if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), { dialogue: dialogueFeed[seat] })) {
+    busy = false;
+    render();
+    return driveTurn();
+  }
   const elapsedMs = performance.now() - t0;
   // F2 沉默模式的"被读"底线：没通道也得说出为什么开你（事实模板，零编造）
   if (d.action.type === 'challenge')
@@ -867,7 +896,10 @@ async function aiTurnFor(seat) {
   else if (d.action.type === 'calc') stampFx('算'); // 拨算盘全桌可见（Q45）
   else if (meta) stampFx(modStamp(meta, d.action));
   else sfx.tick();
-  if (d.say) speak(d.say, seat);
+  if (d.say) {
+    rememberDialogue(seat, d.action, d.say);
+    speak(d.say, seat);
+  }
   busy = false;
   // 算是 keepTurn：算完他接着行动（"算手＝两次调用"，配额口径见 SYNC）
   if (d.action.type === 'declare' || d.action.type === 'calc' || meta?.keepTurn) return aiTurnFor(seat);
@@ -883,8 +915,10 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
   disarmIdle();
   muteBubble();
   pickPending = null;
+  const spokenRound = ob().round;
   if (by === 'A' && elapsedMs === null) elapsedMs = performance.now() - turnStart;
   await match.act(by, { type: actionType }, { elapsedMs, timeout });
+  if (sayText) rememberDialogue(by !== 'A' ? by : 'B', { type: actionType }, sayText, 'speech', spokenRound);
   const o = ob();
   const rv = lastEvent(o, 'reveal');
   const re = lastEvent(o, 'roundEnd');
@@ -1527,7 +1561,7 @@ function openGuestConfig() {
     showLobby();
   });
   d.querySelector('#saveGuestBtn').addEventListener('click', async () => {
-    const cfg = {
+    let cfg = {
       baseUrl: d.querySelector('#gBase').value.trim(),
       apiKey: d.querySelector('#gKey').value.trim(),
       model: d.querySelector('#gModel').value.trim(),
@@ -1539,6 +1573,14 @@ function openGuestConfig() {
       out.textContent = '✗ 三格都要填';
       out.className = 'test-line bad';
       return;
+    }
+    // OpenRouter 清单是能力协商协议的一部分：默认思考型要预留“推理＋答案”两份信封，
+    // 支持 JSON 模式的只在决策调用上锁格式。清单拉不到则保留老的自由输入路径。
+    if (isOpenRouter(cfg.baseUrl)) {
+      try {
+        orCache = orCache ?? (await fetchModels());
+        cfg = { ...cfg, ...requestFeatures(orCache.find((m) => m.id === cfg.model)) };
+      } catch {}
     }
     saveGuest(cfg); // 先落座再试嗓——试失败也保留，可live修
     btn.disabled = true;
@@ -2296,19 +2338,18 @@ async function newMatch() {
   });
   match = await createMatch({ seed, config: { players: seats, startChips, mods: labMods } });
   opponents = {};
-  pokeFeed = {};
+  dialogueFeed = {};
   for (const s of seats.slice(1)) {
     const persona = SEAT_PERSONA[s];
-    pokeFeed[s] = []; // F9：戳他的话滚进这条追加事实流（引用同一数组，push 即生效）
+    dialogueFeed[s] = []; // 引用同一数组，push 后下一手立即可见
     opponents[s] = createOpponent({
       channel: () => chanForPersona(persona), // 通道跟人走：官方机位→暗号；客席→自带钥匙
-      profile: profileBrief(profile, persona.id),
+      profile: profilePromptData(profile, persona.id),
       persona,
       ctx: {
         names: NAMES,
         three: isTrio(),
-        hypotheses: mindOf(profile, persona.id).hypotheses,
-        extraFacts: pokeFeed[s],
+        dialogue: dialogueFeed[s],
       },
     });
   }
@@ -2367,7 +2408,10 @@ function speakOpener(ledger) {
       : '开场白：生面孔头回上桌，用你的方式招呼一句、开局。不要讲规则。',
     facts: facts.join('；'),
   }).then((line) => {
-    if (line && gen === matchGen && atTable) speak(line, 'B');
+    if (line && gen === matchGen && atTable) {
+      rememberDialogue('B', null, line);
+      speak(line, 'B');
+    }
   });
 }
 

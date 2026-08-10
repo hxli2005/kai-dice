@@ -12,6 +12,8 @@
 // key 不出设备（§3.4）：浏览器直连 openrouter.ai，我方服务器永不经手。
 
 export const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+export const OPENROUTER_REASONING_TOKENS = 2048;
+export const OPENROUTER_COMPLETION_TOKENS = 3072;
 
 export const isOpenRouter = (baseUrl = '') => /(^|\/\/)openrouter\.ai/.test(baseUrl);
 
@@ -42,6 +44,13 @@ export function normalizeModel(m) {
   const p = m.pricing ?? {};
   const promptPrice = num(p.prompt); // USD / token
   const completionPrice = num(p.completion);
+  const reasoningInfo = m.reasoning ?? null;
+  const defaultEffort = reasoningInfo?.default_effort ?? null;
+  const reasoningDefaultEnabled = !!(
+    reasoningInfo?.mandatory ||
+    reasoningInfo?.default_enabled ||
+    (defaultEffort && defaultEffort !== 'none')
+  );
   return {
     id: m.id,
     name: m.name ?? m.id,
@@ -55,12 +64,44 @@ export function normalizeModel(m) {
     // 价格不定的多半是**路由型元模型**（每手可能落到不同的底模）——
     // 那种东西上擂台，方差里混的就不只是后端了，是整个模型都在换。
     priceKnown: promptPrice != null && completionPrice != null,
-    // 思考型标注（A4：慢且贵）——清单自己就带这面旗，不用我们猜
-    reasoning: !!(m.reasoning?.mandatory || m.reasoning?.default_enabled),
-    reasoningMandatory: !!m.reasoning?.mandatory,
+    // 思考型标注与默认档都以实时清单为准。只看 mandatory/default_enabled 会漏掉
+    // `default_effort: high` 但没重复写 default_enabled 的型号（V4 Pro 实测即如此）。
+    reasoning: !!reasoningInfo,
+    reasoningMandatory: !!reasoningInfo?.mandatory,
+    reasoningDefaultEnabled,
+    reasoningDefaultEffort: defaultEffort,
+    reasoningEfforts: [...(reasoningInfo?.supported_efforts ?? [])],
+    reasoningSupportsMaxTokens: !!reasoningInfo?.supports_max_tokens,
     supports: new Set(m.supported_parameters ?? []),
     // 只留纯文本模型：这张桌子上没有图
     textOnly: (m.architecture?.output_modalities ?? ['text']).every((x) => x === 'text'),
+  };
+}
+
+// 实时能力清单 → 通道技术参数。它只做两件事：
+//   ① 默认会思考的型号，给推理独立上限并保留答案余量；不替默认关闭的型号强开推理；
+//   ② 支持 JSON 模式的型号只在“决策调用”上锁传输格式，不污染开场白等纯文本任务。
+// 这是能力协商，不是按型号改提示词；所有席位看到的 system/user 仍逐字相同。
+export function requestFeatures(model) {
+  if (!model) return {};
+  const maxCompletion = Math.max(1, Math.min(OPENROUTER_COMPLETION_TOKENS, model.maxOutput ?? Infinity));
+  // Anthropic 等后端的显式推理预算最低 1024；总信封不足 2048 时不乱下一个会 400 的配置。
+  const reasoningMax =
+    maxCompletion >= 2048 ? Math.min(OPENROUTER_REASONING_TOKENS, maxCompletion - 1024) : 0;
+  return {
+    ...(model.reasoningDefaultEnabled && reasoningMax > 0
+      ? {
+          reasoningProfile: {
+            enabled: true,
+            maxTokens: reasoningMax,
+            minCompletionTokens: maxCompletion,
+            maxCompletionTokens: model.maxOutput ?? null,
+          },
+        }
+      : {}),
+    ...(model.supports?.has('response_format') || model.supports?.has('structured_outputs')
+      ? { decisionExtra: { response_format: { type: 'json_object' } } }
+      : {}),
   };
 }
 
@@ -121,7 +162,7 @@ export const pickDefaults = (models, picks = DEFAULT_PICKS) => {
 
 // 客席/擂台用的通道对象（与 llm.js 的 chat 同构）。
 // base 可覆盖：本地跑集成测试时指到假服务器，生产不用动。
-export function openrouterChannel({ apiKey, model, referer, title, providerTag, base = OPENROUTER_BASE } = {}) {
+export function openrouterChannel({ apiKey, model, modelInfo, referer, title, providerTag, base = OPENROUTER_BASE } = {}) {
   return {
     baseUrl: base,
     apiKey,
@@ -129,5 +170,6 @@ export function openrouterChannel({ apiKey, model, referer, title, providerTag, 
     format: 'openai', // OpenRouter 是 OpenAI 兼容口，Anthropic 模型也从这个口进
     headers: originHeaders({ referer, title }),
     providerTag: providerTag ?? null,
+    ...requestFeatures(modelInfo),
   };
 }

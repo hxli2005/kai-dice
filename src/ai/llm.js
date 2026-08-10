@@ -21,6 +21,8 @@ function fillMeta(meta, j, res, ms) {
   meta.cacheRead =
     u.prompt_tokens_details?.cached_tokens ?? u.cache_read_input_tokens ?? u.cache_read_tokens ?? null;
   meta.cacheWrite = u.cache_creation_input_tokens ?? u.cache_write_tokens ?? null;
+  meta.reasoningTokens =
+    u.completion_tokens_details?.reasoning_tokens ?? u.output_tokens_details?.reasoning_tokens ?? null;
   meta.cost = typeof u.cost === 'number' ? u.cost : null; // OpenRouter：请求带 usage:{include:true} 才有
   meta.provider = j?.provider ?? null; // 实际接单的后端（同 ID 不同后端会污染方差）
   meta.finish = j?.choices?.[0]?.finish_reason ?? j?.stop_reason ?? null;
@@ -31,11 +33,39 @@ function fillMeta(meta, j, res, ms) {
 // 通道级 extra/cacheSystem（A2）：供应商路由锁、用量回报、钉死的采样参数属于"这条通道"，
 // 与机位无关；调用级 extra（机位技术参数）后覆盖，两者合并下发。
 export async function chat(
-  { baseUrl, apiKey, model, format = 'openai', headers: extraHeaders, extra: chanExtra, cacheSystem: chanCache },
+  {
+    baseUrl,
+    apiKey,
+    model,
+    format = 'openai',
+    headers: extraHeaders,
+    extra: chanExtra,
+    cacheSystem: chanCache,
+    reasoningProfile,
+  },
   { system, user, maxTokens = 500, timeoutMs = 10_000, extra: callExtra, meta, cacheSystem: callCache },
   fetchFn = globalThis.fetch,
 ) {
-  const extra = chanExtra || callExtra ? { ...chanExtra, ...callExtra } : undefined;
+  const explicitReasoning = callExtra?.reasoning ?? chanExtra?.reasoning;
+  const reasoningDisabled =
+    explicitReasoning?.enabled === false || explicitReasoning?.effort === 'none' || explicitReasoning?.max_tokens === 0;
+  const useReasoningEnvelope = !!reasoningProfile?.enabled && !reasoningDisabled;
+  const automaticReasoning =
+    useReasoningEnvelope && !explicitReasoning
+      ? { reasoning: { max_tokens: reasoningProfile.maxTokens } }
+      : undefined;
+  const extra =
+    automaticReasoning || chanExtra || callExtra
+      ? { ...automaticReasoning, ...chanExtra, ...callExtra }
+      : undefined;
+  // 推理与正文共用完成上限。只加总信封不能保证有正文：实测默认推理会把 4096 全吃光。
+  // 对能力清单确认默认启用推理的型号，至少给它“推理预算＋答案余量”的完整信封。
+  const completionTokens = useReasoningEnvelope
+    ? Math.min(
+        reasoningProfile.maxCompletionTokens ?? Infinity,
+        Math.max(maxTokens, reasoningProfile.minCompletionTokens ?? maxTokens),
+      )
+    : maxTokens;
   const cacheSystem = !!(chanCache || callCache);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -55,7 +85,7 @@ export async function chat(
             },
             body: {
               model,
-              max_tokens: maxTokens,
+              max_tokens: completionTokens,
               system: cacheSystem ? cacheBlock(system) : system,
               messages: [{ role: 'user', content: user }],
               ...extra,
@@ -73,7 +103,7 @@ export async function chat(
             },
             body: {
               model,
-              max_tokens: maxTokens,
+              max_tokens: completionTokens,
               messages: [
                 { role: 'system', content: cacheSystem ? cacheBlock(system) : system },
                 { role: 'user', content: user },

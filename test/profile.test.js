@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadProfile, appendMatch, profileBrief, mindOf, openerFacts } from '../src/ui/profile.js';
+import { loadProfile, appendMatch, profileBrief, profilePromptData, mindOf, openerFacts } from '../src/ui/profile.js';
 import { modelPersona } from '../src/ai/personas.js';
 
 const memStorage = (init = {}) => {
@@ -113,6 +113,24 @@ test('双层：客观统计全席共享，笔记按型号各记各的', () => {
   // 重载后结构保持
   const p2 = loadProfile(s);
   assert.deepEqual(mindOf(p2, 'model:deepseek-v4-pro').notes, ['pro 记：这人稳']);
+});
+
+test('提示词档案契约：核验统计与型号私有笔记/假设分桶', () => {
+  const s = memStorage();
+  let p = loadProfile(s);
+  p = appendMatch(p, { won: true, stats: STATS, notes: ['flash 的主观笔记'], personaId: 'model:deepseek-v4-flash' }, s);
+  mindOf(p, 'model:deepseek-v4-flash').hypotheses = [{ text: '他在大池会急', hits: 2, misses: [] }];
+  mindOf(p, 'model:deepseek-v4-pro').notes = ['pro 的主观笔记'];
+
+  const flash = profilePromptData(p, 'model:deepseek-v4-flash');
+  const pro = profilePromptData(p, 'model:deepseek-v4-pro');
+  assert.deepEqual(flash.verified, pro.verified, '引擎统计不得因型号改口径');
+  assert.equal(flash.verified[0].scope, 'career');
+  assert.equal(flash.verified[1].scope, 'lastMatch');
+  assert.deepEqual(flash.subjective.notes, ['flash 的主观笔记']);
+  assert.deepEqual(flash.subjective.hypotheses, [{ text: '他在大池会急', hits: 2, misses: [] }]);
+  assert.deepEqual(pro.subjective.notes, ['pro 的主观笔记']);
+  assert.deepEqual(pro.subjective.hypotheses, []);
 });
 
 // 账本 v4（TODO(Q25) 占位数值）：AI 是独立玩家，各有初始身家；旧账自愈迁移

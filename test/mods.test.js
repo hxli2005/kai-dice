@@ -195,7 +195,7 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   const ob = m.observe('B');
   const { system, user } = buildPrompts(ob, '');
-  assert.match(user, /本桌实验词条（明牌，全桌同权）：「亮一颗」/);
+  assert.match(user, /实验词条（明牌）：「亮一颗」/);
   assert.match(user, /「掐」/);
   assert.match(user, new RegExp(`对方.*亮出.*${faceA}`), '明骰进叙事');
   // Q45／C1 根治（2026-08-10）：**没拨算盘一个数都不给**——粗档也是数。
@@ -217,7 +217,7 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.ok(!user.includes('宣言和词条都是真招'), 'Q86：策略提醒应已删');
 });
 
-test('原子注册表语义面：许愿词条与官方同权——自定义动作自动获得候选说明/嘴手纪律/叙事', async () => {
+test('原子注册表语义面：许愿词条与官方同权——自定义动作自动获得候选说明/叙事', async () => {
   // 一个"许愿形态"的词条：自定义 type/label，效果复用 revealOwnDie 原子
   const wish = {
     id: 'wish-shi',
@@ -234,7 +234,7 @@ test('原子注册表语义面：许愿词条与官方同权——自定义动�
   const { user } = buildPrompts(obA, '');
   assert.match(user, /拍词条「试」/, '自定义 label 进候选');
   assert.match(user, /face 填骰子的点数/, '语义钉死来自原子注册表，不是官方 id 白名单');
-  assert.match(user, /说错当场穿帮/, '嘴手纪律同权');
+  assert.ok(!user.includes('说错当场穿帮'), 'Q86：sayRule 是行为要求，不进提示词');
   // 叙事同权：亮出后进对手的局面叙事
   const face = obA.yourDice[0];
   await m.act('A', { type: 'shidan', face });
