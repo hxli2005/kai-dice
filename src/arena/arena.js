@@ -52,13 +52,22 @@ export const ARENA_SEAT = Object.freeze({
 // 把钉子钉进通道（通道级 extra；机位级 extra 不再存在——擂台席没有装备）
 export function pinSampling(channel) {
   if (!channel) return null;
+  const or = isOpenRouter(channel.baseUrl);
   return {
     ...channel,
+    // 降本一（A4）：给系统提示词打缓存断点。**只在 OpenRouter 上开**——
+    // 它会把数组式 content 按各家格式转发，而多数裸的 OpenAI 兼容端点吃不下数组，
+    // 开了会把整条通道打死（这批实测过一次类似的"测得通、打起来全静默"）。
+    //
+    // 我们的 system 是理想缓存形态：全席逐字相同、每手不变（Q86 二准入之后更短更稳）。
+    // ⚠️ 但**短前缀会静默失效**：各家有最小可缓存长度（Haiku 4.5 要 4096 token）。
+    // 所以开了不等于省了钱——`cacheReport()` 用回执里的 cache_read 验，命中为 0 就照实说。
+    cacheSystem: or,
     extra: {
       ...SAMPLING,
       ...providerLock(channel.providerTag),
       // OpenRouter：请求带这个才回报真实花费（A4 用实收账目，不用估算糊弄）
-      ...(isOpenRouter(channel.baseUrl) ? { usage: { include: true } } : {}),
+      ...(or ? { usage: { include: true } } : {}),
       ...channel.extra,
     },
   };

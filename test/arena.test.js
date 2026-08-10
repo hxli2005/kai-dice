@@ -125,6 +125,23 @@ test('A2：pinSampling 不动非 OpenRouter 通道的 usage 字段（别给人�
   const ch = pinSampling({ baseUrl: 'https://api.deepseek.com/v1', apiKey: 'k', model: 'deepseek-chat' });
   assert.equal(ch.extra.usage, undefined);
   assert.equal(ch.extra.temperature, SAMPLING.temperature);
+  assert.equal(ch.cacheSystem, false, '裸的 OpenAI 兼容端点吃不下数组式 content，不许给它打断点');
+});
+
+// A4 降本一：缓存断点。**只在 OpenRouter 上开**，且开了不等于省了钱——命中要用回执验。
+test('A4：OpenRouter 通道打缓存断点，system 以数组式 content ＋ cache_control 下发', async () => {
+  const ch = pinSampling({ baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', model: 'm' });
+  assert.equal(ch.cacheSystem, true);
+
+  const seen = [];
+  await playMatch({ seed: 7, seats: { A: seat('mx'), B: seat('my') }, fetchFn: fakeChannel({ seen }) });
+  const sys = seen[0].body.messages[0];
+  assert.equal(sys.role, 'system');
+  assert.ok(Array.isArray(sys.content), 'system 必须是数组式 content，断点才挂得上');
+  assert.deepEqual(sys.content[0].cache_control, { type: 'ephemeral' });
+  // 稳定前缀的定义：每一手发的 system 必须逐字相同，否则缓存永远打不中
+  const systems = seen.map((r) => JSON.stringify(r.body.messages[0]));
+  assert.equal(new Set(systems).size, 1, '整场每一手的 system 必须一模一样');
 });
 
 // ---------- A2：镜像种子 ----------
@@ -382,4 +399,40 @@ test('roundRobin：N 个模型两两配对，不自己打自己', () => {
   const pairs = roundRobin(['a', 'b', 'c'].map((x) => seat(x)));
   assert.equal(pairs.length, 3);
   for (const [x, y] of pairs) assert.notEqual(x.label, y.label);
+});
+
+// ---------- 归属：沉默 bot 顶班的成绩不许挂模型名下（C4 报告归属错位＝P0） ----------
+test('污染守卫：顶班率高的行，棋力层与风味层一律不出数', () => {
+  const rows = [
+    { label: 'dead-model', compliance: { silentFallbackRate: 1 },
+      skill: { winRate: 1, n: 2, challengeHitRate: 1, challenges: 1, calzas: 0, netChips: 42 },
+      flavor: { bluffRate: 0.06, blindBidRate: 0, avgDepth: 2.67, calcPerRound: 0, declarePerRound: 0, baitRate: null, lines: [], n: { bids: 17, rounds: 12, seenBids: 17, says: 0 } },
+      samples: { matches: 2, calls: 30 }, cost: { usd: 0, usdFromApi: false, inTokens: 0, cacheRead: 0 } },
+    { label: 'live-model', compliance: { silentFallbackRate: 0.06 },
+      skill: { winRate: 0, n: 2, challengeHitRate: 0.18, challenges: 11, calzas: 0, netChips: -42 },
+      flavor: { bluffRate: 0, blindBidRate: 0.93, avgDepth: 2.67, calcPerRound: 0.42, declarePerRound: 0.08, baitRate: 0.03, lines: [], n: { bids: 15, rounds: 12, seenBids: 1, says: 33 } },
+      samples: { matches: 2, calls: 33 }, cost: { usd: 0.0037, usdFromApi: true, inTokens: 24644, cacheRead: 2816 } },
+  ];
+  const md = renderBoard(rows, { run: {}, spread: flavorSpread(rows) });
+  // ① 合规层照实显示 100% 顶班（那正是它该说的）；②③ 两层必须不出数
+  const sect = (h) => md.split('## ').find((x) => x.startsWith(h)) ?? '';
+  for (const h of ['② 棋力层', '③ 风味层']) {
+    const line = sect(h).split('\n').find((l) => l.startsWith('| dead-model'));
+    assert.ok(line, h + ' 应有 dead-model 一行');
+    assert.ok(line.includes('未参赛'), '必须写明它根本没打：' + line);
+    assert.ok(!/\b42\b|100%|0\.06/.test(line), '不许把沉默 bot 的成绩挂它名下：' + line);
+  }
+  assert.ok(sect('① 合规层').includes('100%'), '合规层要如实报出 100% 顶班');
+  // 活着的那行照常出数
+  assert.ok(sect('③ 风味层').split('\n').some((l) => l.startsWith('| live-model') && l.includes('93%')));
+});
+
+test('污染守卫：被剔除的行不参与分化计算，且剔除要写出来', () => {
+  const spoiledRow = { label: 'dead', compliance: { silentFallbackRate: 1 },
+    flavor: { bluffRate: 0.5, avgDepth: 9, calcPerRound: 9, declarePerRound: 9, blindBidRate: 9, baitRate: 9, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
+  const cleanRow = { label: 'live', compliance: { silentFallbackRate: 0 },
+    flavor: { bluffRate: 0.1, avgDepth: 2, calcPerRound: 1, declarePerRound: 0, blindBidRate: 0.2, baitRate: 0, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
+  const sp = flavorSpread([spoiledRow, cleanRow]);
+  assert.equal(sp.bluffRate.enough, false, '只剩一个干净的，不出结论');
+  assert.equal(sp.bluffRate.spoiled, 1, '要说清剔了几个');
 });

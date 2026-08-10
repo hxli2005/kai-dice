@@ -219,15 +219,19 @@ export function routingIntegrity(rows) {
 // 机器只能报"分没分开"，"分开得算不算一个人"由人看（红队条款：这里不下结论）。
 export const FLAVOR_AXES = ['bluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate'];
 
+// 顶班率 ≥20% 的行不参与分化计算——那些数里掺着沉默 bot，拿它算"模型之间差多少"是自欺。
+export const CONTAMINATED_RATE = 0.2;
+
 export function flavorSpread(rows, { minSamples = 20 } = {}) {
   const axes = {};
+  const clean = rows.filter((r) => (r.compliance?.silentFallbackRate ?? 0) < CONTAMINATED_RATE);
   for (const key of FLAVOR_AXES) {
-    const vals = rows
+    const vals = clean
       .filter((r) => (key === 'bluffRate' ? r.flavor.n.seenBids : r.flavor.n.rounds) >= minSamples)
       .map((r) => ({ label: r.label, v: r.flavor[key] }))
       .filter((x) => x.v != null);
     if (vals.length < 2) {
-      axes[key] = { enough: false, n: vals.length };
+      axes[key] = { enough: false, n: vals.length, spoiled: rows.length - clean.length };
       continue;
     }
     const lo = vals.reduce((a, b) => (b.v < a.v ? b : a));

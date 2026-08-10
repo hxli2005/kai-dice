@@ -22,6 +22,18 @@ const table = (head, rows) =>
     '\n',
   );
 
+// 沉默 bot 顶班的那些手**不是这个模型的行为**——把它们的数字挂在模型名下就是报告归属错位
+// （C4：裁判层说谎＝P0 违宪）。所以这里立一条硬规矩：
+//   · 顶班率 100% → 这个型号**根本没参赛**，棋力层与风味层一律不出数；
+//   · 顶班率 ≥20% → 数字被沉默 bot 稀释过，一律不出数并写明原因。
+// 宁可空着也不许把别人的成绩挂它头上。
+const CONTAMINATED = 0.2;
+const spoiled = (r) => (r.compliance?.silentFallbackRate ?? 0) >= CONTAMINATED;
+const spoiledNote = (r) => {
+  const p = Math.round((r.compliance?.silentFallbackRate ?? 0) * 100);
+  return p >= 100 ? '未参赛（每手都失败，沉默 bot 代打）' : `${p}% 由沉默 bot 代打，数不算它的`;
+};
+
 export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate } = {}) {
   const sorted = [...rows].sort((a, b) => (b.skill.winRate ?? -1) - (a.skill.winRate ?? -1));
   const totalMatches = rows.reduce((s, r) => s + r.samples.matches, 0) / 2;
@@ -82,14 +94,18 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push(
     table(
       ['模型', '胜率', '开牌命中', '掐中', '净筹码', 'n(场)'],
-      sorted.map((r) => [
-        r.label,
-        f(r.skill.winRate, r.skill.n), // 场数天生小，多半会带括号——那就是它该有的样子
-        f(r.skill.challengeHitRate, r.skill.challenges),
-        r.skill.calzas ? f(r.skill.calzaHitRate, r.skill.calzas) : '—',
-        r.skill.netChips,
-        r.skill.n,
-      ]),
+      sorted.map((r) =>
+        spoiled(r)
+          ? [r.label, '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
+          : [
+              r.label,
+              f(r.skill.winRate, r.skill.n), // 场数天生小，多半会带括号——那就是它该有的样子
+              f(r.skill.challengeHitRate, r.skill.challenges),
+              r.skill.calzas ? f(r.skill.calzaHitRate, r.skill.calzas) : '—',
+              r.skill.netChips,
+              r.skill.n,
+            ],
+      ),
     ),
   );
   out.push('');
@@ -104,16 +120,20 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push(
     table(
       ['模型', '虚报率', '蒙报率', '抬价深度', '算频/局', '宣言/局', 'bait 率', 'n(报价/局)'],
-      sorted.map((r) => [
-        r.label,
-        f(r.flavor.bluffRate, r.flavor.n.seenBids),
-        f(r.flavor.blindBidRate, r.flavor.n.bids),
-        num(r.flavor.avgDepth),
-        num(r.flavor.calcPerRound),
-        num(r.flavor.declarePerRound),
-        f(r.flavor.baitRate, r.flavor.n.says),
-        `${r.flavor.n.bids}/${r.flavor.n.rounds}`,
-      ]),
+      sorted.map((r) =>
+        spoiled(r)
+          ? [r.label, '—', '—', '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
+          : [
+              r.label,
+              f(r.flavor.bluffRate, r.flavor.n.seenBids),
+              f(r.flavor.blindBidRate, r.flavor.n.bids),
+              num(r.flavor.avgDepth),
+              num(r.flavor.calcPerRound),
+              num(r.flavor.declarePerRound),
+              f(r.flavor.baitRate, r.flavor.n.says),
+              `${r.flavor.n.bids}/${r.flavor.n.rounds}`,
+            ],
+      ),
     ),
   );
   out.push('');
@@ -121,7 +141,9 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
     out.push('**分化幅度**（同一把尺子上最远的两个模型）：');
     for (const [axis, s] of Object.entries(spread)) {
       if (!s.enough) {
-        out.push(`- ${axis}：样本不足（只有 ${s.n} 个模型够格），不出结论`);
+        out.push(
+          `- ${axis}：样本不足（只有 ${s.n} 个模型够格${s.spoiled ? `；另有 ${s.spoiled} 个因顶班率过高被剔除` : ''}），不出结论`,
+        );
         continue;
       }
       out.push(
@@ -140,7 +162,7 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push('> 台词质量评估**须等接地批次 G2 完成**——否则评的是被主客体颠倒污染的台词。这里只留样。');
   out.push('');
   for (const r of sorted) {
-    if (!r.flavor.lines.length) continue;
+    if (!r.flavor.lines?.length) continue;
     out.push(`**${r.label}**`);
     for (const l of r.flavor.lines) out.push(`- 第${l.round}局：「${l.say}」${l.belief ? `　（心里：${l.belief}）` : ''}`);
     out.push('');
