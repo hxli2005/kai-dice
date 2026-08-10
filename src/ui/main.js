@@ -180,7 +180,8 @@ async function testGuest(cfg) {
       timeoutMs: gear.timeoutMs,
       extra: ch.decisionExtra,
     });
-    if (JSON.parse(raw)?.ok !== true) throw new Error('bad-output');
+    // 宽容度与真实对局一致：parseDecision 容忍 ```json 围栏与前后缀，试嗓也得容忍
+    if (JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? 'null')?.ok !== true) throw new Error('bad-output');
     return { ok: true, msg: '已连通' };
   } catch (e) {
     return { ok: false, msg: friendlyError(e?.message ?? '') };

@@ -143,7 +143,9 @@ for (const e of entrants) {
         timeoutMs: TIMEOUT_MS,
         extra: pinned.decisionExtra,
       });
-      if (JSON.parse(raw)?.ok !== true) throw new Error('health bad json');
+      // 体检的宽容度必须与真实对局一致：parseDecision 本就容忍 ```json 围栏与前后缀，
+      // 体检用严格 JSON.parse 会误杀能正常上场的模型（实测 kimi-k2 因围栏被淘汰）。
+      if (JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? 'null')?.ok !== true) throw new Error('health bad json');
       if (tag !== e.meta.tag)
         console.log(`  ! ${e.label} 首选后端 ${e.meta.tag} 不可达，改锁 ${tag}`);
       e.channel = ch;
