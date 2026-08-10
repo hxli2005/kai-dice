@@ -7,21 +7,23 @@ import { silentSay, readClause } from '../src/ai/voice.js';
 import { PERSONAS } from '../src/ai/personas.js';
 import { createOpponent } from '../src/ai/agent.js';
 
-test('F2：沉默模式开牌台词按人设声口生成，且只用真事实', async () => {
+test('F2：沉默模式开牌台词只用真事实，且全席共用一句模板', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'declare', declaration: 'blind' }); // 客人空着手压人——可引用的事实
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
   assert.equal(readClause(ob), '你骰都没看就压我');
-  const li = silentSay(PERSONAS.laolitou, ob);
-  const fei = silentSay(PERSONAS.afei, ob);
-  assert.match(li, /你骰都没看就压我。开。$/);
-  assert.match(li, /^(基本稳|五五开|悬|纯扯)。/, '老李头的母语：先给档，再动手');
-  assert.match(fei, /就这？开！$/);
-  assert.notEqual(li, fei, '不同人设不同声口');
+  const one = silentSay(PERSONAS['model:deepseek-v4-flash'], ob);
+  const two = silentSay(PERSONAS['model:deepseek-v4-flash'], ob);
+  const three = silentSay(PERSONAS['model:deepseek-v4-pro'], ob);
+  // 机制不变：仍然说得出"我为什么开你"，且引用的是刚发生的真事
+  assert.match(one, /^你骰都没看就压我。这话(基本稳|五五开|悬|纯扯)。开。$/, '事实在前，粗档在后，然后动手');
+  // Q87：声口全席统一——"谁说话什么调"是人设，已删；有通道时说什么全归模型自己
+  assert.equal(one, two, '沉默模式模板全席共用');
+  assert.equal(two, three, '沉默模式模板全席共用');
   // 零准数：沉默 bot 没拨过算盘，嘴里就不许有百分号
-  for (const line of [li, fei, silentSay(PERSONAS.xiansheng, ob)]) assert.ok(!/%|成(?!立)/.test(line));
+  for (const line of [one, two, three]) assert.ok(!/%|成(?!立)/.test(line));
 });
 
 test('F2：拨过算盘的人报的价会被点破（算盘也是可引用的事实）', async () => {
@@ -36,11 +38,11 @@ test('F2：无通道的 AI 决策仍给得出台词素材（降级不降差异�
   const m = await createMatch({ seed: 11 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 9, face: 6 }); // 报到天上去，沉默 bot 必开
-  const silent = createOpponent({ persona: PERSONAS.laolitou });
+  const silent = createOpponent({ persona: PERSONAS['model:deepseek-v4-flash'] });
   await m.act('B', (await silent.decide(m.observe('B'))).action); // 不玩盲的人设先掀盅
   const ob = m.observe('B');
   const d = await silent.decide(ob);
   assert.equal(d.say, '', '沉默 bot 自己不说话');
   assert.equal(d.silentFallback, true);
-  if (d.action.type === 'challenge') assert.ok(silentSay(PERSONAS.laolitou, ob).endsWith('开。'));
+  if (d.action.type === 'challenge') assert.ok(silentSay(PERSONAS['model:deepseek-v4-flash'], ob).endsWith('开。'));
 });

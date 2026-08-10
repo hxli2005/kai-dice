@@ -9,7 +9,7 @@ const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低�
 // ---- 托管席（用户裁决 2026-08-09）：不带暗号也能玩上一个真模型 ----
 // §3.4 早写了"默认走官方通道（内置低成本模型，每日限额，保证零门槛上手）"，一直欠着。
 // 现在补上，但按 Q7 保命三律「别破产」把口子开小：
-//   · 免费档**只放行托管这一个便宜模型**（暗号持有者才碰得到别的原版演员）；
+//   · 免费档**只放行托管这一个便宜模型**（暗号持有者才碰得到别的型号）；
 //   · 免费档单设备日限另算一档更小的（≈4–5 场），暗号档仍是 400；
 //   · 免费档要求请求来自浏览器同源（Origin 或 Sec-Fetch-Site）——挡住裸脚本刷；
 //   · 全局月熔断照旧，是最后那道闸。
@@ -150,11 +150,11 @@ export default {
 
       let body;
       try { body = await request.json(); } catch { return json({ error: "bad json" }, 400); }
-      // 模型服务端白名单（Q18 原版演员按人设钉）：名单外一律钉回默认——暗号持有者也改不了成本档。
+      // 模型服务端白名单（按机位钉型号）：名单外一律钉回默认——暗号持有者也改不了成本档。
       // 免费档更严：只准托管那一个模型，谁也别想用免费口子点贵的。
       // 名单以**上游 /api/llm/models 查到的为准**，不照抄历史里的名字：
       // 2026-08-09 核对发现上游只有 deepseek-v4-flash 与 deepseek-v4-pro 两个 id，
-      // 而化身一直钉着 "deepseek-chat"——名单外的一律钉回托管模型，别让它去敲一个不存在的门。
+      // 而机位一直钉着 "deepseek-chat"——名单外的一律钉回托管模型，别让它去敲一个不存在的门。
       const MODEL_ALLOW = friend ? [HOSTED_MODEL, "deepseek-v4-pro"] : [HOSTED_MODEL];
       if (!MODEL_ALLOW.includes(body.model)) body.model = HOSTED_MODEL;
       const upstream = await fetch("https://api.deepseek.com/chat/completions", {

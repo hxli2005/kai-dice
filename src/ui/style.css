@@ -1,4 +1,4 @@
-/* 《开！》深夜酒馆（DESIGN §6）：一张桌，一盏灯，不做立绘。 */
+/* 《开！》：一张桌，一盏灯，不做立绘。表现层规则已随 Q84 归档——UI 归编码侧自决。 */
 
 :root {
   --bg: #0f0c0a;
@@ -1073,3 +1073,6 @@ button.ghost {
 
 /* 大厅之上的弹层（挑名章）：大厅 z-index 50 且背景不透明，不置顶就看不见 */
 #overlay.ontop { z-index: 70; }
+
+/* Q88：空榜——一场都没打时，榜上诚实地空着 */
+.board-empty { padding: 1.2rem 0.4rem; text-align: center; color: var(--dim); font-size: 0.85rem; }

@@ -1,7 +1,7 @@
 // BYOK 模型通道（DESIGN §3.4）：浏览器直连，key 不出设备。
 // 兼容 OpenAI 与 Anthropic 两种消息格式。fetch 可注入以便测试。
 
-// 缓存断点（A4 降本一）：稳定前缀＝系统提示词（规则/输出契约/人设，每手逐字相同），
+// 缓存断点（A4 降本一）：稳定前缀＝系统提示词（规则/操作/输出格式，每手逐字相同），
 // 每手变化的局面与档案在断点之后。只在明确开启时下发——多数 OpenAI 兼容端点吃不下
 // 数组式 content，默认不动；OpenRouter 转 Anthropic 时才用得上。
 const cacheBlock = (text) => [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
@@ -26,10 +26,10 @@ function fillMeta(meta, j, res, ms) {
   meta.finish = j?.choices?.[0]?.finish_reason ?? j?.stop_reason ?? null;
 }
 
-// extra：透传进请求体的额外参数（如推理型模型的 reasoning_effort）——人设装备层配置
+// extra：透传进请求体的额外参数（如推理型模型的 reasoning_effort）——机位的技术参数
 // meta：可选回填对象（用量/费用/后端/耗时）；cacheSystem：给系统提示词打缓存断点
 // 通道级 extra/cacheSystem（A2）：供应商路由锁、用量回报、钉死的采样参数属于"这条通道"，
-// 与人设无关；调用级 extra（人设装备）后覆盖，两者合并下发。
+// 与机位无关；调用级 extra（机位技术参数）后覆盖，两者合并下发。
 export async function chat(
   { baseUrl, apiKey, model, format = 'openai', headers: extraHeaders, extra: chanExtra, cacheSystem: chanCache },
   { system, user, maxTokens = 500, timeoutMs = 10_000, extra: callExtra, meta, cacheSystem: callCache },

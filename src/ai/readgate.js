@@ -4,8 +4,8 @@
 //   ① **它真的在读档案吗**（放行判据）——同一个局面，只换玩家画像，它的风险分布必须跟着动；
 //      不动＝档案是摆设（读心是叙事不是机制），门禁不放行。
 //   ② **它嘴上把旧事说歪了几次**（Q49 后降为**观测项，不再是判据**）——场合律之下，
-//      台词记歪是人设活性不是故障（归类权交给盲测玩家："它在玩我" vs "模型又胡说"）；
-//      这里只数一数、报出来，供人设纹理调参用。系统栏位的正确性另有回归守着。
+//      台词记歪是对手的活性不是故障（归类权交给盲测玩家："它在玩我" vs "模型又胡说"）；
+//      这里只数一数、报出来，供观测用。系统栏位的正确性另有回归守着。
 //
 // 无通道时返回 {skipped:true}（同三门体检的"未测"口径：不假装测过）。
 
@@ -63,13 +63,13 @@ export async function runReadGate({ channel, persona = DEFAULT_PERSONA, samples 
     }
     out[key] = { challengeRate: challenges / samples, samples };
   }
-  // 画像换了，开牌率必须动（方向可为任意——人设不同方向不同，但不许纹丝不动）
+  // 画像换了，开牌率必须动（方向可为任意——不同型号方向不同，但不许纹丝不动）
   const shift = Math.abs(out.bluffer.challengeRate - out.honest.challengeRate);
   return {
     skipped: false,
     profiles: out,
     shift,
-    skewed, // 观测项（Q49）：他嘴上把旧事说歪的次数——多不等于坏，看人设
+    skewed, // 观测项（Q49）：他嘴上把旧事说歪的次数——多不等于坏
     silent,
     ok: shift > 0,
     note: `分布位移 ${shift.toFixed(2)}／嘴上记歪 ${skewed} 次（观测）／降级 ${silent}`,

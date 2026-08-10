@@ -7,7 +7,7 @@ import { obProb, obProbExact, coarseWord } from '../probability.js';
 import { createOpponent, settleVerdict, reflect, personaLine } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
 import { chat } from '../ai/llm.js';
-import { PERSONAS, HOSTED_MODEL, modelPersona } from '../ai/personas.js';
+import { PERSONAS, HOSTED_MODEL, modelPersona, IDLE_LINES, defaultAiPersona } from '../ai/personas.js';
 import { OPENROUTER_BASE, isOpenRouter, originHeaders, fetchModels, perMillion } from '../ai/openrouter.js';
 import { pickedMods, allMods, loadLab, saveLab, loadWishes, saveWishes, addWishLog, loadWishLog, activeTypes } from '../mods/store.js';
 import { OPS } from '../mods/catalog.js';
@@ -26,7 +26,8 @@ document.addEventListener('pointerdown', unlockAudio, { once: true });
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (p) => `${Math.round(p * 100)}%`;
-const IDLE_MS = 30_000; // §2.4（Q19 修订）：无倒计时无超时代报；挂机 >30s 人设催话
+const IDLE_MS = 30_000; // §1.4：无倒计时无超时代报；挂机 >30s 给一句中性提示，无机制后果
+const REVEAL_BAIT_P = 0.25; // F7 揭诈频率，全席同一个数（Q87 起不再挂机位）；定值待 Q51 参数表
 // F4（Q45）新手训练轮：头几场给被动粗档扶手，毕业自动拆——之后想要准数就得自己拨算盘
 const TRAIN_MATCHES = 3; // TODO(Q46) 训练轮长度待设计确认
 const inTraining = () => profile.matches < TRAIN_MATCHES;
@@ -67,31 +68,30 @@ let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
 const typeTimers = {}; // 每席位独立打字机
 
-// 座次（§2.5）：阵容数据驱动——人设只增不改代码。A=玩家，其余按序入座
+// 座次（§2.5）：阵容数据驱动——机位只增不改代码。A=玩家，其余按序入座
 const SEAT_IDS = ['B', 'C', 'D', 'E'];
 // 客席（Q28）：自带钥匙的模型以本名上桌。托管席（用户裁决 2026-08-09）：同一种席位，
 // 只是钱由官方通道出，玩家零配置——**户头都是模型名，所以同一个模型不管谁付钱都是同一个人**。
 const guestPersona = () => modelPersona(loadGuest()?.model);
-const hostedPersona = () => modelPersona(HOSTED_MODEL, { hosted: true });
-// 主位在最前：一键可玩的真身排第一，化身（老李头他们）跟在后面，自带钥匙的客席垫底。
-// 自带钥匙填的正好是托管那个模型时不重复出卡——同名即同人。
+const hostedPersona = () => defaultAiPersona();
+// 名册即型号表（Q89）：托管那个排头，其余官方型号跟上，自带钥匙的客席垫底。
+// 自带钥匙填的正好是某个官方型号时不重复出卡——同名即同人（户头也是同一本）。
 const rosterAll = () => {
-  const hosted = hostedPersona();
   const g = guestPersona();
-  return [hosted, ...Object.values(PERSONAS), ...(g && g.id !== hosted.id ? [g] : [])];
+  return [...Object.values(PERSONAS), ...(g && !PERSONAS[g.id] ? [g] : [])];
 };
 const rosterMap = () => Object.fromEntries(rosterAll().map((p) => [p.id, p]));
 let SEAT_PERSONA = {}; // seat -> persona（newMatch 构建）
 let NAMES = { A: '客人' };
 const isTrio = () => seats.length > 2;
 const dispName = (s) => (s === 'A' ? '你' : NAMES[s]);
-// 桌型与阵容（选桌页写入；花名册可增，缺位按册序补齐）
+// 桌型与阵容（选桌页写入；机位可增，缺位按序补齐）
 // F1（Q43②）：单挑是默认——1v1 读心核，三人桌是明确的副模式
 function loadTable() {
   return localStorage.getItem('kai.table.v1') === 'trio' ? 'trio' : 'duo';
 }
-// 主位换人（用户裁决 2026-08-09）：托管席升正席时，老设备存着的花名册选择做**一次性**迁移，
-// 否则"升主位"只对新装的人生效，你自己的机器上还是老李头坐着。搬完落个记号，之后你选谁就是谁。
+// 主位换人（用户裁决 2026-08-09）：托管席升正席时，老设备存着的机位选择做**一次性**迁移，
+// 否则"升主位"只对新装的人生效，你自己的机器上还是一号机坐着。搬完落个记号，之后你选谁就是谁。
 function promoteHostedOnce() {
   if (localStorage.getItem('kai.hostedseat.v1')) return;
   localStorage.setItem('kai.hostedseat.v1', '1');
@@ -112,13 +112,13 @@ function loadLineup(mode) {
   return ids.slice(0, need);
 }
 
-// 通道分流（Q28 用户裁决）：官方人设只走官方通道（暗号→同域代理，原版演员钉死，可控打磨）；
+// 通道分流（Q28 用户裁决）：官方机位只走官方通道（暗号→同域代理，型号钉死，可控打磨）；
 // 客席只走自带钥匙（BYOK）。两把钥匙互不越界。
 function officialChannelOf(per) {
   const pass = loadPass();
   // 托管席（用户裁决 2026-08-09）：**无暗号也能开口**——普通玩家一键就能玩上真模型。
   // 代价与护栏都在服务端：没暗号只放行托管那一个便宜模型，额度另算一档更小的（见 _worker.js）。
-  // 化身（老李头他们）仍要暗号：他们钉着各自的原版演员，成本档不能被路人改。
+  // 机位仍要暗号：它们各自钉着型号，成本档不能被路人改。
   if (!pass && !per?.hosted) return null;
   return {
     baseUrl: `${location.origin}/api/llm`,
@@ -129,7 +129,7 @@ function officialChannelOf(per) {
     // 官方通道现在全是思考型模型（v4-flash／v4-pro）。**不关思维链就没法玩**：
     // 2026-08-09 生产实测，max_tokens=320 时思维链把 320 个 token 全部想光，
     // finish_reason=length、正文为空 → 每一手都 bad-output → 整场退沉默 bot。
-    // 关掉之后 1.9s／81 token／JSON 完整。先生当年（v4-pro）踩的是同一个坑。
+    // 关掉之后 1.9s／81 token／JSON 完整。三号机（v4-pro）踩的是同一个坑。
     extra: { thinking: { type: 'disabled' } },
   };
 }
@@ -141,8 +141,8 @@ function guestChannelOf() {
   const g = loadGuest();
   return g?.apiKey && g?.baseUrl ? withGuestHeaders(g) : null;
 }
-// 通道跟人走：托管席与化身走官方通道，自带钥匙的客席走 BYOK。两把钥匙互不越界（Q28）。
-const chanForPersona = (per) => (per?.bare && !per.hosted ? guestChannelOf() : officialChannelOf(per));
+// 通道跟人走：托管席与机位走官方通道，自带钥匙的客席走 BYOK。两把钥匙互不越界（Q28）。
+const chanForPersona = (per) => (per?.official ? officialChannelOf(per) : guestChannelOf());
 
 // 降级原因 → 人话（连接状态可见性）
 function friendlyError(msg = '') {
@@ -423,7 +423,7 @@ function renderTrio(o) {
       const nameEl = strip.querySelector('.strip-head b');
       if (info && nameEl)
         nameEl.textContent =
-          info.name + (info.substituted ? '（老李头代打）' : info.kind === 'human' && !info.connected ? '（掉线）' : '');
+          info.name + (info.substituted ? '（一号机代打）' : info.kind === 'human' && !info.connected ? '（掉线）' : '');
     } else if (!chanForPersona(SEAT_PERSONA[s])) dot.className = 'brain hidden';
     else {
       const last = opponents[s]?.logs.findLast((l) => !l.auto); // 自动掀盅那一手不代表通道状态
@@ -609,17 +609,17 @@ function hintFor() {
 }
 
 // ---------- 计时（§2.4：超时＝最小抬价，本身即信号） ----------
-// §2.4（Q19）：不设钟。turnStart 只做用时记录基准；挂机 >30s 人设催一句（循环换句，无机制后果）
+// §2.4（Q19）：不设钟。turnStart 只做用时记录基准；挂机 >30s 给一句中性提示（循环换句，无机制后果）
 function armIdle() {
   turnStart = performance.now();
-  if (room) return; // 好友房：催话在服务端（老李头本人催）
+  if (room) return; // 好友房：催话在服务端（一号机催）
   clearTimeout(idleTimer);
   const nag = () => {
     if (!atTable) return;
     const o = ob();
     if (o.turn !== 'A' || o.over || busy) return;
-    const lines = opponent?.persona?.idle ?? [];
-    if (lines.length) speak(lines[Math.floor(Math.random() * lines.length)], 'B');
+    // 挂机提示（§1.4）：全席共用一份中性文案——原来一人一套的催话台词是角色台词，Q87 已删
+    speak(IDLE_LINES[Math.floor(Math.random() * IDLE_LINES.length)], 'B');
     idleTimer = setTimeout(nag, IDLE_MS);
   };
   idleTimer = setTimeout(nag, IDLE_MS);
@@ -856,8 +856,8 @@ async function aiTurnFor(seat) {
     // 用 toast 而非 hint：hint 会被下一帧 render 抹掉——"额度用完"曾因此看起来像"AI 挂了"
     toastFx(`${NAMES[seat]}降级沉默（${friendlyError(d.error)}）`);
   }
-  // 人设节奏：阿飞近乎秒出，老李头想得慢
-  const floor = ai.persona.pace === 'fast' ? 350 + Math.random() * 350 : 900 + Math.random() * 800;
+  // 出手节奏：全席同一个下限（Q87 删 pace——"谁想得慢"是角色设定，不是座位规则）
+  const floor = 350 + Math.random() * 500;
   await wsleep(Math.max(0, floor - (performance.now() - t0)));
   if (gen !== matchGen) return;
   const elapsedMs = performance.now() - t0;
@@ -1015,7 +1015,7 @@ async function showReport(end) {
   const won = end.winner === 'A';
   // 沙盒经济（Q32）：实验局不入榜不入账不入档案——以下写回全部跳过
   if (!sandbox) {
-    // 账本落袋（按人设分户头），下一场带着走
+    // 账本落袋（按机位分户头），下一场带着走
     const led = loadLedger();
     for (const s of seats.slice(1)) led.personas[SEAT_PERSONA[s].id] = end.chips[s];
     led.you = end.chips.A;
@@ -1043,7 +1043,7 @@ async function showReport(end) {
   const standingsLine = end.standings
     ? end.standings.map((s, i) => `${i + 1}. ${dispName(s)}`).join('　')
     : '';
-  // F0（P0 违宪修正）：多人桌的账按人设归属拆分——别人和客人之间的事不是你的账。
+  // F0（P0 违宪修正）：多人桌的账按机位归属拆分——别人和客人之间的事不是你的账。
   // 判词执笔者只拿"你与客人之间"的对局事实＋明确标注为全桌口径的公共数据。
   const vsMe = (seat) => stats.vs?.[seat] ?? { iOpened: 0, iOpenedHit: 0, theyOpenedMe: 0 };
   const duelText = (seat) => {
@@ -1269,7 +1269,7 @@ const statTableHtml = () =>
         .join('')}</table>`
     : '';
 
-// 每个 AI 一本账（遍历花名册，人设可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
+// 每个 AI 一本账（遍历机位表，机位可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
 const bookHtml = (per, extraBits = []) => {
   const mind = mindOf(profile, per.id);
   const agg = mind.stats.reduce(
@@ -1354,8 +1354,8 @@ function openDrawer(section, inLobby = false) {
     <h2 id="secWho">对面是谁</h2>
     <ul>
       <li><b>模型是真身</b>：做决定的是一个语言模型。算不算、什么时候掀盅、开不开你这口价，都是它自己的判断。</li>
-      <li><b>形象是化身</b>：名字、名章，外加一条明牌的座位规则（谁桌上有算盘、谁能宣盲）。化身换的是脸，不是脑子。</li>
-      <li><b>提示词只管规则</b>：发给它的只有规则、输出格式、三条锁和一条内容底线（只评打法、不碰人身、不用脏话）——<b>没有性格剧本</b>。所以换个型号，你换到的是另一个对手。</li>
+      <li><b>机位是座位</b>：一个机号、一枚名章，外加一条明牌的座位规则（哪台桌上有算盘、哪台能扳盲闸）。机位换的是座位，不是脑子——它没有性格，我们也没给它写过一个字。</li>
+      <li><b>提示词只管规则</b>：发给它的只有游戏规则、能做哪些动作、输出格式，外加这一局实际发生了什么——<b>没有性格剧本，也没有任何"你该怎么说话"的交代</b>。怎么打、怎么说、说什么，全是它自己的判断。所以换个型号，你换到的是另一个对手。</li>
       <li><b>系统说话零容忍，他说话零审查</b>：结算、报告卡、档案统计、算盘由引擎复算，错了就是 bug；他的嘴可能记歪、可能夸大——那不是故障，那是对手。不服就「戳」他。</li>
       <li>站内的模型名只是事实性标注。本作与各模型厂商无关联、未获授权，不使用其商标与形象。<a href="about.html">说明页</a>写得更细。</li>
     </ul>
@@ -1381,8 +1381,8 @@ function openDrawer(section, inLobby = false) {
       !inLobby
         ? ''
         : `<h2 id="secBrain">设置</h2>
-    <p class="dim-line">大厅第一席（${HOSTED_MODEL}）**不用配任何东西**，直接开局——那一席的账我们出，每天一份免费额度。下面这格是给化身用的。</p>
-    <label>暗号（官方通道——解锁化身与更高额度）</label><input id="fPass" type="password" value="${loadPass()}">
+    <p class="dim-line">大厅第一席（${HOSTED_MODEL}）**不用配任何东西**，直接开局——那一席的账我们出，每天一份免费额度。下面这格是给机位用的。</p>
+    <label>暗号（官方通道——解锁机位与更高额度）</label><input id="fPass" type="password" value="${loadPass()}">
     <div class="btnrow"><button class="primary" id="savePassBtn">保存</button></div>
     <div id="passTest" class="test-line"></div>
     <p class="dim-line">自带 API？在大厅的「客席」卡上填钥匙，你的模型以本名上桌。</p>
@@ -1506,7 +1506,7 @@ function openGuestConfig() {
   const g = loadGuest() ?? { baseUrl: '', apiKey: '', model: '', format: 'openai' };
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <h2>客席</h2>
-    <p class="p-idline">自带钥匙，让你的模型以本名上桌——素颜，无人设，只守规矩。换模型＝换人，各记各的账。钥匙只存这台设备，浏览器直连模型商。</p>
+    <p class="p-idline">自带钥匙，让你的模型以本名上桌——素颜，无剧本，只守规矩。换模型＝换人，各记各的账。钥匙只存这台设备，浏览器直连模型商。</p>
     <label>Base URL</label><input id="gBase" value="${g.baseUrl}" placeholder="https://api.deepseek.com/v1">
     <p class="dim-line">一把钥匙开一屋子模型：<button class="linkish" id="gOR">用 OpenRouter</button>　·　<button class="linkish" id="gDS">用 DeepSeek</button></p>
     <label>API Key</label><input id="gKey" type="password" value="${g.apiKey}">
@@ -1607,9 +1607,10 @@ function enterRoom({ roomId, hostKey = null }) {
   sandbox = false;
   $('lobby').classList.add('hidden');
   seats = ['A', 'B', 'C'];
-  SEAT_PERSONA = { B: PERSONAS.laolitou, C: { seal: '客', name: '朋友', idle: [], pace: 'fast' } };
-  NAMES = { A: '客人', B: '老李头', C: '朋友' };
-  document.documentElement.style.setProperty('--persona-verdict', "'老李头批：'");
+  const host = defaultAiPersona();
+  SEAT_PERSONA = { B: host, C: { seal: '客', name: '朋友' } };
+  NAMES = { A: '客人', B: host.name, C: '朋友' };
+  document.documentElement.style.setProperty('--persona-verdict', `'${host.name} 批：'`);
   myDiceByRound = {};
   sel = null;
   busy = false;
@@ -1864,14 +1865,14 @@ function showRoomWait() {
   ov.innerHTML = `<div class="card fade-in"><h2>好友房</h2>
     ${
       room.isHost
-        ? `<p class="p-idline">链接甩给朋友，人到即坐。老李头占第三席当主持——他两个都读。</p>
+        ? `<p class="p-idline">链接甩给朋友，人到即坐。一号机占第三席当主持——它两个都读。</p>
     <p class="note-item mono-sm">${link}</p>
     <div class="btnrow"><button class="ghost" id="copyLink">复制链接</button></div>`
         : `<p class="p-idline">你在桌边坐下了。等主家开局。</p>`
     }
     <div class="wait-seats">
       <p class="note-item">「${me?.seal ?? myStoredSeal() ?? '主'}」你 · 已就座</p>
-      <p class="note-item">「李」老李头 · 主持${room.isHost && !loadPass() ? '（无暗号：只行棋不说话）' : ''}</p>
+      <p class="note-item">「1」一号机 · 主持${room.isHost && !loadPass() ? '（无暗号：只行棋不说话）' : ''}</p>
       <p class="note-item">${c?.occupied ? `「${c.seal}」${c.name} · ${c.connected ? '已就座' : '掉线'}` : '空位 · 等好友点链接进来…'}</p>
     </div>
     ${room.isHost ? `<div class="btnrow"><button class="primary" id="roomStart" ${guestReady ? '' : 'disabled'}>开局</button></div>` : ''}
@@ -1913,7 +1914,7 @@ function tryShowRoomReport() {
     </table>
     ${me.insight ? `<p class="insight">你的破绽：${me.insight}</p>` : ''}
     ${fr.insight ? `<p class="insight">「${fr.seal}」的破绽：${fr.insight}</p>` : ''}
-    <p class="book-stats">老李头身家 ${m.ai.chips}</p>
+    <p class="book-stats">一号机身家 ${m.ai.chips}</p>
     ${m.verdict ? `<div class="verdict">${m.verdict}</div>` : ''}
   </div>
   <div class="again-row">
@@ -1960,7 +1961,7 @@ function openWishPanel() {
     ${chan ? '' : '<p class="test-line bad">许愿要先连上 AI：在「设置」里填暗号，或在大厅「客席」卡填自带钥匙</p>'}
     <div id="wishOut"></div>
     <h2>词条架</h2>
-    <p>这桌会的新规矩都挂在这。「体检」＝重新试打一遍，再请老李头评一评这张卡带不带劲。</p>
+    <p>这桌会的新规矩都挂在这。「体检」＝重新试打一遍，再请一号机评一评这张卡带不带劲。</p>
     ${allMods()
       .map(
         (m) => `
@@ -2065,7 +2066,7 @@ async function runExam(mod, out) {
     .join('');
 }
 
-// ---------- 选桌（开局前：先模式后对手；花名册数据驱动，人设只增不改代码） ----------
+// ---------- 选桌（开局前：先模式后对手；机位表数据驱动，机位只增不改代码） ----------
 function showLobby() {
   const lb = $('lobby');
   const led = loadLedger();
@@ -2077,16 +2078,20 @@ function showLobby() {
     const rec = mindOf(profile, per.id).record;
     return rec.plays ? `对你 ${rec.plays} 战 ${rec.beat} 胜` : '生面孔';
   };
-  // 榜（平等公民）：你和他们同一种行——胜率＋身家，身家即座次；点行翻开玩家页
+  // 榜（平等公民）：你和它们同一种行——胜率＋身家，身家即座次；点行翻开玩家页。
+  // Q88：**榜上不预置任何数字**——身家＝净转移，没打过就不上榜。空榜是诚实的空，
+  // 不是坏了：一场都还没打的时候，这里本来就该什么都没有。
   const rateOf = (wins, plays) => (plays ? `${Math.round((wins / plays) * 100)}%` : '—');
-  const boardHtml = () =>
-    [
-      { id: 'you', seal: '客', name: '你', bal: led.you, rate: rateOf(profile.wins, profile.matches) },
+  const boardHtml = () => {
+    const rows = [
+      { id: 'you', seal: '客', name: '你', bal: led.you, rate: rateOf(profile.wins, profile.matches), plays: profile.matches },
       ...rosterAll().map((per) => {
         const rec = mindOf(profile, per.id).record;
-        return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays) };
+        return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays), plays: rec.plays };
       }),
-    ]
+    ].filter((r) => r.plays > 0 || r.bal !== 0);
+    if (!rows.length) return '<p class="board-empty">榜上还没有人。打一场，这里就有第一行。</p>';
+    return rows
       .sort((a, b) => b.bal - a.bal)
       .map(
         (r, i) => `<button class="board-row ${r.id === 'you' ? 'me' : ''}" data-pg="${r.id}">
@@ -2094,6 +2099,7 @@ function showLobby() {
         </button>`,
       )
       .join('');
+  };
   const draw = () => {
     const note =
       localStorage.getItem('kai.note.v1') === 'byok-moved'
@@ -2236,7 +2242,7 @@ function openPlayerPage(id) {
       (profile.resets ?? 0) > 0 ? `翻篇 ${profile.resets} 次` : '',
     ].filter(Boolean);
     body = `<div class="book">
-      <div class="book-head"><span class="seal mini">客</span>你<span class="book-tag">酒馆的客人</span></div>
+      <div class="book-head"><span class="seal mini">客</span>你<span class="book-tag">这桌的客人</span></div>
       <p class="book-stats">${bits.join(' · ')}</p>
       ${insight ? `<p class="insight">破绽：${insight}</p>` : ''}
       ${statTableHtml()}
@@ -2299,7 +2305,7 @@ async function newMatch() {
     const persona = SEAT_PERSONA[s];
     pokeFeed[s] = []; // F9：戳他的话滚进这条追加事实流（引用同一数组，push 即生效）
     opponents[s] = createOpponent({
-      channel: () => chanForPersona(persona), // 通道跟人走：官方人设→暗号；客席→自带钥匙
+      channel: () => chanForPersona(persona), // 通道跟人走：官方机位→暗号；客席→自带钥匙
       profile: profileBrief(profile, persona.id),
       persona,
       ctx: {
@@ -2345,7 +2351,7 @@ function showRuleCardsIntro() {
   ov.querySelector('#rcGo').addEventListener('click', () => ov.classList.add('hidden'));
 }
 
-// 开场白（§5.3-bis 硬节拍）：主家亲口说——LLM 按自己的声口引用旧账；写死的老李头腔已废。
+// 开场白（§5.3-bis 硬节拍）：主家亲口说——LLM 按自己的声口引用旧账；写死的角色腔已废。
 // 沉默模式不代言（无通道＝无开场白，明显变弱是诚实的）。事实素材全为裁判层中性口径。
 function speakOpener(ledger) {
   const per = SEAT_PERSONA.B;
@@ -2355,9 +2361,10 @@ function speakOpener(ledger) {
   const facts = openerFacts(profile, ledger); // 素材抽成纯函数（可测：Q14 节拍是否真落地）
   const mind = mindOf(profile, per.id);
   if (mind.peeks > 0) facts.push(`他翻过你的小本子 ${mind.peeks} 次`); // F8 反身彩蛋
-  // F7 揭诈时刻（Q47）：偶尔把上一场留档的一句诈自己揭了——调味不主食，频率随人设
+  // F7 揭诈时刻（Q47）：偶尔把上一场留档的一句诈自己揭了——调味不主食。
+  // 频率全席同一个数（Q87 删 revealBait——"谁爱摊牌"该由型号自己长出来）；定值待 Q51 参数表。
   const bait = mind.baits?.at(-1);
-  if (bait && Math.random() < (per.gear?.revealBait ?? 0.25))
+  if (bait && Math.random() < REVEAL_BAIT_P)
     facts.push(
       `上一场第 ${bait.round} 局你嘴上说的是「${bait.say}」，心里想的其实是「${bait.belief}」——这一句你可以自己揭出来`,
     );
@@ -2442,7 +2449,7 @@ $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('menuBtn').addEventListener('click', () => openDrawer());
 
 // 启动：好友房邀请链接直入（#room=xxx），否则进大厅
-promoteHostedOnce(); // 托管席升主位的一次性迁移（老设备的花名册选择）
+promoteHostedOnce(); // 托管席升主位的一次性迁移（老设备的机位选择）
 const roomHash = location.hash.match(/^#room=([a-z0-9]{10})$/);
 if (roomHash) pickSeal(() => enterRoom({ roomId: roomHash[1] }));
 else showLobby();

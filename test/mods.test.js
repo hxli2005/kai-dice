@@ -210,7 +210,9 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.match(system, /{"type":"qia"}/);
   assert.match(system, /{"type":"liang","face":点数1到6}/);
   assert.match(user, /face 填骰子的点数/, '亮的语义钉死：点数不是第几颗');
-  assert.match(user, /宣言和词条都是真招/, '机制使用软推在场');
+  // Q86：原「宣言和词条都是真招…只会抬价和开牌的人是桌上最好读的人」是策略指导，已删。
+  // 用不用三闸与词条，是它自己的判断（正是素颜擂台风味层要测的东西）。
+  assert.ok(!user.includes('宣言和词条都是真招'), 'Q86：策略提醒应已删');
 });
 
 test('原子注册表语义面：许愿词条与官方同权——自定义动作自动获得候选说明/嘴手纪律/叙事', async () => {

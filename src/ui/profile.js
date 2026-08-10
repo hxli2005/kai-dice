@@ -1,12 +1,12 @@
 // 本地档案（DESIGN §3.3 双层制、§5.1 明牌档案）与 BYOK 配置（§3.4）。
 // 全部 localStorage，无账号（§7.2）。key 不出设备。
 
-import { PERSONAS } from '../ai/personas.js';
+import { PERSONAS, HOSTED_MODEL } from '../ai/personas.js';
 import { bigPotBrief } from './report.js';
 //
 // 档案双层（Q19）：
-// - 客观层（全人设共享）：matches/wins/resets/stats——酒馆的公共账本，换人设不冷启动。
-// - 主观层（minds[personaId] 私有）：notes 观察笔记＋hypotheses 规律假设——各记各的仇。
+// - 客观层（全席共享）：matches/wins/resets/stats——公共账本，换对手不冷启动。
+// - 主观层（minds[型号id] 私有）：notes 观察笔记＋hypotheses 规律假设——各型号各记各的。
 
 const PROFILE_KEY = 'kai.profile.v1';
 const BYOK_KEY = 'kai.byok.v1';
@@ -24,13 +24,73 @@ function emptyProfile() {
   return { matches: 0, wins: 0, resets: 0, stats: [], minds: {} };
 }
 
-// 旧结构（顶层 notes 数组）迁移：笔记归老李头主观层，无损
+// 旧机位 → 型号户头（Q87 改名、Q89 折成型号）。D4 规矩：改存储键必须带迁移方案。
+// **这张表永久保留**，删了就是让老存档凭空少几本账。
+//
+// 注意这不是改名是**合并**：老李头/一号机与阿飞/二号机钉的是同一个型号，
+// 按 DESIGN §1.2「户头按型号记」本来就该是一本账——以前分着记才是 bug。
+export const LEGACY_SEAT_MODEL = {
+  laolitou: 'model:deepseek-v4-flash',
+  afei: 'model:deepseek-v4-flash',
+  xiansheng: 'model:deepseek-v4-pro',
+  seat1: 'model:deepseek-v4-flash',
+  seat2: 'model:deepseek-v4-flash',
+  seat3: 'model:deepseek-v4-pro',
+};
+
+// 数值账：老机位的余额是"本金＋净转移"，折进型号户头时要**先减本金再相加**——
+// 否则两本账并一本会把本金也加两遍。折完把新户头的基准钉成 0（Q88），免得自愈再补一次。
+export function foldLegacyLedger(personas, applied = {}) {
+  if (!personas) return personas;
+  for (const [old, next] of Object.entries(LEGACY_SEAT_MODEL)) {
+    if (!Number.isFinite(personas[old])) {
+      delete personas[old];
+      delete applied[old];
+      continue;
+    }
+    const basis = applied[old] ?? 100; // 老档没记基准时的隐含值
+    personas[next] = (personas[next] ?? 0) + personas[old] - basis;
+    applied[next] = 0;
+    delete personas[old];
+    delete applied[old];
+  }
+  return personas;
+}
+
+// 主观档案：合并要**逐字段并**（笔记接起来、假设按文本去重取证据多的那条、计数相加）
+export function foldLegacyMinds(minds) {
+  if (!minds) return minds;
+  for (const [old, next] of Object.entries(LEGACY_SEAT_MODEL)) {
+    const src = minds[old];
+    if (!src) continue;
+    delete minds[old];
+    const dst = (minds[next] ??= emptyMind());
+    dst.notes = [...(dst.notes ?? []), ...(src.notes ?? [])].slice(-30);
+    const byText = new Map((dst.hypotheses ?? []).map((h) => [h.text, h]));
+    for (const h of src.hypotheses ?? [])
+      if (!byText.has(h.text) || (byText.get(h.text).hits ?? 0) < (h.hits ?? 0)) byText.set(h.text, h);
+    dst.hypotheses = [...byText.values()].slice(-8);
+    dst.dead = [...(dst.dead ?? []), ...(src.dead ?? [])].slice(-12);
+    dst.baits = [...(dst.baits ?? []), ...(src.baits ?? [])].slice(-8);
+    dst.stats = [...(dst.stats ?? []), ...(src.stats ?? [])].slice(-20);
+    dst.peeks = (dst.peeks ?? 0) + (src.peeks ?? 0);
+    for (const k of ['count', 'hold', 'fold', 'ignore'])
+      dst.pokes[k] = (dst.pokes[k] ?? 0) + (src.pokes?.[k] ?? 0);
+    for (const k of ['plays', 'beat', 'wins'])
+      dst.record[k] = (dst.record[k] ?? 0) + (src.record?.[k] ?? 0);
+  }
+  return minds;
+}
+
+// 旧结构迁移：① 顶层 notes 数组归托管型号的主观层；② 旧机位折成型号户头。均无损。
 function migrate(p) {
   if (!p) return emptyProfile();
   if (!p.minds) p.minds = {};
+  foldLegacyMinds(p.minds);
   if (Array.isArray(p.notes)) {
-    p.minds.laolitou = p.minds.laolitou ?? emptyMind();
-    p.minds.laolitou.notes = [...p.notes, ...p.minds.laolitou.notes].slice(-30);
+    const k = 'model:deepseek-v4-flash';
+    p.minds[k] ??= emptyMind();
+    p.minds[k].notes = [...p.notes, ...p.minds[k].notes].slice(-30);
     delete p.notes;
   }
   p.resets ??= 0;
@@ -85,20 +145,20 @@ export function saveProfile(profile, storage = localStorage) {
   storage.setItem(PROFILE_KEY, JSON.stringify(profile));
 }
 
-// 每场结束追加：客观统计入共享层，观察笔记入该人设的主观层
+// 每场结束追加：客观统计入共享层，观察笔记入该型号的主观层
 export function appendMatch(profile, { won, stats, notes, personaId }, storage = localStorage) {
   profile.matches += 1;
   if (won) profile.wins += 1;
-  const mind = mindOf(profile, personaId ?? 'laolitou');
+  const mind = mindOf(profile, personaId ?? `model:${HOSTED_MODEL}`);
   mind.notes = [...mind.notes, ...notes.filter(Boolean)].slice(-30);
   profile.stats = [...profile.stats, { ...stats, won }].slice(-20);
   storage.setItem(PROFILE_KEY, JSON.stringify(profile));
   return profile;
 }
 
-// 档案摘要（明牌，双方看同一份）。客观段全人设一致；笔记段取该人设自己的本子。
+// 档案摘要（明牌，双方看同一份）。客观段全席一致；笔记段取该型号自己的本子。
 // withNotes=true 给 AI 的 prompt 用；档案页传 false（页面上笔记单独成列表）
-export function profileBrief(p, personaId = 'laolitou', withNotes = true) {
+export function profileBrief(p, personaId = `model:${HOSTED_MODEL}`, withNotes = true) {
   if (!p.matches) return '';
   const last = p.stats.at(-1);
   const resets = p.resets ?? 0;
@@ -152,33 +212,48 @@ export function bumpResets(profile, storage = localStorage) {
 }
 
 // 跨场账本（Q12）：身家不重置——这回打剩多少，下回带多少上桌；可为负（赊账）。
-// v3：{you, personas:{id:n}} 按人设开户，人设可增不改结构；兼容旧平铺结构迁移。
-// v4（TODO(Q25) 数值占位）：AI 是独立玩家，各有初始身家 bankroll（比客人厚——客人的钱从他们身上赢）；
-// bankrollApplied 记录每个户头按哪个基准入的账，基准变了给存量户头补差额（你已赢走的净额不动）——自愈式迁移。
+// v3：{you, personas:{id:n}} 按机位开户，机位可增不改结构；兼容旧平铺结构迁移。
+// v5（Q88，2026-08-10）：**所有人从 0 起**——身家就是净转移，榜上不预置任何数字。
+// bankrollApplied 记录每个户头按哪个基准入的账，基准变了给存量户头补差额（你已赢走的净额不动）——
+// 自愈式迁移：老档里 770（基准 800）会自动变成 −30，也就是"你从它身上赢走 30"，一分不差。
 const LEDGER_KEY = 'kai.ledger.v1';
 export function loadLedger(storage = localStorage) {
   let raw = null;
   try {
     raw = JSON.parse(storage.getItem(LEDGER_KEY));
   } catch {}
-  let l = { you: 100, personas: {}, bankrollApplied: {} };
+  let l = { you: 0, personas: {}, bankrollApplied: {} };
   let had = false;
   if (raw && Number.isFinite(raw.you)) {
     had = true;
     if (raw.personas) {
       l = { you: raw.you, personas: { ...raw.personas }, bankrollApplied: { ...(raw.bankrollApplied ?? {}) } };
     } else {
+      // 更早的平铺结构（v2）：键就是旧机位名
       const personas = {};
       if (Number.isFinite(raw.laolitou)) personas.laolitou = raw.laolitou;
       else if (Number.isFinite(raw.opp)) personas.laolitou = raw.opp;
       if (Number.isFinite(raw.afei)) personas.afei = raw.afei;
       l = { you: raw.you, personas, bankrollApplied: {} };
     }
+    // Q87／Q89 迁移：旧机位的身家**合并**进型号户头（同型号本就该一本账）；
+    // 入账基准直接丢掉——新基准一律 0，留着反而会被当成"基准变了"再补一次。
+    foldLegacyLedger(l.personas, l.bankrollApplied);
   }
   let shifted = false;
+  // 玩家也走同一套自愈：老档的 you 是从 100 起的，基准归 0 后要减掉那 100
+  const youBase = l.bankrollApplied.__you ?? (had ? 100 : 0);
+  if (youBase !== 0) {
+    l.you -= youBase;
+    l.bankrollApplied.__you = 0;
+    shifted = true;
+  } else if (l.bankrollApplied.__you !== 0) {
+    l.bankrollApplied.__you = 0;
+    shifted = true;
+  }
   for (const [id, per] of Object.entries(PERSONAS)) {
-    const bank = per.bankroll ?? 100;
-    const base = l.bankrollApplied[id] ?? 100;
+    const bank = per.bankroll ?? 0;
+    const base = l.bankrollApplied[id] ?? 100; // 老档的隐含基准是 100
     if (l.personas[id] != null && base !== bank) {
       l.personas[id] += bank - base;
       shifted = true;
@@ -191,19 +266,15 @@ export function loadLedger(storage = localStorage) {
   if (had && shifted) storage.setItem(LEDGER_KEY, JSON.stringify(l)); // 立即落盘防重复补差
   return l;
 }
+// Q88：没打过就是 0——身家是净转移，不是发下来的本金
 export function balanceOf(ledger, personaId) {
-  // 客席（model:xxx）默认身家 300——Q25 已裁（客席按街口价）
-  return (
-    ledger.personas[personaId] ??
-    PERSONAS[personaId]?.bankroll ??
-    (personaId.startsWith('model:') ? 300 : 100)
-  );
+  return ledger.personas[personaId] ?? PERSONAS[personaId]?.bankroll ?? 0;
 }
 export function saveLedger(l, storage = localStorage) {
   storage.setItem(LEDGER_KEY, JSON.stringify(l));
 }
 
-// 钥匙分流（Q28 用户裁决）：暗号（官方通道，只喂官方人设）与客席钥匙（BYOK，只喂客席模型）分开存。
+// 钥匙分流（Q28 用户裁决）：暗号（官方通道，只喂官方机位）与客席钥匙（BYOK，只喂客席模型）分开存。
 // 旧 kai.byok.v1 迁移：只填 key＝暗号；三格全填＝客席钥匙。
 const PASS_KEY = 'kai.pass.v1';
 const GUEST_KEY = 'kai.guest.v1';

@@ -8,9 +8,9 @@
 
 import { obProb, coarseWord } from '../probability.js';
 
-// 没有 voice 的座位（模型席）用这句通用的。
-// 注：这是**表现层模板**，不是提示词——通道断了时由我们代它开口，属于"化身"那一层。
-const FALLBACK = (f) => `${f.clause ? `${f.clause}。` : ''}这话${f.coarse}。开。`;
+// **全席共用同一句**（Q87：原来一人一种声口，那是角色设定）。
+// 注：这是表现层模板，不是提示词——通道断了时由我们代它开口。
+const TEMPLATE = (f) => `${f.clause ? `${f.clause}。` : ''}这话${f.coarse}。开。`;
 
 // 本局最扎的一条公开事实 → 一句短语（挑一条就够；挑不出就闭嘴，别凑废话）
 export function readClause(ob) {
@@ -30,9 +30,10 @@ export function readClause(ob) {
 }
 
 // 沉默模式台词：kind 目前只有 'challenge'（开牌那一拍——"它为什么开我"正是被读感的落点）
+// persona 参数保留只为不动调用方；声口已全席统一，它现在不被读取。
 export function silentSay(persona, ob, kind = 'challenge') {
   if (!ob?.currentBid) return '';
-  const tpl = persona?.voice?.[kind] ?? FALLBACK;
+  const tpl = TEMPLATE;
   const line = tpl({
     coarse: coarseWord(obProb(ob, ob.currentBid)),
     clause: readClause(ob),

@@ -10,6 +10,7 @@ import { mulberry32 } from '../src/engine.js';
 import { createRoomCore } from '../src/room/room.js';
 import { viewFor } from '../src/room/rename.js';
 import { PHRASES, BET_CAP } from '../src/room/protocol.js';
+import { PERSONAS } from '../src/ai/personas.js';
 
 const sleep = (ms) => new Promise((r) => (ms > 0 ? setTimeout(r, ms) : setImmediate(r)));
 
@@ -96,7 +97,7 @@ test('好友房：建房入座→整场走通→双端对比报告卡（房内�
   assert.equal(roomH.seats.find((s) => s.seat === 'A').seal, '虎');
   assert.equal(roomG.seats.find((s) => s.seat === 'A').seal, '雀');
   assert.equal(roomG.seats.find((s) => s.seat === 'C').seal, '虎', '客视角里主家坐对面');
-  assert.equal(roomH.seats.find((s) => s.seat === 'B').name, '老李头');
+  assert.equal(roomH.seats.find((s) => s.seat === 'B').name, PERSONAS['model:deepseek-v4-flash'].name);
   // 客不能开局
   h.core.handle('g1', { t: 'start' });
   assert.match(h.last('g1', 'err').msg, /主家/);
@@ -138,7 +139,7 @@ test('座位重映射：客视角事件流自洽（承诺哈希在重命名后�
   assert.deepEqual(obA, m.observe('A'));
 });
 
-test('掉线代打与回座：老李头接管断线席位，游戏不停', async () => {
+test('掉线代打与回座：一号机接管断线席位，游戏不停', async () => {
   const h = harness();
   h.core.handle('h1', { t: 'hello', device: 'devA', tab: 't1', seal: '虎', hostKey: 'HK' });
   h.core.handle('g1', { t: 'hello', device: 'devB', tab: 't2', seal: '雀' });

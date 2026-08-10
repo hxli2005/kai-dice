@@ -1,12 +1,12 @@
 // 好友房核心（Q29/Q37，§7.2 唯一豁免）：一房一实例的服务端权威状态机。
 // 掷骰与暗骰只活在这里；每个客户端只收到 observe(自己)（schema 强制信息隔离原样上网络）。
-// AI（老李头）也跑在这里——人设提示词在多人局里永不落任何客户端（§9.7 红利）。
+// AI（一号机）也跑在这里——提示词在多人局里永不落任何客户端（§9.7 红利）。
 // 本模块零平台依赖（注入 send/schedule/fetch），DO 只是薄壳；node 测试用假 socket 全场走通。
 
 import { createMatch } from '../engine.js';
 import { createOpponent, personaLine } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
-import { PERSONAS, HOSTED_MODEL } from '../ai/personas.js';
+import { defaultAiPersona, HOSTED_MODEL, IDLE_LINES } from '../ai/personas.js';
 import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
 import { viewFor, mapFor } from './rename.js';
 import { PHRASES, SEALS, BET_CAP, SHOWDOWN_MS } from './protocol.js';
@@ -25,13 +25,13 @@ export function createRoomCore({
   fetchFn = globalThis.fetch,
   proxyBase = 'https://kai-dice.pages.dev/api/llm',
   aiPaceMs = 1100, // AI 思考地板（演出节奏），LLM 延迟大于它时不再叠加
-  subMs = 10_000, // 掉线多久后老李头代打
+  subMs = 10_000, // 掉线多久后一号机代打
   nagMs = 30_000, // 挂机催话（§2.4 平移到服务端）
   showdownMs = SHOWDOWN_MS,
 } = {}) {
   const seats = {
     A: { kind: 'human', seal: null, device: null, tab: null, conn: null, connected: false, substituted: false },
-    B: { kind: 'ai', seal: PERSONAS.laolitou.seal, name: PERSONAS.laolitou.name },
+    B: { kind: 'ai', seal: defaultAiPersona().seal, name: defaultAiPersona().name },
     C: { kind: 'human', seal: null, device: null, tab: null, conn: null, connected: false, substituted: false },
   };
   let phase = 'waiting'; // waiting | playing | ended
@@ -97,7 +97,7 @@ export function createRoomCore({
   };
   const say = (text) => text && broadcast({ t: 'say', seat: 'B', text });
 
-  // ---------- AI（老李头本席 + 掉线代打） ----------
+  // ---------- AI（一号机本席 + 掉线代打） ----------
   function ensureOpponent(seat) {
     if (opponents[seat]) return opponents[seat];
     const base =
@@ -110,7 +110,7 @@ export function createRoomCore({
     opponents[seat] = createOpponent({
       channel,
       profile: '', // 好友房无跨设备档案：AI 对两位客人都从本房现场读起（房内多场连续）
-      persona: PERSONAS.laolitou,
+      persona: defaultAiPersona(),
       ctx: { names: namesFor(seat), three: true, extraFacts: seatFacts[seat] },
     });
     return opponents[seat];
@@ -132,7 +132,7 @@ export function createRoomCore({
       if (phase !== 'playing' || !match) return;
       const o = match.observe('A');
       if (o.over || o.turn !== seat) return;
-      const lines = PERSONAS.laolitou.idle;
+      const lines = IDLE_LINES;
       say(`${sealName(seat)}——${lines[Math.floor(Math.random() * lines.length)]}`);
       armNag(seat);
     }, nagMs);
@@ -199,7 +199,7 @@ export function createRoomCore({
       const fact = (s) =>
         `${sealName(s)}：虚报率${Math.round(packs[s].bluffRate * 100)}%，开牌${packs[s].challenges}次中${packs[s].challengeHits}次，被开${packs[s].timesChallenged}次${packs[s].insight ? `，破绽「${packs[s].insight}」` : ''}`;
       verdict = await personaLine(ch, {
-        persona: PERSONAS.laolitou,
+        persona: defaultAiPersona(),
         task: '一场打完。你是桌上的主持人，写两三句「双人对比判词」——点名两位客人谁更怂、谁更虚，必须引用给你的真实数据，比出个高下，不许编。',
         facts: `名次：${end.standings.map((s) => sealName(s)).join(' > ')}；${fact('A')}；${fact('C')}`,
       });
@@ -251,7 +251,7 @@ export function createRoomCore({
           break; // 引擎拒绝（不应发生；沉默 bot 兜底本身合法）——停泵防死循环
         }
         // F2 沉默模式的"被读"底线：没暗号的房间（沉默主持）开牌时也得说出为什么——事实模板，零编造
-        const line = d.say || (d.action.type === 'challenge' ? silentSay(PERSONAS.laolitou, ob) : '');
+        const line = d.say || (d.action.type === 'challenge' ? silentSay(defaultAiPersona(), ob) : '');
         if (line) say(seat === 'B' ? line : `（代打${sealName(seat)}）${line}`);
         pushObs();
         drainEvents();
@@ -279,7 +279,7 @@ export function createRoomCore({
     if (ch) {
       const gen = matchGen;
       personaLine(ch, {
-        persona: PERSONAS.laolitou,
+        persona: defaultAiPersona(),
         task:
           matchNo === 1
             ? '好友房开场白：两位人类客人同桌，你是主持人也是对手。招呼开局，顺带把丑话说在前面（你两个都读）。'
@@ -403,13 +403,13 @@ export function createRoomCore({
     cancelSub[seat]?.();
     cancelSub[seat] = schedule(() => {
       if (seats[seat].connected || phase !== 'playing') return;
-      seats[seat].substituted = true; // 老李头代打（裁决：有暗号=LLM 代打，无=沉默代打）
+      seats[seat].substituted = true; // 一号机代打（裁决：有暗号=LLM 代打，无=沉默代打）
       pushRoster(); // 代打状态由数据承载（UI 标注），播报只能出自角色——有通道才开口
       const ch = channel();
       if (ch) {
         const gen = matchGen;
         personaLine(ch, {
-          persona: PERSONAS.laolitou,
+          persona: defaultAiPersona(),
           task: '桌上一位客人掉线了，你接手替他打（代打）。用你的方式说一句——照打不误、账照记。',
           facts: `掉线的客人：${sealName(seat)}`,
         }).then((line) => {

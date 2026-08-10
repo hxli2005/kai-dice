@@ -49,7 +49,7 @@ export const ARENA_SEAT = Object.freeze({
   strategy: Object.freeze({ challengeThreshold: 0.25 }), // 降级顶班时全席同参数
 });
 
-// 把钉子钉进通道（通道级 extra；人设级 extra 不再存在——擂台席没有装备）
+// 把钉子钉进通道（通道级 extra；机位级 extra 不再存在——擂台席没有装备）
 export function pinSampling(channel) {
   if (!channel) return null;
   return {

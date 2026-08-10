@@ -109,7 +109,7 @@ test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本�
   const pokes = []; // 与 UI 同款：戳的话滚进 extraFacts，下一手提示词就带上
   const ai = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
-    persona: PERSONAS.laolitou,
+    persona: { ...PERSONAS['model:deepseek-v4-flash'], gear: { ...PERSONAS['model:deepseek-v4-flash'].gear, usesBlind: false } },
     ctx: { extraFacts: pokes },
     fetchFn: mockFetch((user) =>
       user.includes('你记错了')

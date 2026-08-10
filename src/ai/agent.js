@@ -1,7 +1,7 @@
-// LLM agent 决策器（DESIGN §3.1/3.2）。人设从 personas.js 的一等公民对象读取（Q10）。
-// 每手 1 次调用（§3.1 成本约束）→ 事实工具结果预注入（等价于"他每手都用计算器"）。
-// 台词=真实推理的复述，事实全部来自注入的真实数据（§3.5 不许编）。
-// 任何失败 → 沉默模式顶班（§3.4 降级链），明显变弱是诚实的。
+// LLM agent 决策器（DESIGN §2.3）。机位对象只提供**座位规则与技术参数**（personas.js），
+// 一个字都不进提示词——提示词只有规则、操作与数据（Q86 二准入）。
+// 每手 1 次调用；台词由模型自己写，我们不规定它怎么说。
+// 任何失败 → 沉默模式顶班（§2.3 降级链），明显变弱是诚实的。
 // 词条（§8 实验桌）：规则卡明牌注入、动作 schema 动态扩展——LLM 读规则即生效（Q24 规则流动性）。
 
 import { allLegalBids, isLegalBid } from '../rules.js';
@@ -11,51 +11,38 @@ import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { DEFAULT_PERSONA } from './personas.js';
 
-// SYSTEM 全部由人设五件套拼装：身份 + 嘴臭度 + 回复风格 + 性格缺陷（Q11）
-// tableTalk：三人桌台词双层制（§2.5）——裁判层不许编 / 牌手层允许诈 / 各为其利 / 禁围剿
-const TABLE_TALK = `
-这是三人桌（你、客人、另一个对手），额外规矩：
-- 说话是玩法：手牌、意图、你对局势的判断，虚张误导演戏都行（"我劝你别开，我这把是真的"）。
-- 各为其利：你只为自己赢。对另一个对手的凶狠不得低于对客人，不许跟任何人联手针对第三方。
-- 每手最多一句话，开牌时刻可以多说。`;
-// 三块共用件：说话纪律 / 规则提要 / 输出契约——官方人设与素颜客席同规矩，差别只在性格。
-// Q49 场合律：这里管的是"怎么读人、怎么骂人"，不管"说得对不对"——
-// 桌上的账由系统盖章（他的嘴碰不到那些数字），他记歪记仇是他的活性。
-const FACT_LINE =
-  '发给你的数据都是真的。读人只读选择与倾向（他报了什么、开没开、宣言、输后的变化）；不提思考秒数，明显的犹豫只说成现象（"你手停了半天"）。只评价打法，不作人身攻击，不用脏话。';
+// ---------- 提示词二准入（Q86，用户裁决 2026-08-10） ----------
+//
+// 提示词（system 与 user 两段同规）只准装两类东西：
+//   ① **规则与操作**——这张桌子怎么运作、你能做什么动作、怎么输出；
+//   ② **数据**——这局实际发生了什么。
+// 其余一律不写：解释、提醒、鼓励、许可、节拍要求、风格约束、策略暗示，以及
+// "做你自己""没有派给你的性格"这类**元指令**——那仍然是在规定它该是谁。
+// 一句话：**怎么选，是它的判断，不是我们的输入。**
+//
+// 要保证的东西写进代码，不写成对模型的请求：秒数在进提示词前已转成现象语言（hesi），
+// 台词长度交给 max_tokens，嘴手是否一致交给渲染层，串牌由架构的信息隔离物理阻断。
+// 历史包袱（人设五件套／说话纪律／三锁／三条铁律）见 SYNC 已决 Q85·Q86，不要请回来。
+
+// 三人桌唯一的额外规则。"无队伍"是规则（多人游戏必须说清有没有队伍）；
+// 原"不许联手针对第三方"是行为要求，Q86 删——串牌本就由信息隔离物理阻断。
+const TABLE_TALK = `\n这张桌上没有队伍，各自为战。`;
+
 const RULES_BRIEF = (three) =>
-  `规则提要：${three ? '三人各摇暗骰，轮流报"桌上（三家合计）至少有 N 个 X 点"，只能抬价；开牌只能开上家（对上一个报价者）。' : '双方各摇暗骰，轮流报"桌上至少有 N 个 X 点"，只能抬价（数量加大，或同数量点数加大）。'}认为对方吹牛就开牌，开错自己输，输家掉一颗骰子。骰子掉光出局。默认 1 点是万能牌（斋局除外）。轮到自己可拍「抬」：本局池×2，每人每局一次——空手抬是合法演技，抬的时机会被对手读。报价到第 6 手起池自动再×2（深水）。`;
+  `大话骰。${
+    three
+      ? '三人各摇 5 颗暗骰，只看得见自己的，轮流报"桌上（三家合计）至少有 N 个 X 点"；开牌只能开上家（对上一个报价者）。'
+      : '双方各摇 5 颗暗骰，只看得见自己的，轮流报"桌上至少有 N 个 X 点"。'
+  }后报的必须比前一口高：数量加大，或数量相同而点数加大；首报数量至少 2。引擎不校验报价真假——任何满足阶梯的报价都合法。不接受上一口报价时可以开牌：清点全桌骰子，报价成立则开牌方输，不成立则报价方输，输家掉一颗骰子，骰子掉光出局。默认 1 点计入任何点数（斋局除外）。每次报数全桌各追 1 注入池；轮到自己可宣「抬」，本局池×2，每人每局一次；报价到第 6 手起池自动再×2。未看骰时可掀盅，掀盅是公开动作；未看骰时可宣「盲」，本局池×2，宣后整局不得看骰；本局首报者在首报前可宣「斋」，本局池×1.5。拨算盘是公开动作：全桌看得见你在算，算出的概率只有你自己看得见——没拨算盘你手上就没有准数。不合法的动作会被引擎打回。`;
+
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词","belief":"你此刻的真实判断（私密，不上屏；要具体到这一口价与这个人，别写套话）","speechMode":"straight 或 bait（bait＝这句台词是有意误导）","note":"一句真实决策理由（记入档案，玩家看不到）"}
-铁律一：say 必须贴着你此刻的 action 说——报价，台词里的数就是 action 里的数；宣言，就说宣言这件事；词条动作，说你正在主动做它。嘴和手对不上＝当场穿帮。
-铁律二（你的嘴是你自己的，Q49 场合律）：台词没有审查——误判、过度自信、言行不一、记仇、偏见、把旧账记歪，全是你这个人的一部分，说就是了。数字也一样：没拨算盘你手上就没有准数，你要硬说一个"三成"，那是你在演，别指望它准。桌上的账本、结算和报告卡由系统盖章（那儿一个字都不许错），你不必替系统当会计。
-铁律三（留档，不是审查）：belief 写你心里此刻真实的判断，speechMode 在你有意误导时填 "bait"。这不管你说什么——它只是把当时的你留下来（客人散场后能翻看，且**任何人都不能事后改写**）。所以别写套话：写具体到这一口价、这个人的那句心里话。
-如果客人刚戳了你（说你记错了／说你在演／叫你慢着），你爱怎么接怎么接——嘴硬、改口、装没听见都行，拿着你那本错账继续下注也行。只在 reaction 里留一个词交底："hold"（嘴硬）、"fold"（改口认了）或 "ignore"（没理他）。`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词，上屏","belief":"你此刻的判断，不上屏，存档","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","note":"决策理由，不上屏，存档","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
 
-// 三锁（Q49 场合律保留的那三条）：解链解的是他的嘴，不是这三条。
-// 擂台席用得上——素颜实验里没有人设可依，规矩得自己写清楚。
-const THREE_LOCKS = `这张桌子上有三条锁（引擎强制，不是口头承诺）：
-- 信息边界：你只看得到自己的骰子和公开事件流，对手的骰面不在发给你的数据里——谁也偷不到谁的。
-- 动作合法：一切动作由引擎结算，不合法的动作会被打回，说了不算。
-- 真迹不可改：你留的档（belief／speechMode）散场之后谁都改不了，包括你自己。`;
+// 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
+// 三个机位与擂台席拿到的 system 完全逐字相同（Q53 全席同构在此兑现，测试断言全等）。
+const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}${three ? TABLE_TALK : ''}
 
-// ---------- 一张桌子，一份提示词（用户裁决 2026-08-09：**提示词只管规则**） ----------
-//
-// 以前这里分三条岔路：官方人设注入身份＋嘴臭度＋腔调＋四条性格缺陷，素颜客席只给规则，
-// 擂台席连名字都不给。现在只剩一条：**每个座位拿到的都是规则 ＋ 输出契约 ＋ 三锁 ＋ 内容底线**，
-// 唯一的差别是那个名字标签（擂台席连名字都不要——受控实验里名字也是变量）。
-//
-// 也就是说：**模型是真身，形象是化身。** 化身给的是一张脸和一个称呼，不是一套性格脚本；
-// 它怎么打、怎么说、记不记仇，是模型自己的事。座位之间还能有差别，但差别只许来自
-// **座位规则**（工具可用性：算盘给不给、盲能不能宣）——那是明牌的规则，不是偷偷塞的人格。
-const seatSystem = (name, three, modSpec = '') =>
-  `${name ? `你在这张桌上的名字是「${name}」。` : ''}你正和客人玩大话骰。没有人设剧本，也没有派给你的性格——用你自己的判断打牌、说话，台词一两句即可。${FACT_LINE}${three ? TABLE_TALK : ''}
-${RULES_BRIEF(three)}
-${THREE_LOCKS}
 ${jsonSpec(modSpec)}`;
-
-// 擂台席（A2）：受控实验，连名字都不给——同一份字符串发给每个模型，否则实验作废
-const personaSystem = (p, three, modSpec = '') => seatSystem(p.arena ? '' : p.name, three, modSpec);
 
 const pct = (p) => `${Math.round(p * 100)}%`;
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
@@ -113,14 +100,9 @@ function matchRecap(events, you, names) {
     .join('；');
 }
 
-// 算频（Q45，软倾向：只染色不扣扳机——扣扳机的必须是模型）。'never' 是身份锚点：
-// 不给他这个动作（阿飞从不算，和老李头不用盲同级）。
-const CALC_HABIT = {
-  often: '你习惯算：多数手你会当众把算盘拨一下——但数是数、人是人，你照样可能逆着数开。',
-  key: '你只在关键手才算：平常凭经验走，真到要紧处才把算盘拿出来（算这个动作本身就在告诉别人这手要紧）。',
-  never: '你从不碰算盘：全凭手感，所以你嘴里永远没有准数——你也不觉得那玩意儿有用。',
-};
-
+// 算频：`gear.calc === 'never'` 是**座位规则**（明牌的工具可用性，如二号机桌上没算盘）——
+// 它决定候选动作里给不给「拨算盘」，是规则不是性格。Q86 删掉了配套的算频染色文案：
+// 常算还是不算，由模型自己长出来（那正是素颜擂台风味层要测的原生 tell）。
 
 // 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
 const ownActDesc = (a, ob) => {
@@ -194,13 +176,13 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
             (l) =>
               `${ownActDesc(l.action, ob)}${l.say ? `，嘴上说的是「${l.say}」` : ''}${l.note ? `（当时心思：${l.note}）` : ''}`,
           )
-          .join('；')}。接下来的动作和台词必须接得上这些话——要么兑现，要么是你有意在诈（心里要有数），不许像失忆一样自相矛盾。`
+          .join('；')}。`
       : null,
     returned
       ? `注意：你报的「${ob.currentBid.count} 个 ${ob.currentBid.face}」被原样推了回来——你必须自己继续抬，不能开自己的价。`
       : ob.currentBid
         ? calced
-          ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你这局拨过算盘：按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}（只算骰面，不算人——他是不是在诈，算盘不管）。`
+          ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你这局拨过算盘：按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}。`
           : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你没拨算盘，只有手感：这话${coarseWord(p(ob.currentBid))}。`
         : `你是首报（数量至少 2）。`,
     `可选动作：${[
@@ -215,18 +197,11 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
             : `宣言「${DECL[a.declaration]}」后再报`,
         ),
       ...legalMods.map((meta) => modCandidateLine(meta, ob, fmtP)),
-      canCalc &&
-        `当众拨算盘（{"type":"calc"}）——算完这一局你都有准数，算盘拨在明处：全桌都看得见你在算，何时算本身就是话（算完你继续行动）`,
+      canCalc && `当众拨算盘（{"type":"calc"}）——算完这一局你都有准数（算完你继续行动）`,
       !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
     ]
       .filter(Boolean)
       .join('；')}。`,
-    // 算频是人设的可见装备（Q45）：只染色候选，不替模型扣扳机。素颜客席不发这行——它没有性格剧本
-    (!persona.bare && CALC_HABIT[calcHabit]) || null,
-    // 软倾向（Q22-补：只染色不扣扳机）：宣言与词条是决策动词，不是摆设
-    ob.legal.some((a) => a.type === 'declare' || !!modActionMeta(ob, a.type))
-      ? '提醒：宣言和词条都是真招——虚实、时机、赔率都在里面，该出手就出手；一个只会抬价和开牌的人，是桌上最好读的人。'
-      : null,
     ...(ctx.extraFacts ?? []), // 宿主注入的追加事实行（好友房：主持人职责/短语盘/旁注注单——全为真实数据）
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',
     ctx.hypotheses?.length
@@ -234,14 +209,13 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
           .map((h) => `「${h.text}」（证据${h.hits ?? 0}${h.misses?.length ? `，反例：${h.misses.join('、')}` : ''}）`)
           .join('；')}`
       : null,
-    ob.round >= 2 && ob.round <= 3
-      ? '【节拍要求】你在第 3 局结束前，至少要有一句台词引用对方本场更早的具体行为（让他知道你在记）。'
-      : null,
+    // Q86 删：原「节拍要求」（第 3 局前必须引用对方早期行为）——它对应已归档的 D11 显形节拍，
+    // 是对模型的要求不是数据。"它记得你"此后完全靠档案数据自然长出来，没有一句话在催它。
   ].filter(Boolean);
   const modSpec = modActionsOf(ob)
     .map((a) => `或{"type":"${a.type}"${a.params === 'face' ? ',"face":点数1到6' : ''}}（词条「${a.label}」）`)
     .join('');
-  return { system: personaSystem(persona, three, modSpec), user: facts.join('\n') };
+  return { system: seatSystem(three, modSpec), user: facts.join('\n') };
 }
 
 export function parseDecision(text, ob) {
@@ -305,15 +279,14 @@ export function classifyOutput(raw, ob) {
   return parseDecision(raw, ob) ? 'ok' : 'illegal';
 }
 
-// 一句话任务（开场白等）：人设声口、非 JSON、事实锚定——替代写死台词（台词只能出自角色）。
-// 失败返回 null（一句不说；沉默模式不代言）。
+// 一句话任务（开场白等）：非 JSON、事实锚定——替代写死台词。失败返回 null（一句不说）。
+// Q86：system 只剩一句场合事实，任务与素材全在 user 段——名字、声口、说话纪律一律不发。
 export async function personaLine(channel, { persona, task, facts }, fetchFn) {
   try {
     const raw = await chat(
       channel,
       {
-        // 开场白也走同一条规矩：名字是标签，不是性格（用户裁决 2026-08-09）
-        system: `你在这张桌上的名字是「${persona.name}」。${FACT_LINE}`,
+        system: '这是一张大话骰牌桌。',
         user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身（一到两句，不要引号、不要解释、不要 JSON）。`,
         maxTokens: persona.gear?.maxTokens ?? 160,
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,
@@ -335,7 +308,10 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     const raw = await chat(
       channel,
       {
-        system: `你是${persona.name}。你刚在大话骰桌上被打脸了，现在快速修订你对这位客人的判断。规矩：**假设只写关于客人（人类玩家）的**——其他对手的行为可作背景，不入假设槽；假设必须由给你的事实支撑；证据不足的假设降权；被反例打死的假设保留并记下反例（尸体也是学问）。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        // Q86：删身份自述与劝导，只留任务、字段口径与 schema。
+        // 「假设只写关于客人的」是字段口径（决定 hypotheses 装什么），不是性格——留。
+        // 注：这一条同时是"型号之间互相记仇"的拦路石，牵动 SYNC 待决 Q80，未裁前不动。
+        system: `一局大话骰刚打完，你被打脸了。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被反例打死的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
         user: `刚发生的事：${factText}
 你既有的假设：${
           hypotheses.length
@@ -344,7 +320,7 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
         }`,
         maxTokens: Math.max(300, persona.gear?.maxTokens ?? 0),
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,
-        extra: persona.gear?.extra, // 推理型演员（先生）不带这个会烧穿预算回空
+        extra: persona.gear?.extra, // 推理型型号（如三号机的 v4-pro）不带这个会烧穿预算回空
       },
       fetchFn,
     );
@@ -365,8 +341,10 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
     const raw = await chat(
       channel,
       {
-        system: personaSystem(persona).replace(/严格输出一行 JSON[\s\S]*$/, '') +
-          '现在一场结束了，你在写这位客人的酒桌档案。判词两三句，必须引用给你的具体数据，不许编——只许用下面数据里出现过的数字，牌桌上没拨算盘算过的概率不许当准数说。顺手全量复盘你对他的规律假设（只写关于客人的；由数据支撑；被反例打死的保留尸体并记反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+        // Q86：删角色包裹与"判词两三句／不许编"等要求（判词是它的场合，§3 场合律零审查）。
+        // 留下的是任务、字段口径、一条规则（没拨算盘就没有准数）与 schema。
+        system:
+          '一场大话骰结束了，你在写这位客人的档案。牌桌上没拨算盘算过的概率不是准数。复盘你对他的规律假设（只写关于客人的；被反例打死的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
           hypotheses.length
             ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`
@@ -374,7 +352,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
         }`,
         maxTokens: Math.max(500, persona.gear?.maxTokens ?? 0),
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,
-        extra: persona.gear?.extra, // 推理型演员（先生）不带这个会烧穿预算回空
+        extra: persona.gear?.extra, // 推理型型号（如三号机的 v4-pro）不带这个会烧穿预算回空
       },
       fetchFn,
     );
@@ -400,14 +378,14 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
 // channel 为 null 时直接沉默模式（官方通道未配、额度耗尽等）。
 // channel 可传函数（每手求值）——设置保存后下一手立即生效，不用等下一场。
 export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, ctx = {}, fetchFn } = {}) {
-  const silent = createSilentBot(persona.strategy); // 策略参数随人设（Q10④）
+  const silent = createSilentBot(persona.strategy); // 策略参数随机位的 strategy（只在沉默 bot 顶班时生效）
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
   return {
     logs,
     persona,
     async decide(ob) {
       const canPeek = ob.legal.some((a) => a.type === 'peek');
-      // 不玩盲的人设：未看骰直接掀盅（老李头）；爱盲的人设把"掀盅还是盲上"交给 LLM（阿飞）。
+      // 盲闸扳不动的座位：未看骰直接掀盅（一号机）；能扳的把"掀盅还是盲上"交给模型（二号机）。
       // 这一手不问模型，但**照样落日志**——决策日志要与它的动作严格 1:1，
       // 否则复盘室的双轨会从这里开始错位（F8 验收：逐字段对账一致）。
       if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind) {
@@ -438,7 +416,7 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       const meta = {}; // 用量/费用/后端/耗时回填（A4 成本护栏；也是 A2 供应商锁的验尺）
       if (ch) {
         try {
-          // maxTokens/timeout 默认压低（动作 JSON＋一句台词，节拍 ≤4s）；推理型演员按人设放宽——
+          // maxTokens/timeout 默认压低（动作 JSON＋一句台词，节拍 ≤4s）；推理型型号按机位的技术参数放宽——
           // 思维链吃 token 也吃钟：预算太紧 JSON 被截断成 bad-output，钟太紧直接 abort
           raw = await chat(
             ch,

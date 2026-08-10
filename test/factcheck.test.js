@@ -73,7 +73,10 @@ test('F8 对账前提：决策日志与 AI 的动作严格 1:1（自动掀盅也
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
-  const ai = createOpponent({ persona: PERSONAS.laolitou }); // 无通道＝沉默 bot
+  // 自动掀盅只发生在扳不动盲闸的座位上——名册全员可扳，所以这里显式造一个
+  const base = PERSONAS['model:deepseek-v4-flash'];
+  const seat = { ...base, gear: { ...base.gear, usesBlind: false } };
+  const ai = createOpponent({ persona: seat }); // 无通道＝沉默 bot
   let decisions = 0;
   for (let i = 0; i < 3; i++) {
     const ob = m.observe('B');
@@ -92,7 +95,7 @@ test('Q49 场合律：他把旧账记歪照样出口（台词侧解链），留�
   const m = await ladderMatch();
   const ai = createOpponent({
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
-    persona: PERSONAS.laolitou,
+    persona: { ...PERSONAS['model:deepseek-v4-flash'], gear: { ...PERSONAS['model:deepseek-v4-flash'].gear, usesBlind: false } }, // 自动掀盅要一个不扳盲闸的座位
     fetchFn: mockFetch(
       '{"action":{"type":"challenge"},"say":"你两次九个六，开。","belief":"其实五五开","speechMode":"bait","note":"n"}',
     ),

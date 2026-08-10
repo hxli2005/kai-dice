@@ -66,8 +66,8 @@ export async function examMod(mod, { channel, fetchFn, games = 200, existingType
           name: '读不透吗',
           pass,
           detail: pass
-            ? `老李头猜这一手的动机，猜出两种相反的：「${reads[0]}」还是「${reads[1]}」——他也吃不准，有戏`
-            : '老李头没猜出两种像样的相反读法',
+            ? `一号机猜这一手的动机，猜出两种相反的：「${reads[0]}」还是「${reads[1]}」——他也吃不准，有戏`
+            : '一号机没猜出两种像样的相反读法',
         });
       }
     } catch (e) {

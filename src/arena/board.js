@@ -43,7 +43,7 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   );
   out.push('');
   out.push('**实验设置**（改任何一条，跨批次的数就不能比了）：');
-  out.push(`- 系统提示词：全席逐字相同（无人设、无模型名）`);
+  out.push(`- 系统提示词：全席逐字相同（无身份、无模型名）`);
   out.push(`- 镜像种子：同一副骰种打两遍、互换座位`);
   out.push(`- 采样钉死：${run.sampling ? JSON.stringify(run.sampling) : '—'}，max_tokens=${run.maxTokens ?? '—'}`);
   out.push(`- 档案：每场独立（v1 不带跨场记忆，避免顺序效应）`);

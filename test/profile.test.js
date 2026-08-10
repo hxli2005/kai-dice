@@ -16,15 +16,46 @@ const memStorage = (init = {}) => {
 
 const STATS = { bluffRate: 0.4, myChallenges: 2, myChallengeHits: 1, timesChallenged: 1, avgTimeMs: 5000, myBids: 5, myBlinds: 0, rounds: 6 };
 
-test('旧档迁移：顶层 notes 无损归入老李头主观层', () => {
+test('旧档迁移：顶层 notes 无损归入一号机主观层', () => {
   const s = memStorage({
     'kai.profile.v1': JSON.stringify({ matches: 3, wins: 1, notes: ['他手抖', '秒点真话'], stats: [STATS] }),
   });
   const p = loadProfile(s);
   assert.equal(p.matches, 3);
   assert.equal(p.notes, undefined);
-  assert.deepEqual(p.minds.laolitou.notes, ['他手抖', '秒点真话']);
-  assert.deepEqual(p.minds.laolitou.hypotheses, []);
+  assert.deepEqual(p.minds['model:deepseek-v4-flash'].notes, ['他手抖', '秒点真话']);
+  assert.deepEqual(p.minds['model:deepseek-v4-flash'].hypotheses, []);
+});
+
+// Q89 折成型号户头：老李头与阿飞钉的是同一个型号，两本账**合并**成一本
+//（DESIGN §1.2「户头按型号记」——以前分着记才是 bug）。D4 规矩：改键必须带迁移。
+test('Q89 迁移：旧机位折进型号户头，两本并一本且一分不差', () => {
+  const s = memStorage({
+    'kai.profile.v1': JSON.stringify({
+      matches: 9, wins: 4, stats: [STATS],
+      minds: {
+        laolitou: { notes: ['他大池必怂'], hypotheses: [{ text: '虚报时偏报6', hits: 4 }], stats: [], record: { plays: 9, beat: 2, wins: 4 } },
+        afei: { notes: ['这人稳'], hypotheses: [], stats: [], record: { plays: 2, beat: 0, wins: 1 } },
+      },
+    }),
+    'kai.ledger.v1': JSON.stringify({ you: 130, personas: { laolitou: 770, afei: 300 }, bankrollApplied: { laolitou: 800, afei: 300 } }),
+  });
+  const p = loadProfile(s);
+  const F = 'model:deepseek-v4-flash';
+  assert.equal(p.minds.laolitou, undefined, '旧键必须让位');
+  assert.equal(p.minds.afei, undefined);
+  assert.deepEqual(p.minds[F].notes, ['他大池必怂', '这人稳'], '两本笔记接起来');
+  assert.equal(p.minds[F].hypotheses[0].text, '虚报时偏报6');
+  assert.equal(p.minds[F].record.plays, 11, '9 + 2：对局数相加');
+  assert.equal(p.minds[F].record.wins, 5, '4 + 1');
+
+  const led = loadLedger(s);
+  assert.equal(led.personas.laolitou, undefined, '旧键必须让位');
+  assert.equal(led.personas.afei, undefined);
+  // 老李头 770（本金 800）＝净 −30；阿飞 300（本金 300）＝净 0 → 并账后 −30，本金没被加两遍
+  assert.equal(led.personas[F], -30, '合并后它净输 30');
+  assert.equal(led.bankrollApplied[F], 0);
+  assert.equal(loadLedger(s).personas[F], -30, '二次读取不重复折');
 });
 
 // Q14 显形节拍的编码侧自查（Q43 要求补报）：次场开场白必须拿得到上一场的具体事实
@@ -61,53 +92,61 @@ test('Q14 自查：生面孔只有招呼素材，回头客的开场白素材必�
   assert.match(text, /上一场他输了/);
 });
 
-test('双层：客观统计全人设共享，笔记各记各的', () => {
+test('双层：客观统计全席共享，笔记按型号各记各的', () => {
   const s = memStorage();
   let p = loadProfile(s);
-  p = appendMatch(p, { won: true, stats: STATS, notes: ['李记：爱虚报'], personaId: 'laolitou' }, s);
-  p = appendMatch(p, { won: false, stats: STATS, notes: ['飞记：这人稳'], personaId: 'afei' }, s);
+  p = appendMatch(p, { won: true, stats: STATS, notes: ['flash 记：爱虚报'], personaId: 'model:deepseek-v4-flash' }, s);
+  p = appendMatch(p, { won: false, stats: STATS, notes: ['pro 记：这人稳'], personaId: 'model:deepseek-v4-pro' }, s);
   // 客观层：两场都计入，谁看都一样
   assert.equal(p.matches, 2);
   assert.equal(p.stats.length, 2);
-  const headLi = profileBrief(p, 'laolitou', false);
-  const headFei = profileBrief(p, 'afei', false);
-  assert.equal(headLi, headFei, '客观段必须全人设一致');
-  // 主观层：笔记互不可见
-  assert.match(profileBrief(p, 'laolitou'), /李记：爱虚报/);
-  assert.doesNotMatch(profileBrief(p, 'laolitou'), /飞记/);
-  assert.match(profileBrief(p, 'afei'), /飞记：这人稳/);
-  assert.doesNotMatch(profileBrief(p, 'afei'), /李记/);
+  assert.equal(
+    profileBrief(p, 'model:deepseek-v4-flash', false),
+    profileBrief(p, 'model:deepseek-v4-pro', false),
+    '客观段必须全席一致',
+  );
+  // 主观层：笔记按型号互不可见
+  assert.match(profileBrief(p, 'model:deepseek-v4-flash'), /flash 记：爱虚报/);
+  assert.doesNotMatch(profileBrief(p, 'model:deepseek-v4-flash'), /pro 记/);
+  assert.match(profileBrief(p, 'model:deepseek-v4-pro'), /pro 记：这人稳/);
+  assert.doesNotMatch(profileBrief(p, 'model:deepseek-v4-pro'), /flash 记/);
   // 重载后结构保持
   const p2 = loadProfile(s);
-  assert.deepEqual(mindOf(p2, 'afei').notes, ['飞记：这人稳']);
+  assert.deepEqual(mindOf(p2, 'model:deepseek-v4-pro').notes, ['pro 记：这人稳']);
 });
 
 // 账本 v4（TODO(Q25) 占位数值）：AI 是独立玩家，各有初始身家；旧账自愈迁移
 import { loadLedger, balanceOf } from '../src/ui/profile.js';
 import { PERSONAS } from '../src/ai/personas.js';
 
-test('账本 v4：新户头按人设 bankroll 起步，客人 100', () => {
+// Q88：榜上不预置任何数字——身家＝净转移，谁都从 0 起
+test('账本 v5：全席从 0 起，一场没打榜上就是空的', () => {
   const s = memStorage();
   const led = loadLedger(s);
-  assert.equal(led.you, 100);
-  assert.equal(balanceOf(led, 'laolitou'), PERSONAS.laolitou.bankroll);
-  assert.equal(balanceOf(led, 'afei'), PERSONAS.afei.bankroll);
+  assert.equal(led.you, 0);
+  assert.equal(balanceOf(led, 'model:deepseek-v4-flash'), 0);
+  assert.equal(balanceOf(led, 'model:deepseek-v4-flash'), 0);
+  assert.equal(balanceOf(led, 'model:deepseek-v4-pro'), 0);
+  assert.equal(balanceOf(led, 'model:any-model'), 0);
 });
 
-test('账本 v4：旧账补差额——你已赢走的净额不变，且二次读取不重复补', () => {
+// Q88 自愈迁移：老档带着本金记的数，要原样折成净转移，一分不差且不许补第二次
+test('账本 v5：老档折成净转移——赢走的还是那么多，二次读取不重复折', () => {
   const s = memStorage({
-    'kai.ledger.v1': JSON.stringify({ you: 130, personas: { laolitou: 70 } }), // 你从老李头赢走 30
+    // 老口径：玩家本金 100、一号机本金 800；你从它身上赢走 30
+    'kai.ledger.v1': JSON.stringify({ you: 130, personas: { seat1: 770 }, bankrollApplied: { seat1: 800 } }),
   });
   const led = loadLedger(s);
-  assert.equal(led.you, 130);
-  assert.equal(led.personas.laolitou, PERSONAS.laolitou.bankroll - 30);
+  assert.equal(led.you, 30, '你净赢 30');
+  assert.equal(led.personas['model:deepseek-v4-flash'], -30, '它净输 30');
   const again = loadLedger(s);
-  assert.equal(again.personas.laolitou, PERSONAS.laolitou.bankroll - 30);
+  assert.equal(again.you, 30, '不许再折一次');
+  assert.equal(again.personas['model:deepseek-v4-flash'], -30);
 });
 
 test('mindOf 补齐 record.wins（旧档无损，胜率列可用）', () => {
-  const p = { matches: 0, wins: 0, resets: 0, stats: [], minds: { laolitou: { notes: [], hypotheses: [], stats: [], record: { plays: 3, beat: 1 } } } };
-  const m = mindOf(p, 'laolitou');
+  const p = { matches: 0, wins: 0, resets: 0, stats: [], minds: { 'model:deepseek-v4-flash': { notes: [], hypotheses: [], stats: [], record: { plays: 3, beat: 1 } } } };
+  const m = mindOf(p, 'model:deepseek-v4-flash');
   assert.equal(m.record.wins, 0);
   assert.equal(m.record.plays, 3);
 });
@@ -128,9 +167,9 @@ test('钥匙迁移：三格全填的旧配置归客席', () => {
   assert.equal(loadPass(s), '');
 });
 
-test('客席身家默认 300（model: 前缀）', () => {
+test('Q88：客席也从 0 起——没打过就没有身家', () => {
   const led = loadLedger(memStorage());
-  assert.equal(balanceOf(led, 'model:some-model'), 300);
+  assert.equal(balanceOf(led, 'model:some-model'), 0);
 });
 
 // ---------- 模型席：每个型号各记各的账（用户 2026-08-09 验证要求） ----------
@@ -168,16 +207,16 @@ test('模型席：同一个模型不管谁付钱都是同一个人；身家各�
   assert.equal(hosted.id, byok.id, '同名即同人——托管与自带钥匙共用一本账');
   assert.equal(hosted.hosted, true);
   assert.equal(byok.hosted, false);
-  // 素颜：提示词只给规则，没有性格剧本（人格捏造是被删掉的那部分）
+  // 素颜：提示词只给规则、操作与数据（角色脚本是被删掉的那部分）
   assert.equal(hosted.bare, true);
   assert.equal(hosted.flaws, undefined);
   assert.equal(hosted.tone, undefined);
   assert.equal(hosted.blurb.includes('deepseek-v4-flash'), true);
-  assert.equal(hosted.identity, undefined, '身份自述已随人格捏造一起删掉');
+  assert.equal(hosted.identity, undefined, '身份自述已随角色脚本一起删掉');
   // 身家按户头走，两个不同型号各有各的钱
-  const led = { you: 100, personas: {}, bankrollApplied: {} };
-  assert.equal(balanceOf(led, hosted.id), 300);
+  const led = { you: 0, personas: {}, bankrollApplied: {} };
+  assert.equal(balanceOf(led, hosted.id), 0);
   led.personas[hosted.id] = 412;
   assert.equal(balanceOf(led, hosted.id), 412);
-  assert.equal(balanceOf(led, modelPersona('glm-5.2').id), 300);
+  assert.equal(balanceOf(led, modelPersona('glm-5.2').id), 0, '另一个型号自己的账，还没开张');
 });

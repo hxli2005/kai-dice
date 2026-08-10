@@ -89,13 +89,13 @@ test('A2：擂台席的系统提示词全席逐字相同，且不含任何身份
   // 任何按模型/人设的微调都让实验作废——所以这段文本里不许有名字
   for (const banned of ['老李头', '阿飞', '先生', '客席', 'deepseek', 'claude'])
     assert.ok(!sysA.toLowerCase().includes(banned.toLowerCase()), `擂台提示词不许出现「${banned}」`);
-  // Q51 最小集：规则＋输出契约＋三锁＋内容底线
+  // Q86 二准入：只剩规则与操作＋输出格式（三锁与内容底线已随 Q85/Q86 退场）
   assert.match(sysA, /至少有 N 个 X 点/, '规则');
-  assert.match(sysA, /严格输出一行 JSON/, '输出契约');
-  assert.match(sysA, /信息边界[：:]/, '三锁·信息边界');
-  assert.match(sysA, /动作合法[：:]/, '三锁·动作合法');
-  assert.match(sysA, /真迹不可改[：:]/, '三锁·真迹不可赛后重写');
-  assert.match(sysA, /不作人身攻击/, 'Q6 内容底线');
+  assert.match(sysA, /引擎不校验报价真假/, '规则：报价无需为真');
+  assert.match(sysA, /不合法的动作会被引擎打回/, '操作');
+  assert.match(sysA, /严格输出一行 JSON/, '输出格式');
+  for (const gone of ['信息边界', '真迹不可改', '不作人身攻击', '你自己的判断', '铁律'])
+    assert.ok(!sysA.includes(gone), `Q85/Q86：「${gone}」应已退场`);
   // 档案槽位仍在（v1 每场独立＝"生面孔"，不是把接口拆了）
   assert.match(buildPrompts(m.observe('A'), '', ARENA_SEAT).user, /生面孔/);
 });
