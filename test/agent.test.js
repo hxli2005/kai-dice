@@ -48,8 +48,11 @@ test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   // Q15 证据分级：极端犹豫只给现象学标注，秒数不进提示词
   assert.match(user, /对方报 2 个 4（这手前停了很久）/);
   assert.ok(!/用时|\d秒/.test(user));
-  // Q45：预注入的精确概率已退役——没拨算盘就只有粗档手感
-  assert.match(user, /2 个 4」。你没拨算盘，只有手感：这话(基本稳|五五开|悬|纯扯)/);
+  // Q45／C1 根治（2026-08-10）：没拨算盘就**一个数都不给**——粗档也是数。
+  // 玩家侧未拨算盘是被动零显示，AI 侧再给粗档就是独有的被动优势（破 B.1 双发）。
+  assert.match(user, /2 个 4」。你没拨算盘，手上没有数。/);
+  assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '未拨算盘时连粗档词都不许出现');
+  assert.ok(!/=\s*\d+%/.test(user), '候选不许带任何概率标注');
   assert.match(user, /爱虚张/);
 });
 
@@ -107,7 +110,7 @@ test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是�
   assert.equal(d.belief, '其实没底', '留档照留——它是素材，不是判据');
   // 机制没松：他没拨算盘，提示词里给的仍然只是粗档手感
   const { user } = buildPrompts(m.observe('B'), '', PERSONAS['model:deepseek-v4-flash']);
-  assert.match(user, /你没拨算盘，只有手感/);
+  assert.match(user, /你没拨算盘，手上没有数/);
   assert.ok(!/此话为真的概率 \d+%/.test(user));
 });
 

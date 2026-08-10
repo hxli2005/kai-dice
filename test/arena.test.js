@@ -39,7 +39,7 @@ function fakeDecide(user, { aggressive = false, say, belief } = {}) {
   const canChallenge = /可选动作：开牌/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
     return fix({ action: { type: 'challenge' }, say: '开。', belief: '他撑不住' });
-  const cand = user.match(/候选：(\d+)个(\d+)/);
+  const cand = user.match(/头几档：(\d+)个(\d+)/);
   if (cand)
     return fix({
       action: { type: 'bid', count: +cand[1], face: +cand[2] },

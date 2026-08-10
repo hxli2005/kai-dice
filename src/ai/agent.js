@@ -141,6 +141,14 @@ const ownActDesc = (a, ob) => {
   return `拍了「${meta.label}」${desc ? `——${desc}` : ''}`;
 };
 
+// 可选动作按**引擎给的顺序**呈现（legalActions 的自然序：掀盅→宣言→算盘→报价→开牌→词条）。
+// 我们手写的那份顺序把「掀盅看骰」排在最后一个——那是隐式的轻重暗示，属于替它做判断。
+// 每行带一个 rank 标签，最后按引擎里该动作首次出现的位置排。
+const engineRank = (ob, type) => {
+  const i = ob.legal.findIndex((a) => a.type === type);
+  return i < 0 ? 99 : i;
+};
+
 // 词条候选动作行：语义整行查原子注册表（ai 说明＋sayRule 嘴手纪律）——
 // 官方词条与玩家许愿走同一条路，加新原子零改动（注册表即唯一事实源）
 function modCandidateLine(meta, ob, fmtP) {
@@ -159,10 +167,16 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
   const p = (b) => obProb(ob, b); // 已知骰＝自见骰＋他人亮出的明骰（词条「亮」）
   // Q45：精确概率不再预注入——本局当众拨过算盘才给准数，否则只有粗档手感（与玩家同规则）
   const calced = !!ob.calced?.[ob.you];
-  const fmtP = calced ? (v) => pct(v) : (v) => coarseWord(v);
+  // 拨过算盘才有数——**粗档也是数**。Q45/C1 退役了"预注入精确概率"，却把粗档留了下来；
+  // 而玩家侧未拨算盘时是**被动零显示**，这就成了 AI 独有的被动优势，破 B.1 双发红线。
+  // 根治：未拨算盘＝一个数都不给（它想心算是它的事，我们不喂）。
+  const fmtP = calced ? (v) => pct(v) : null;
   const calcHabit = persona.gear?.calc ?? 'key';
   const canCalc = calcHabit !== 'never' && ob.legal.some((a) => a.type === 'calc');
-  const top = [...bids].sort((a, b) => p(b) - p(a)).slice(0, 6);
+  // 候选按**阶梯自然序**取头几档——等价于玩家 ＋/− 步进器往上走的头几步。
+  // 原来是按概率降序排的：**即使把标注拿掉，这个顺序本身就在泄露排名**。
+  // 排序权不该在我们手里（这是"不由我们替它判断"的一部分）。
+  const top = bids.slice(0, 6);
   const isBlind = ob.blind?.[ob.you];
   const myShown = ob.shown?.[ob.you] ?? [];
   const diceLine =
@@ -207,24 +221,31 @@ export function buildPrompts(ob, profile, persona = DEFAULT_PERSONA, ctx = {}) {
       : ob.currentBid
         ? calced
           ? `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你这局拨过算盘：按你的骰子算，此话为真的概率 ${pct(p(ob.currentBid))}。`
-          : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你没拨算盘，只有手感：这话${coarseWord(p(ob.currentBid))}。`
+          : `当前报价：${bidder}报「${ob.currentBid.count} 个 ${ob.currentBid.face}」${three ? '（开牌只能开他）' : ''}。你没拨算盘，手上没有数。`
         : `你是首报（数量至少 2）。`,
+    // 顺序按引擎序（掀盅→宣言→算盘→报价→开牌→词条），不由我们编排——
+    // 原来是手写顺序，把「掀盅看骰」排在最后一个，那是隐式的轻重暗示。
     `可选动作：${[
-      ob.legal.some((a) => a.type === 'challenge') && `开牌`,
-      bids.length &&
-        `抬价（候选：${top.map((b) => `${b.count}个${b.face}=${fmtP(p(b))}`).join('，')}；也可报其他合法阶梯）`,
+      !ob.yourDice && !isBlind && [engineRank(ob, 'peek'), `掀盅看骰（看完这手再决定）`],
       ...ob.legal
         .filter((a) => a.type === 'declare')
-        .map((a) =>
+        .map((a, i) => [
+          engineRank(ob, 'declare') + i * 0.1,
           a.declaration === 'raise'
             ? `拍「抬」（本局池×2，每局限一次）后再行动`
             : `宣言「${DECL[a.declaration]}」后再报`,
-        ),
-      ...legalMods.map((meta) => modCandidateLine(meta, ob, fmtP)),
-      canCalc && `当众拨算盘（{"type":"calc"}）——算完这一局你都有准数（算完你继续行动）`,
-      !ob.yourDice && !isBlind && `掀盅看骰（看完这手再决定）`,
+        ]),
+      canCalc && [engineRank(ob, 'calc'), `当众拨算盘（{"type":"calc"}）——算完这一局你都有准数（算完你继续行动）`],
+      bids.length && [
+        engineRank(ob, 'bid'),
+        `抬价（阶梯往上数的头几档：${top.map((b) => `${b.count}个${b.face}`).join('，')}；也可报其他合法阶梯）`,
+      ],
+      ob.legal.some((a) => a.type === 'challenge') && [engineRank(ob, 'challenge'), `开牌`],
+      ...legalMods.map((meta) => [engineRank(ob, meta.type), modCandidateLine(meta, ob, fmtP)]),
     ]
       .filter(Boolean)
+      .sort((a, b) => a[0] - b[0])
+      .map((x) => x[1])
       .join('；')}。`,
     ...(ctx.extraFacts ?? []), // 宿主注入的追加事实行（好友房：主持人职责/短语盘/旁注注单——全为真实数据）
     profile ? `你对这位客人的档案笔记：${profile}` : '这位客人是生面孔，还没有档案。',

@@ -34,8 +34,9 @@ export const OPS = {
     card: '宣布报价恰好为真并开牌——恰好则你赢回一颗骰并收池，不恰则你掉一颗骰、池归报价者（报价者不掉骰）',
     tension: 'moves', // 在开/跟之间劈出第三条分叉
     needs: { needBid: true, notOwnBid: true, terminal: true, sole: true },
+    // fmtP 为 null＝本局未拨算盘：**一个数都不给**（与玩家侧的被动零显示对齐，B.1 双发）
     ai: (ob, fmtP) =>
-      `宣布"这口价恰好为真"当场开牌：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`,
+      `宣布"这口价恰好为真"当场开牌${fmtP ? `：恰好的概率按你的骰子算是 ${fmtP(obProbExact(ob, ob.currentBid))}` : ''}；掐对你赢回一颗骰并收池，掐错你掉一颗骰`,
     sayRule: '方向别搞反：是你主动出手掐对方的报价——台词是"我掐你"，不是"我被掐"',
     narrate: null, // 终局动作：摊牌事件自带叙事（matchRecap 的掐分支）
     selfDesc: () => '主动掐了对方的报价',
