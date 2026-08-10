@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>素颜擂台 · 回放</title>
+<!--
+  擂台回放器（内部工具，不进产品——Q81 占位：榜与擂台只作内部证据）。
+
+  两条纪律，写在代码里而不是注释里：
+  ① **上帝视角**：双方骰面全程可见。回放的是打完的局，全部已公开，不碰 §2.1 信息边界。
+     明知是诈的诈才好笑——这正是斗兽场当初要的看点。
+  ② **不许把沉默 bot 的话挂在模型名下**（C4 报告归属错位＝P0）。任何一手若是降级顶班，
+     这里必须当场标出来，且不显示它的"台词/心里"（那两栏本来就是空的）。
+-->
+<style>
+  :root {
+    --bg: #0b0a09; --panel: #14120f; --line: #2a2622;
+    --ink: #e8e0d4; --dim: #8a8178; --lamp: #d9a441; --red: #c0392b; --cool: #4a9d9c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 1.2rem; letter-spacing: .28em; color: var(--lamp); font-weight: 400; margin: 0 0 .2rem; }
+  .sub { color: var(--dim); font-size: .82rem; margin-bottom: 1.2rem; }
+  .bar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+         padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 1rem; }
+  select, button { background: #1c1916; color: var(--ink); border: 1px solid var(--line);
+                   border-radius: 4px; padding: .35rem .7rem; font: inherit; font-size: .85rem; cursor: pointer; }
+  button:hover { border-color: var(--lamp); }
+  button:disabled { opacity: .35; cursor: default; }
+  button.on { border-color: var(--lamp); color: var(--lamp); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .seat { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .8rem 1rem; }
+  .seat.turn { border-color: var(--lamp); }
+  .seat h2 { font-size: .92rem; margin: 0 0 .5rem; font-weight: 400; letter-spacing: .04em; }
+  .seat h2 .who { color: var(--dim); font-size: .72rem; margin-left: .4rem; }
+  .dice { font-size: 1.5rem; letter-spacing: .28rem; color: var(--lamp); }
+  .dice .gone { color: #3a352f; }
+  .said { margin-top: .6rem; min-height: 2.6rem; }
+  .said .say { color: var(--ink); }
+  .said .belief { color: var(--cool); font-size: .82rem; }
+  .said .bait { color: var(--red); font-size: .74rem; margin-left: .3rem; }
+  .said .fallback { color: var(--red); font-size: .78rem; }
+  .table { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+           padding: .9rem 1rem; margin: 1rem 0; text-align: center; }
+  .bid { font-size: 1.6rem; color: var(--lamp); letter-spacing: .05em; }
+  .meta { color: var(--dim); font-size: .8rem; }
+  .reveal { color: var(--red); font-size: 1.05rem; }
+  .log { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+         padding: .6rem 1rem; max-height: 15rem; overflow: auto; font-size: .82rem; }
+  .log div { color: var(--dim); padding: .1rem 0; }
+  .log div.cur { color: var(--lamp); }
+  .log div.big { color: var(--red); }
+  .drop { border: 1px dashed var(--line); border-radius: 6px; padding: 2rem; text-align: center; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>素颜擂台 · 回放</h1>
+  <div class="sub">
+    上帝视角：双方骰面全程可见（打完的局，全部已公开）。
+    <b style="color:var(--cool)">青色＝它心里想的</b>，只在留档里，当时没上屏。
+  </div>
+
+  <div id="loader" class="drop">
+    把某次跑批的 <b>run.json</b> 拖进来，或
+    <input type="file" id="file" accept="application/json">
+    <div style="margin-top:.6rem;font-size:.8rem">（也可用 <code>?run=smoke/2026-…/run.json</code> 直接加载）</div>
+  </div>
+
+  <div id="app" hidden>
+    <div class="bar">
+      <select id="match"></select>
+      <button id="prev">◀ 上一手</button>
+      <button id="play">▶ 播放</button>
+      <button id="next">下一手 ▶</button>
+      <button id="jump">跳到下一次「开」</button>
+      <span style="color:var(--dim);font-size:.8rem">倍速</span>
+      <button class="spd" data-s="1">1×</button>
+      <button class="spd on" data-s="2">2×</button>
+      <button class="spd" data-s="4">4×</button>
+      <span id="pos" class="meta" style="margin-left:auto"></span>
+    </div>
+
+    <div class="grid">
+      <div class="seat" id="seatA"></div>
+      <div class="seat" id="seatB"></div>
+    </div>
+
+    <div class="table" id="tableBox"></div>
+    <div class="log" id="logBox"></div>
+  </div>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const PIP = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
+// 需要模型做决定的事件——它们与决策日志严格 1:1（F8 对账前提）
+const DECIDED = new Set(['bid', 'challenge', 'peek', 'calc', 'declare', 'modAction']);
+
+let run = null, mi = 0, k = 0, timer = null, speed = 2;
+
+function load(json) {
+  run = json;
+  $('loader').hidden = true;
+  $('app').hidden = false;
+  $('match').innerHTML = run.matches
+    .map((m, i) => {
+      const w = m.aborted ? `中断:${m.aborted}` : m.winner ? `${m.seats[m.winner]} 胜` : '未终局';
+      return `<option value="${i}">#${i + 1}　seed ${m.seed}　${m.seats.A} vs ${m.seats.B}　—　${w}</option>`;
+    })
+    .join('');
+  pick(0);
+}
+
+// 把决策日志按事件顺序摊到每个事件上（谁做的这一手、他说了什么、心里想什么）
+function align(m) {
+  const q = { A: [...(m.logs.A ?? [])], B: [...(m.logs.B ?? [])] };
+  return m.events.map((e) => (DECIDED.has(e.type) && e.player ? q[e.player].shift() ?? null : null));
+}
+
+let M = null, LOGS = null;
+function pick(i) {
+  stop();
+  mi = i;
+  M = run.matches[i];
+  LOGS = align(M);
+  k = 0;
+  draw();
+}
+
+// 某一手时，某座位还剩几颗骰、这一局的真实骰面是什么（上帝视角：从这一局的 reveal 里取）
+function stateAt(idx) {
+  let round = 0, first = null, bid = null, pot = 0, zhai = false;
+  const dice = { A: 5, B: 5 };
+  const calced = {}, blind = {}, peeked = {};
+  for (let i = 0; i <= idx && i < M.events.length; i++) {
+    const e = M.events[i];
+    if (e.type === 'roundStart') {
+      round = e.round; first = e.first; bid = null; pot = 0; zhai = false;
+      for (const s of ['A', 'B']) { calced[s] = false; blind[s] = false; peeked[s] = false; }
+      if (e.diceCount) Object.assign(dice, e.diceCount);
+    }
+    if (e.type === 'bid') { bid = e; pot += 2; }
+    if (e.type === 'calc') calced[e.player] = true;
+    if (e.type === 'peek') peeked[e.player] = true;
+    if (e.type === 'declare') { if (e.declaration === 'zhai') zhai = true; if (e.declaration === 'blind') blind[e.player] = true; }
+    if (e.type === 'reveal' && e.loser) dice[e.loser] = Math.max(0, dice[e.loser] - 1);
+  }
+  // 本局的骰面：往后找这一局的 reveal
+  let hands = null;
+  for (let i = idx; i < M.events.length; i++) {
+    if (M.events[i].type === 'roundStart' && i > idx) break;
+    if (M.events[i].type === 'reveal') { hands = M.events[i].dice; break; }
+  }
+  return { round, first, bid, pot, zhai, dice, calced, blind, peeked, hands };
+}
+
+function seatHtml(s, st, e, log) {
+  const label = M.seats[s];
+  const hand = st.hands?.[s];
+  const isTurn = e && e.player === s;
+  const fell = st.dice[s];
+  const pips = hand
+    ? hand.map((d, i) => `<span class="${i < fell ? '' : 'gone'}">${PIP[d]}</span>`).join('')
+    : '—';
+  let said = '';
+  if (log) {
+    if (log.silentFallback) {
+      said = `<div class="fallback">⚠️ 这一手是沉默 bot 顶的（${log.outcome ?? log.error ?? '降级'}）——不是它打的，别算它头上</div>`;
+    } else {
+      said = `${log.say ? `<div class="say">「${esc(log.say)}」${log.speechMode === 'bait' ? '<span class="bait">〔诈〕</span>' : ''}</div>` : ''}
+              ${log.belief ? `<div class="belief">心里：${esc(log.belief)}</div>` : ''}`;
+    }
+  }
+  return `<h2>${esc(label)}<span class="who">座 ${s}${st.blind[s] ? ' · 盲' : ''}${st.calced[s] ? ' · 拨过算盘' : ''}</span></h2>
+          <div class="dice">${pips}</div>
+          <div class="said">${said}</div>`;
+}
+
+const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+
+function evLine(e, i) {
+  const w = (p) => esc(M.seats[p] ?? p);
+  switch (e.type) {
+    case 'roundStart': return `— 第 ${e.round} 局 —（${w(e.first)} 先报）`;
+    case 'peek': return `${w(e.player)} 掀盅看骰`;
+    case 'calc': return `${w(e.player)} 当众拨算盘`;
+    case 'bid': return `${w(e.player)} 报 ${e.count} 个 ${e.face}`;
+    case 'declare': return `${w(e.player)} 宣言「${DECL[e.declaration] ?? e.declaration}」`;
+    case 'challenge': return `${w(e.player)} 开！`;
+    case 'reveal': return `开牌：实有 ${e.actual} 个 ${e.bid.face}，${e.stands ? '成立' : '不成立'} → ${w(e.loser)} 掉一骰`;
+    case 'roundEnd': return `本局结束`;
+    case 'matchEnd': return `全场结束：${w(e.winner)} 胜`;
+    default: return e.type;
+  }
+}
+
+function draw() {
+  const e = M.events[k];
+  const st = stateAt(k);
+  const log = LOGS[k];
+  $('seatA').className = 'seat' + (e?.player === 'A' ? ' turn' : '');
+  $('seatB').className = 'seat' + (e?.player === 'B' ? ' turn' : '');
+  $('seatA').innerHTML = seatHtml('A', st, e, e?.player === 'A' ? log : null);
+  $('seatB').innerHTML = seatHtml('B', st, e, e?.player === 'B' ? log : null);
+
+  const rev = e?.type === 'reveal' ? e : null;
+  $('tableBox').innerHTML = rev
+    ? `<div class="reveal">开牌 · 实有 ${rev.actual} 个 ${rev.bid.face} · ${rev.stands ? '报价成立，开的人输' : '报价不成立，报的人输'}</div>
+       <div class="meta">${esc(M.seats[rev.loser])} 掉一颗骰</div>`
+    : `<div class="bid">${st.bid ? `${st.bid.count} 个 ${st.bid.face}` : '（还没人报）'}</div>
+       <div class="meta">第 ${st.round} 局 · 池 ${st.pot} 注${st.zhai ? ' · 斋局' : ''}</div>`;
+
+  $('logBox').innerHTML = M.events
+    .map((x, i) => `<div class="${i === k ? 'cur' : ''} ${x.type === 'reveal' || x.type === 'matchEnd' ? 'big' : ''}">${evLine(x, i)}</div>`)
+    .join('');
+  const cur = $('logBox').querySelector('.cur');
+  if (cur) cur.scrollIntoView({ block: 'center' });
+  $('pos').textContent = `${k + 1} / ${M.events.length}`;
+  $('prev').disabled = k === 0;
+  $('next').disabled = k >= M.events.length - 1;
+}
+
+function step(d) { k = Math.max(0, Math.min(M.events.length - 1, k + d)); draw(); }
+function stop() { clearInterval(timer); timer = null; $('play').textContent = '▶ 播放'; $('play').classList.remove('on'); }
+function play() {
+  if (timer) return stop();
+  $('play').textContent = '⏸ 暂停';
+  $('play').classList.add('on');
+  timer = setInterval(() => {
+    if (k >= M.events.length - 1) return stop();
+    // 开牌那一拍多停一会儿——那是这游戏爽感的落点
+    const pause = M.events[k]?.type === 'reveal' ? 3 : 1;
+    step(1);
+    if (pause > 1) { clearInterval(timer); timer = null; setTimeout(() => { if (!timer) play(); }, (900 * pause) / speed); $('play').textContent = '⏸ 暂停'; }
+  }, 900 / speed);
+}
+
+$('prev').onclick = () => { stop(); step(-1); };
+$('next').onclick = () => { stop(); step(1); };
+$('play').onclick = play;
+$('jump').onclick = () => {
+  stop();
+  for (let i = k + 1; i < M.events.length; i++) if (M.events[i].type === 'reveal') { k = i; return draw(); }
+  k = M.events.length - 1; draw();
+};
+$('match').onchange = (ev) => pick(+ev.target.value);
+for (const b of document.querySelectorAll('.spd'))
+  b.onclick = () => { speed = +b.dataset.s; for (const o of document.querySelectorAll('.spd')) o.classList.toggle('on', o === b); };
+addEventListener('keydown', (ev) => {
+  if (ev.key === 'ArrowRight') { stop(); step(1); }
+  if (ev.key === 'ArrowLeft') { stop(); step(-1); }
+  if (ev.key === ' ') { ev.preventDefault(); play(); }
+});
+
+$('file').onchange = (ev) => {
+  const f = ev.target.files[0];
+  if (f) f.text().then((t) => load(JSON.parse(t)));
+};
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) f.text().then((t) => load(JSON.parse(t)));
+});
+
+const q = new URLSearchParams(location.search).get('run');
+if (q) fetch(q).then((r) => r.json()).then(load).catch(() => {});
+</script>
+</body>
+</html>
