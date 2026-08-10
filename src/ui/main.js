@@ -18,7 +18,6 @@ import { compileWish } from '../mods/compiler.js';
 import { examMod } from '../mods/exam.js';
 import { smokeMods } from '../mods/smoke.js';
 import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByRoundOf, reviewTracks } from './report.js';
-import { buildLedger } from '../ai/factcheck.js';
 import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 
@@ -825,6 +824,13 @@ function driveTurn() {
   aiTurnFor(o.turn);
 }
 
+// 幻影记忆防线：被丢弃的决策打 stale 标——日志条目保留（真迹不可改），
+// 但 agent.js 的自我回灌会排除它，模型不会"记得"一个引擎从未接受的动作。
+const markStaleLog = (ai, d) => {
+  const last = ai?.logs?.at(-1);
+  if (last && !last.auto && last.observedStateId === d?.observedStateId) last.stale = true;
+};
+
 async function aiTurnFor(seat) {
   if (!atTable) return;
   const gen = matchGen;
@@ -849,9 +855,17 @@ async function aiTurnFor(seat) {
   }
   if (gen !== matchGen) return; // 已离桌/换场：在途决策作废
   if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), { dialogue: dialogueFeed[seat] })) {
+    markStaleLog(ai, d); // 幻影记忆防线：这手被丢弃重决，引擎没接受过——真迹保留，回灌排除
     busy = false;
     render();
     return driveTurn();
+  }
+  // F9：被戳之后的三岔口由他自己交底（hold 嘴硬／fold 改口／ignore 没理）——进档案的嘴硬率。
+  // 放在 peek 分支之前：reaction 与动作类型无关，附在掀盅上的也得进账。
+  if (d.reaction && !sandbox) {
+    const pk = mindOf(profile, ai.persona.id).pokes;
+    pk[d.reaction] = (pk[d.reaction] ?? 0) + 1;
+    saveProfile(profile);
   }
   if (d.action.type === 'peek') {
     // 揭盅是公开动作（§2.3）——他看骰，你看得见
@@ -862,14 +876,13 @@ async function aiTurnFor(seat) {
       ? document.querySelectorAll(`#strip-${seat} .die`)
       : $('oppDice').querySelectorAll('.die')
     ).forEach((el) => el.classList.add('reveal'));
+    if (d.say) {
+      // 掀盅时说的话也是话——此前这条分支把 say 静默吞掉（说了没人听）
+      rememberDialogue(seat, d.action, d.say);
+      speak(d.say, seat);
+    }
     busy = false;
     return aiTurnFor(seat);
-  }
-  // F9：被戳之后的三岔口由他自己交底（hold 嘴硬／fold 改口／ignore 没理）——进档案的嘴硬率
-  if (d.reaction && !sandbox) {
-    const pk = mindOf(profile, ai.persona.id).pokes;
-    pk[d.reaction] = (pk[d.reaction] ?? 0) + 1;
-    saveProfile(profile);
   }
   if (d.silentFallback && d.error && chanForPersona(ai.persona) && !fallbackNoticed) {
     fallbackNoticed = true;
@@ -881,6 +894,7 @@ async function aiTurnFor(seat) {
   await wsleep(Math.max(0, floor - (performance.now() - t0)));
   if (gen !== matchGen) return;
   if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), { dialogue: dialogueFeed[seat] })) {
+    markStaleLog(ai, d); // 幻影记忆防线：这手被丢弃重决，引擎没接受过——真迹保留，回灌排除
     busy = false;
     render();
     return driveTurn();
@@ -1175,12 +1189,12 @@ async function showReport(end) {
   let note = '';
   if (byok) {
     const mindB = mindOf(profile, opponent.persona.id);
+    // Q49 解链后判词不再对账（他的场合零审查）——数据面由引擎另行渲染，不经他的嘴
     const r = await settleVerdict(byok, {
       won,
       statsText,
       persona: opponent.persona,
       hypotheses: mindB.hypotheses,
-      ledger: buildLedger(o), // F0b：判词里的账要对得上事件流，对不上就退模板
     });
     if (r) {
       ({ verdict, note } = r);
@@ -2397,15 +2411,12 @@ function speakOpener(ledger) {
   // 频率全席同一个数（Q87 删 revealBait——"谁爱摊牌"该由型号自己长出来）；定值待 Q51 参数表。
   const bait = mind.baits?.at(-1);
   if (bait && Math.random() < REVEAL_BAIT_P)
-    facts.push(
-      `上一场第 ${bait.round} 局你嘴上说的是「${bait.say}」，心里想的其实是「${bait.belief}」——这一句你可以自己揭出来`,
-    );
+    facts.push(`上一场第 ${bait.round} 局你嘴上说的是「${bait.say}」，心里想的其实是「${bait.belief}」`);
+  // Q86 二准入：任务只说场合（老客/生面孔＝数据），不写节拍与风格要求——
+  // "第一句必须引用旧账"已删（Q86⑤：显形节拍在提示词层不再存在，引不引用是他自己的事）
   personaLine(ch, {
-    ledger: buildLedger(ob()), // F0b：开场白也过出口校验（只许引用给它的事实）
     persona: per,
-    task: profile.matches
-      ? '开场白：老客回来了，开一局。第一句必须引用下面旧账里的一条具体事实——让他知道这儿记着他。'
-      : '开场白：生面孔头回上桌，用你的方式招呼一句、开局。不要讲规则。',
+    task: profile.matches ? '开场白：老客回来了，开一局。' : '开场白：生面孔头回上桌，开一局。',
     facts: facts.join('；'),
   }).then((line) => {
     if (line && gen === matchGen && atTable) {

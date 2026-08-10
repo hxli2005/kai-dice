@@ -286,6 +286,52 @@ test('createOpponent：跨局回灌走真实决策日志——第 2 局的提示
   assert.ok(prompts.at(-1).includes('前几局自我留档：第1局：开了牌，说「开。」，判断「第1局我诈了他」'), prompts.at(-1).slice(-600));
 });
 
+test('Anthropic 格式：thinking 块不挡正文提取；stop_reason=max_tokens 归因 truncated 并加倍信封重试', async () => {
+  const thinky = mockFetch(() => ({ content: [{ type: 'thinking', thinking: '……' }, { type: 'text', text: 'yo' }] }));
+  const t = await chat(
+    { baseUrl: 'https://a.test', apiKey: 'k', model: 'm', format: 'anthropic' },
+    { system: 's', user: 'u' },
+    thinky,
+  );
+  assert.equal(t, 'yo', 'thinking 块在首位时仍取到 text 块');
+
+  const m = await createMatch({ seed: 9 });
+  const sent = [];
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://a.test', apiKey: 'k', model: 'm', format: 'anthropic' },
+    fetchFn: mockFetch((url, h, body) => {
+      sent.push(body.max_tokens);
+      return { content: [{ type: 'text', text: '' }], stop_reason: 'max_tokens', usage: {} };
+    }),
+  });
+  const d = await ai.decide(m.observe('A'));
+  assert.equal(d.outcome, 'truncated', 'Anthropic 截断旗也归因 truncated，不算模型合规失败');
+  assert.equal(d.silentFallback, true);
+  assert.equal(d.retried, true);
+  assert.equal(d.firstOutcome, 'truncated');
+  assert.equal(sent.length, 2, '截断记在我们头上：重试一次');
+  assert.equal(sent[1], sent[0] * 2, '重试时信封加倍——盒子放大再问');
+});
+
+test('幻影记忆防线：打了 stale 标的决策不进自我回灌（引擎没接受过的动作不算记忆）', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  const prompts = [];
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    fetchFn: mockFetch((url, h, body) => {
+      prompts.push(body.messages[1].content);
+      return { choices: [{ message: { content: '{"action":{"type":"declare","declaration":"raise"},"say":"抬了","belief":"吓吓他"}' } }] };
+    }),
+  });
+  await ai.decide(m.observe('B'));
+  ai.logs.at(-1).stale = true; // 宿主丢弃了这手（过期重决）
+  await ai.decide(m.observe('B'));
+  assert.ok(!prompts[1].includes('自我留档'), '被丢弃的那手不得回灌');
+});
+
 test('瞬态失败重试一次：网络错误后第二发成功不落沉默 bot；格式失败是被测项，不重试', async () => {
   const m = await createMatch({ seed: 9 });
   await m.act('A', { type: 'peek' });

@@ -11,6 +11,13 @@ import { computeStats, condBrief, diceByRoundOf } from '../ui/report.js';
 import { viewFor, mapFor } from './rename.js';
 import { PHRASES, SEALS, BET_CAP, SHOWDOWN_MS } from './protocol.js';
 
+// 幻影记忆防线（与 ui/main.js 同构）：被丢弃/被引擎拒绝的决策打 stale 标——
+// 日志条目保留（真迹不可改），agent.js 的自我回灌会排除它。
+const markStaleLog = (ai, d) => {
+  const last = ai?.logs?.at(-1);
+  if (last && !last.auto && last.observedStateId === d?.observedStateId) last.stale = true;
+};
+
 const HUMANS = ['A', 'C'];
 const sleep = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 
@@ -246,14 +253,21 @@ export function createRoomCore({
         const d = await ai.decide(ob);
         if (gen !== matchGen || phase !== 'playing') break;
         if (controllerOf(seat) !== 'ai') break;
-        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) continue;
+        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) {
+          markStaleLog(ai, d); // 幻影记忆防线：丢弃重决的那手不进自我回灌
+          continue;
+        }
         await sleep(aiPaceMs - (now() - t0));
         if (gen !== matchGen || phase !== 'playing') break;
         if (controllerOf(seat) !== 'ai') break;
-        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) continue;
+        if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), promptCtxFor(seat))) {
+          markStaleLog(ai, d); // 幻影记忆防线：丢弃重决的那手不进自我回灌
+          continue;
+        }
         try {
           await match.act(seat, d.action, { elapsedMs: now() - t0 });
         } catch {
+          markStaleLog(ai, d); // 引擎拒绝的那手同样没发生过
           break; // 引擎拒绝（不应发生；沉默 bot 兜底本身合法）——停泵防死循环
         }
         // F2 沉默模式的"被读"底线：没暗号的房间（沉默主持）开牌时也得说出为什么——事实模板，零编造

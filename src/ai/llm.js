@@ -90,7 +90,8 @@ export async function chat(
               messages: [{ role: 'user', content: user }],
               ...extra,
             },
-            text: (j) => j.content?.[0]?.text,
+            // 回包可能带 thinking 块（extended thinking 时排在首位）——取第一个 text 块，不认死 [0]
+            text: (j) => j.content?.find?.((b) => b?.type === 'text')?.text ?? j.content?.[0]?.text,
           }
         : {
             url: `${url}/chat/completions`,

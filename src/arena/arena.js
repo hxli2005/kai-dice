@@ -127,6 +127,8 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
     } catch {
       // 走到这儿说明 parseDecision 的合法性校验漏了——记在我们头上（rejects），不算模型的合规失败。
       // 沉默 bot 顶一手把桌子推下去；顶不动就收摊，绝不空转到 maxSteps。
+      const last = ai[p].logs.at(-1);
+      if (last && !last.auto) last.stale = true; // 幻影记忆防线：被引擎拒绝的那手不进自我回灌
       rejects[p]++;
       const fb = backup.decide(ob);
       const safe = ob.legal.some((a) => a.type === fb.type)

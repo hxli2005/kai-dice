@@ -84,6 +84,9 @@ const whoOf = (you, names) => (p) => (p === you ? '你' : (names?.[p] ?? '对方
 const modActionsOf = (ob) => (ob.mods ?? []).flatMap((m) => m.actions.map((a) => ({ ...a, modName: m.name })));
 const modActionMeta = (ob, type) => modActionsOf(ob).find((a) => a.type === type);
 
+// 截断旗两家口径：OpenAI 系 finish_reason='length'，Anthropic 系 stop_reason='max_tokens'
+const cutShort = (f) => f === 'length' || f === 'max_tokens';
+
 // Q15：原始毫秒不进提示词，只保留固定的现象分类。
 const timingOf = (e) =>
   e.elapsedMs == null ? null : e.elapsedMs > 8000 ? 'slow' : e.elapsedMs < 1200 ? 'fast' : null;
@@ -576,14 +579,15 @@ export function classifyOutput(raw, ob) {
 }
 
 // 一句话任务（开场白等）：非 JSON、事实锚定——替代写死台词。失败返回 null（一句不说）。
-// Q86：system 只剩一句场合事实，任务与素材全在 user 段——名字、声口、说话纪律一律不发。
+// Q86：system 退化为空，任务与素材全在 user 段——名字、声口、说话纪律、长度要求一律不发
+//（长度归 max_tokens，"一到两句"已删；"只输出台词本身"是输出格式，属操作，留）。
 export async function personaLine(channel, { persona, task, facts }, fetchFn) {
   try {
     const raw = await chat(
       channel,
       {
-        system: '这是一张大话骰牌桌。',
-        user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身（一到两句，不要引号、不要解释、不要 JSON）。`,
+        system: '',
+        user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身，不要引号、不要解释、不要 JSON。`,
         maxTokens: persona.gear?.maxTokens ?? 160,
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,
         extra: persona.gear?.extra,
@@ -613,10 +617,11 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     const raw = await chat(
       channel,
       {
-        // Q86：删身份自述与劝导，只留任务、字段口径与 schema。
+        // Q86：删身份自述与劝导，只留任务、字段口径与 schema（"你被打脸了"是情绪定调，已删——
+        // 输赢经过写在 factText 里，是数据）。
         // 「假设只写关于客人的」是字段口径（决定 hypotheses 装什么），不是性格——留。
         // 注：这一条同时是"型号之间互相记仇"的拦路石，牵动 SYNC 待决 Q80，未裁前不动。
-        system: `一局大话骰刚打完，你被打脸了。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被反例打死的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        system: `一局大话骰刚打完。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被反例打死的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
         user: `刚发生的事：${factText}
 你既有的假设：${
           hypotheses.length
@@ -682,7 +687,8 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
     async decide(ob) {
       const observedStateId = stateIdOf(ob, ctx);
       const canPeek = ob.legal.some((a) => a.type === 'peek');
-      // 盲闸扳不动的座位：未看骰直接掀盅（一号机）；能扳的把"掀盅还是盲上"交给模型（二号机）。
+      // 盲闸扳不动的座位（gear.usesBlind=false，当前仅测试构造，生产席全员可扳）：未看骰直接掀盅；
+      // 能扳的把"掀盅还是盲上"交给模型。
       // 这一手不问模型，但**照样落日志**——决策日志要与它的动作严格 1:1，
       // 否则复盘室的双轨会从这里开始错位（F8 验收：逐字段对账一致）。
       if (ob.yourDice === null && canPeek && !persona.gear?.usesBlind) {
@@ -696,8 +702,10 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
         // 自我记忆回灌：自己的动作/台词/心思喂回下一手——每手独立调用天然失忆，
         // 宣言（keepTurn）把一个心理动作拆成两次调用，不回灌就会"说斋两个6、报出两个3"。
         // 跨局也回灌（带局号，呈现时前几局压缩）：诈的伏笔与对对手的判断跨局连续。
+        // stale＝宿主丢弃重决或引擎拒绝的那手：真迹保留（决策日志不可改），但它没发生过——
+        // 回灌它等于让模型记得一个不存在的动作（幻影记忆），必须排除。
         const ownLog = logs
-          .filter((l) => !l.silentFallback)
+          .filter((l) => !l.silentFallback && !l.stale)
           .map((l) => ({
             round: l.round,
             action: l.action,
@@ -721,9 +729,11 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       let meta = {}; // 用量/费用/后端/耗时回填（A4 成本护栏；也是 A2 供应商锁的验尺）
       let firstOutcome = null; // 瞬态重试后保留首发归因（审计不丢原始事实）
       if (ch) {
-        // 瞬态传输失败（超时/网络/空响应）重试一次（G6 最小实现：最戏剧的一手不无谓降级）。
-        // 模型侧的合规失败（no-json/bad-json/illegal/refusal/truncated）不重试——那是被测项，不是路况。
+        // 瞬态传输失败（超时/网络/空响应）重试一次（G6 最小实现：最戏剧的一手不无谓降级）；
+        // 截断（我们的盒子小了，记在我们头上）也重试一次，且信封加倍——盒子放大再问。
+        // 模型侧的合规失败（no-json/bad-json/illegal/refusal）不重试——那是被测项，不是路况。
         for (let attempt = 0; attempt < 2; attempt++) {
+          const bump = firstOutcome === 'truncated' ? 2 : 1;
           meta = {};
           error = null;
           try {
@@ -733,7 +743,7 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
               ch,
               {
                 ...prompts,
-                maxTokens: persona.gear?.maxTokens ?? DECISION_MAX_TOKENS,
+                maxTokens: (persona.gear?.maxTokens ?? DECISION_MAX_TOKENS) * bump,
                 timeoutMs: persona.gear?.timeoutMs ?? DECISION_TIMEOUT_MS,
                 extra:
                   persona.gear?.extra || ch.decisionExtra
@@ -745,15 +755,15 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
             );
             decision = parseDecision(raw, ob);
             outcome = classifyOutput(raw, ob);
-            // 被 max_tokens 截断 ≠ 它不守契约。finish_reason=length 时另立类目，
+            // 被 max_tokens 截断 ≠ 它不守契约。截断旗（两家口径见 cutShort）另立类目，
             // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
-            if (decision === null && meta.finish === 'length') outcome = 'truncated';
+            if (decision === null && cutShort(meta.finish)) outcome = 'truncated';
             if (decision === null) error = 'bad-output';
           } catch (e) {
             error = e?.message ?? 'unknown';
-            outcome = meta.finish === 'length' ? 'truncated' : /abort/i.test(error) ? 'timeout' : 'error';
+            outcome = cutShort(meta.finish) ? 'truncated' : /abort/i.test(error) ? 'timeout' : 'error';
           }
-          if (decision !== null || !['timeout', 'error', 'empty'].includes(outcome)) break;
+          if (decision !== null || !['timeout', 'error', 'empty', 'truncated'].includes(outcome)) break;
           firstOutcome = outcome;
         }
       }
