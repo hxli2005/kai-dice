@@ -28,9 +28,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (p) => `${Math.round(p * 100)}%`;
 const IDLE_MS = 30_000; // §1.4：无倒计时无超时代报；挂机 >30s 给一句中性提示，无机制后果
 const REVEAL_BAIT_P = 0.25; // F7 揭诈频率，全席同一个数（Q87 起不再挂机位）；定值待 Q51 参数表
-// F4（Q45）新手训练轮：头几场给被动粗档扶手，毕业自动拆——之后想要准数就得自己拨算盘
-const TRAIN_MATCHES = 3; // TODO(Q46) 训练轮长度待设计确认
-const inTraining = () => profile.matches < TRAIN_MATCHES;
+// 训练轮已取消（Q51，用户裁决 2026-08-10）：新手第一场就零显示，与老玩家同规则。
+// 理由是 Q45 的哲学——**不藏答案，而给答案标价**；给三场被动扶手会把玩家养成看档位的习惯，
+// 那正是 C1 要根治的"阈值执行器"。想要准数就自己拨算盘，从第一手起。
 // F1 观战提速：玩家出局后不是你的戏了——演出 4 倍速，还可一键跳到战报
 let watchSpeed = 1;
 let skipToReport = false;
@@ -517,10 +517,6 @@ function render() {
     const exact = canCalza ? ` · 恰好 ${pct(obProbExact(o, o.currentBid))}` : '';
     read = `「${o.currentBid.count} 个 ${o.currentBid.face}」真 <b>${pct(obProb(o, o.currentBid))}</b>${exact}`;
     note = `只算骰面 · 不算人${blindCalc}`;
-  } else if (inTraining() && readable) {
-    // 训练轮：被动粗档扶手（毕业即拆）——粗档词与 AI 没算时看到的同一粒度（双发同粗）
-    read = `「${o.currentBid.count} 个 ${o.currentBid.face}」<b>${coarseWord(obProb(o, o.currentBid))}</b>`;
-    note = `训练轮 · 第 ${profile.matches + 1}/${TRAIN_MATCHES} 场${blindCalc}`;
   } else if (canCalc) {
     note = '全桌都看得见你在算';
   }
@@ -2332,11 +2328,6 @@ async function newMatch() {
   render();
   armIdle();
   showCoach();
-  // 训练轮毕业（F4）：扶手要当面拆，否则玩家只会觉得"数字怎么没了"
-  if (profile.matches === TRAIN_MATCHES && !localStorage.getItem('kai.trained.v1')) {
-    localStorage.setItem('kai.trained.v1', '1');
-    setTimeout(() => toastFx('训练轮拆了：想要准数，自己拨算盘'), 1400);
-  }
   if (labMods.length) showRuleCardsIntro(); // 词条以明牌规则卡在局前展示（Q32；AI 侧同卡走提示词）
 }
 

@@ -10,11 +10,14 @@ const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低�
 // §3.4 早写了"默认走官方通道（内置低成本模型，每日限额，保证零门槛上手）"，一直欠着。
 // 现在补上，但按 Q7 保命三律「别破产」把口子开小：
 //   · 免费档**只放行托管这一个便宜模型**（暗号持有者才碰得到别的型号）；
-//   · 免费档单设备日限另算一档更小的（≈4–5 场），暗号档仍是 400；
+//   · 免费档**不限次**（Q83）：逐设备照旧计数但不拦，损失上限由全局月熔断兜底；暗号档仍是 400；
 //   · 免费档要求请求来自浏览器同源（Origin 或 Sec-Fetch-Site）——挡住裸脚本刷；
 //   · 全局月熔断照旧，是最后那道闸。
 const HOSTED_MODEL = "deepseek-v4-flash"; // 与 src/ai/personas.js 的 HOSTED_MODEL 同名
-const OPEN_DAILY_LIMIT = 60;
+// Q83（用户裁决 2026-08-10）：**免费档不设单设备日限**，唯一的闸是全局月熔断。
+// 仍然逐设备计数，但**只用来看，不用来拦**——一个人吃掉多少额度，得看得见。
+// 防滥用的那道门不是配额，是下面的 Sec-Fetch-Site 同源检查（裸脚本不接待）。
+const OPEN_DAILY_LIMIT = Infinity;
 
 export default {
   async fetch(request, env) {
@@ -83,7 +86,7 @@ export default {
           deviceUsed,
           deviceLimit: DEVICE_DAILY_LIMIT,
           openUsed, // 免费托管档今日用量
-          openLimit: OPEN_DAILY_LIMIT,
+          openLimit: Number.isFinite(OPEN_DAILY_LIMIT) ? OPEN_DAILY_LIMIT : "不限（Q83：只靠全局月熔断）",
           hosted: HOSTED_MODEL,
         });
       }
@@ -110,7 +113,7 @@ export default {
       // `\s*` 不是 `\s+`：客户端若发了个空的 `Bearer `，代理这边收到的可能是光秃秃的 `Bearer`——
       // 用 `\s+` 剥不掉，就会把 "Bearer" 本身当成暗号判 401，免费档整个进不来（实测踩过）。
       const pass = (request.headers.get("Authorization") || "").replace(/^Bearer\s*/i, "").trim();
-      // 两档：有暗号＝原班人马全开、日限 400；没暗号＝免费托管档、只放行托管模型、日限 60。
+      // 两档：有暗号＝全开、日限 400；没暗号＝免费托管档、只放行托管模型、**不限次**（Q83）。
       const friend = !!(env.FRIEND_PASS && pass && pass === env.FRIEND_PASS);
       if (pass && !friend) return json({ error: "暗号不对" }, 401);
       if (!friend) {
@@ -136,6 +139,7 @@ export default {
             env.QUOTA.get(gKey).then((v) => +v || 0),
           ]);
           if (gUsed >= GLOBAL_MONTHLY_LIMIT) return json({ error: "本月打烊，下月再来" }, 503);
+          // 免费档 dailyLimit=Infinity：照旧计数（看得见谁在吃额度），但这一关恒不成立
           if (dUsed >= dailyLimit)
             return json(
               { error: friend ? "今日额度用完，明天再来" : "今日免费额度用完了，明天再来（有暗号可以填在设置里）" },
