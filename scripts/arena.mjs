@@ -14,7 +14,8 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
-import { runArena, roundRobin, SAMPLING, MAX_TOKENS } from '../src/arena/arena.js';
+import { runArena, roundRobin, SAMPLING, MAX_TOKENS, pinSampling } from '../src/arena/arena.js';
+import { chat } from '../src/ai/llm.js';
 import { summarize, routingIntegrity, flavorSpread } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
@@ -77,11 +78,12 @@ for (const raw of wanted) {
   }
   let tag = tagOverride ?? null;
   let quant = null;
+  let endpoints = [];
   if (!tag) {
     try {
-      const eps = await fetchEndpoints(id, { base });
-      tag = eps[0]?.tag ?? null;
-      quant = eps[0]?.quantization ?? null;
+      endpoints = await fetchEndpoints(id, { base });
+      tag = endpoints[0]?.tag ?? null;
+      quant = endpoints[0]?.quantization ?? null;
     } catch {
       console.warn(`  ! ${id} 拉不到 endpoint 清单，本次不锁后端（方差里可能混后端差异）`);
     }
@@ -90,6 +92,7 @@ for (const raw of wanted) {
     label: id,
     price: model,
     channel: openrouterChannel({ apiKey, model: id, providerTag: tag, base }),
+    endpoints, // 体检轮换用：首选端点可能在你的数据策略下不可达
     meta: { tag, quant, thinking: thinkingNote(model) },
   });
   console.log(
@@ -100,6 +103,51 @@ for (const raw of wanted) {
   if (!model.priceKnown)
     console.warn(`    ⚠️ ${id} 价格不定，多半是路由型元模型——上擂台前想清楚：它每手可能换一个底模，数据不可比。`);
 }
+
+// ---- 参赛体检（Q91）：用**钉死的那套设置**各发一发试试 ----
+// 教训来自 2026-08-10 的冒烟：gemini-3.6-flash 的思维链强制开，我们钉的 reasoning:{enabled:false}
+// 被它直接 400 回绝——30 手全失败，沉默 bot 替它打完两场，而榜上还挂着它的"胜率 100%"。
+// 打不通就当场淘汰：**宁可少一个参赛者，也不许让沉默 bot 顶着别人的名字上榜。**
+console.log('\n参赛体检（用钉死的设置各发一发）…');
+const fit = [];
+for (const e of entrants) {
+  // 后端清单**不按账号的数据策略过滤**：`/endpoints` 列的第一个端点，
+  // 在你的账号下可能压根不可达（实测 deepseek/deepseek-v4-pro 的首选端点 404）。
+  // 所以体检兼做选端点：锁不通就换下一个，**换到通为止，但仍然锁死并记下来**。
+  const tags = [e.meta.tag, ...(e.endpoints ?? []).map((x) => x.tag)].filter(
+    (t, i, a) => t && a.indexOf(t) === i,
+  );
+  let ok = false;
+  let lastErr = null;
+  for (const tag of tags.length ? tags : [null]) {
+    const ch = { ...e.channel, providerTag: tag };
+    try {
+      await chat(pinSampling(ch), { system: '回复 ok', user: 'ok', maxTokens: 16, timeoutMs: 20_000 });
+      if (tag !== e.meta.tag)
+        console.log(`  ! ${e.label} 首选后端 ${e.meta.tag} 不可达，改锁 ${tag}`);
+      e.channel = ch;
+      e.meta.tag = tag;
+      console.log(`  ✓ ${e.label}${tag ? `（锁 ${tag}）` : '（未锁后端）'}`);
+      ok = true;
+      break;
+    } catch (err) {
+      lastErr = err?.message ?? String(err);
+    }
+  }
+  if (!ok) {
+    console.error(`  ✗ ${e.label} 打不通：${lastErr}`);
+    console.error(
+      '    → 淘汰。若是 400，多半它不接受钉死的采样参数（如思维链强制开）；' +
+        '若是 404，是所有后端在你的数据策略下都不可达（见 openrouter.ai/settings/privacy）。',
+    );
+  } else fit.push(e);
+}
+if (fit.length < 2) {
+  console.error('\n能参赛的不足 2 个，跑不成。');
+  process.exit(2);
+}
+entrants.length = 0;
+entrants.push(...fit);
 
 const pairs = roundRobin(entrants);
 const est = estimateRun({ pairs, games });
