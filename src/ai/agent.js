@@ -765,6 +765,10 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
           }
           if (decision !== null || !['timeout', 'error', 'empty', 'truncated'].includes(outcome)) break;
           firstOutcome = outcome;
+          // 限流退避：429 后立刻重发多半再吃一个 429（实测 15 试仅 1 救回）；其他瞬态短喘息；
+          // 截断重试不等——那不是路况，是盒子小了。
+          if (outcome !== 'truncated')
+            await new Promise((r) => setTimeout(r, meta.status === 429 ? 3000 + Math.random() * 4000 : 500));
         }
       }
       const silentFallback = decision === null;

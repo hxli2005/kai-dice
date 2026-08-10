@@ -40,7 +40,9 @@ export const SAMPLING = Object.freeze({
 // 真实 OpenRouter 冒烟：默认推理会把 800、1600 乃至裸 4096 全吃光。总信封统一 3072；
 // 能力层把其中至多 2048 划给推理、保留约 1024 给 JSON。若仍 length，记在我们头上。
 export const MAX_TOKENS = DECISION_MAX_TOKENS;
-export const TIMEOUT_MS = DECISION_TIMEOUT_MS; // 擂台离屏跑，不吃产品内的节拍预算
+// 擂台离屏跑，不吃产品内的节拍预算——超时给到产品档（60s）的 2.5 倍：
+// 实测 GLM 类长思考型号 p95 越过 60s（12 次超时里重试只救回一半），掐它等于替它降级。
+export const TIMEOUT_MS = 150_000;
 
 // 擂台席位：一个没有脸的座位。三个 gear 的取值都必须是"中性"的——
 // calc:'free'＝给算盘但不给算频剧本（算不算是模型自己的 tell，Q45 的原生分化）；
