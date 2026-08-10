@@ -84,19 +84,21 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget 
   const backup = createSilentBot(ARENA_SEAT.strategy);
   const rejects = { A: 0, B: 0 }; // 引擎当场打回的动作（parseDecision 之后仍不合法＝我们的 bug，不是模型的）
   let aborted = null;
-  budget?.startMatch?.();
+  // 并发时每场要一份自己的账本，否则单场上限会互相误伤（见 cost.js）
+  const bud = budget?.forMatch?.() ?? budget;
+  bud?.startMatch?.();
 
   for (let step = 0; step < maxSteps; step++) {
     const ob0 = m.observe('A');
     if (ob0.over) break;
     const p = ob0.turn;
     const ob = p === 'A' ? ob0 : m.observe(p);
-    if (budget?.exceeded?.()) {
+    if (bud?.exceeded?.()) {
       aborted = 'budget';
       break;
     }
     const d = await ai[p].decide(ob);
-    budget?.charge?.(d.meta ?? {}, seats[p].price); // 逐发记账（A4）
+    bud?.charge?.(d.meta ?? {}, seats[p].price); // 逐发记账（A4）
     try {
       await m.act(p, d.action, { elapsedMs: null }); // 不喂用时（见文件头自决）
     } catch {
@@ -143,21 +145,44 @@ export async function playMirrorPair({ seed, x, y, fetchFn, budget } = {}) {
 
 // 一批对局：pairs 里每对打 games 场（每场＝一对镜像局，故实际对局数 = games×2）。
 // onMatch 回调用于 CLI 逐场落盘与打点（跑一半断了也不至于全丢）。
-export async function runArena({ pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair } = {}) {
-  const matches = [];
-  for (const [x, y] of pairs) {
-    if (budget?.runExceeded?.()) break;
+//
+// **并发（concurrency）**：一手接一手必须串行（后手要看前手），但**场与场之间没有理由排队**——
+// 种子固定、素颜台无跨场记忆（Q90），每场彼此独立。20 场串行跑了 80 分钟，这是纯浪费。
+// ⚠️ 但并发不是白拿的：开太高会撞上游限流，而限流会以**超时/格式失败**的形式落到合规层，
+// 把"这个模型听不听话"污染成"我们打太急了"。所以默认保守，且并发数要写进战报的实验设置。
+export async function runArena({
+  pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair, concurrency = 1,
+} = {}) {
+  // 摊平成一个个独立的场（镜像的第二遍＝同种子、互换座位）
+  const jobs = [];
+  for (const [x, y] of pairs)
     for (let g = 0; g < games; g++) {
-      if (budget?.runExceeded?.()) break; // 单场触顶只收那一场，整批触顶才收摊
-      const pair = await playMirrorPair({ seed: seed0 + g, x, y, fetchFn, budget });
-      for (const r of pair) {
-        matches.push(r);
-        onMatch?.(r);
-      }
+      jobs.push({ pair: [x.label, y.label], seed: seed0 + g, seats: { A: x, B: y } });
+      jobs.push({ pair: [x.label, y.label], seed: seed0 + g, seats: { A: y, B: x } });
     }
-    onPair?.([x.label, y.label]);
-  }
-  return matches;
+
+  const out = new Array(jobs.length).fill(null);
+  const left = new Map(); // 每对还剩几场没打完 → 打完才回调 onPair
+  for (const j of jobs) left.set(j.pair.join('\u0000'), (left.get(j.pair.join('\u0000')) ?? 0) + 1);
+
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= jobs.length) return;
+      if (budget?.runExceeded?.()) return; // 整批触顶：收摊，别再开新场
+      const j = jobs[i];
+      const r = await playMatch({ seed: j.seed, seats: j.seats, fetchFn, budget });
+      out[i] = r;
+      onMatch?.(r);
+      const k = j.pair.join('\u0000');
+      const n = left.get(k) - 1;
+      left.set(k, n);
+      if (n === 0) onPair?.(j.pair);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
+  return out.filter(Boolean); // 触顶收摊时后面的槽位是空的
 }
 
 // 全对全（模型两两配对，不自己打自己）

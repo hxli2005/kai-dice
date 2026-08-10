@@ -436,3 +436,40 @@ test('污染守卫：被剔除的行不参与分化计算，且剔除要写出�
   assert.equal(sp.bluffRate.enough, false, '只剩一个干净的，不出结论');
   assert.equal(sp.bluffRate.spoiled, 1, '要说清剔了几个');
 });
+
+// ---------- 并发：场与场独立，但账不能串 ----------
+test('并发：N 场同时跑，结果不丢不重，单场上限各记各的', async () => {
+  const seen = [];
+  const pairs = [[seat('mx'), seat('my')]];
+  const budget = createBudget({ perMatchUsd: 999 }); // 不真刹车，只看账本不打架
+  const ms = await runArena({
+    pairs, games: 4, seed0: 500, budget, concurrency: 4,
+    fetchFn: fakeChannel({ seen }),
+  });
+  assert.equal(ms.length, 8, '4 组镜像 = 8 场，一场都不许丢');
+  // 镜像成对：每个种子恰好两场，且座位互换
+  const bySeed = new Map();
+  for (const m of ms) bySeed.set(m.seed, [...(bySeed.get(m.seed) ?? []), m]);
+  assert.equal(bySeed.size, 4);
+  for (const [, two] of bySeed) {
+    assert.equal(two.length, 2);
+    assert.deepEqual(
+      [two[0].seats.A, two[0].seats.B].sort(),
+      [two[1].seats.A, two[1].seats.B].sort(),
+    );
+    assert.notEqual(two[0].seats.A, two[1].seats.A, '第二遍必须换座');
+  }
+});
+
+test('并发：单场上限只收那一场，不误伤同时在跑的别场', async () => {
+  // 每场自己一份账本——共享 matchSpent 的话，A 场的花费会把 B 场也刹停
+  const b = createBudget({ perMatchUsd: 1 });
+  const one = b.forMatch();
+  const two = b.forMatch();
+  one.startMatch();
+  two.startMatch();
+  one.charge({ cost: 5 }, null); // 把第一场干爆
+  assert.equal(one.exceeded(), true, '第一场该刹');
+  assert.equal(two.exceeded(), false, '第二场不该被连累');
+  assert.equal(b.spent(), 5, '整批的账仍然是共用的');
+});

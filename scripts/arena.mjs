@@ -38,6 +38,9 @@ const seed0 = +(flag('seed', 1000) || 1000);
 const outDir = flag('out', 'docs/arena');
 const capUsd = flag('cap') ? +flag('cap') : null;
 const perMatchUsd = flag('per-match') ? +flag('per-match') : null;
+// 并发跑场（场与场独立）。**保守默认**：开太高会撞上游限流，而限流会以超时/格式失败
+// 的形式落到合规层，把"这个模型听不听话"污染成"我们打太急了"。
+const concurrency = Math.max(1, +(flag('concurrency', 4) || 4));
 
 const base = process.env.OPENROUTER_BASE ?? OPENROUTER_BASE; // 本地假服务器可覆盖（集成自测用）
 
@@ -152,7 +155,8 @@ entrants.push(...fit);
 const pairs = roundRobin(entrants);
 const est = estimateRun({ pairs, games });
 console.log(
-  `\n预估：${pairs.length} 对 × ${games} 组镜像 = ${est.matches} 场 / ${est.calls} 次调用　**约 $${est.usd}**（${est.note}）`,
+  `\n预估：${pairs.length} 对 × ${games} 组镜像 = ${est.matches} 场 / ${est.calls} 次调用　**约 $${est.usd}**（${est.note}）` +
+    `\n并发 ${concurrency} 场（--concurrency 可改；开太高会把上游限流拍进合规层）`,
 );
 if (capUsd) console.log(`整批上限 $${capUsd}${perMatchUsd ? `　单场上限 $${perMatchUsd}` : ''}`);
 if (!has('yes')) {
@@ -167,6 +171,7 @@ const matches = await runArena({
   games,
   seed0,
   budget,
+  concurrency,
   onMatch: (m) => {
     done += 1;
     const line =
@@ -187,7 +192,7 @@ const spread = flavorSpread(rows);
 const cache = cacheReport(rows);
 const at = new Date().toISOString().slice(0, 16).replace('T', ' ');
 const board = renderBoard(rows, {
-  run: { seed0, games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS },
+  run: { seed0, games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency },
   integrity,
   cache,
   spread,
@@ -219,7 +224,7 @@ writeFileSync(
     {
       at,
       entrants: entrants.map((e) => ({ label: e.label, ...e.meta })),
-      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, handEstimate: HAND_ESTIMATE },
+      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, handEstimate: HAND_ESTIMATE },
       estimate: est,
       spent: budget.spent(),
       integrity,

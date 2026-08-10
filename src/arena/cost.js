@@ -66,28 +66,46 @@ export function estimateRun({ pairs, games = 5, opts = HAND_ESTIMATE } = {}) {
 // **单场触顶只收这一场**（下一场 startMatch 自动解除），**整批触顶收全场**。
 export function createBudget({ capUsd = null, perMatchUsd = null } = {}) {
   let spent = 0;
-  let matchSpent = 0;
   let runStop = null;
-  let matchStop = null;
-  return {
-    startMatch() {
-      matchSpent = 0;
-      matchStop = null;
-    },
-    charge(meta, price) {
-      const c = callCost(meta, price);
-      spent += c;
-      matchSpent += c;
-      if (capUsd != null && spent >= capUsd) runStop = `整批上限 $${capUsd} 已用尽（实花 $${spent.toFixed(4)}）`;
-      if (perMatchUsd != null && matchSpent >= perMatchUsd) matchStop = `单场上限 $${perMatchUsd} 触顶`;
-      return c;
-    },
-    exceeded: () => runStop != null || matchStop != null,
-    runExceeded: () => runStop != null,
-    reason: () => runStop ?? matchStop,
-    spent: () => +spent.toFixed(4),
-    matchSpent: () => +matchSpent.toFixed(4),
+
+  // 整批的账是共用的；**单场的账必须各记各的**——并发跑的时候，
+  // 一个共享的 matchSpent 会让 A 场的花费触发 B 场的单场刹车（或反过来漏刹）。
+  const chargeRun = (meta, price) => {
+    const c = callCost(meta, price);
+    spent += c;
+    if (capUsd != null && spent >= capUsd) runStop = `整批上限 $${capUsd} 已用尽（实花 $${spent.toFixed(4)}）`;
+    return c;
   };
+  const shared = {
+    runExceeded: () => runStop != null,
+    spent: () => +spent.toFixed(4),
+  };
+
+  // 一场一份账本：playMatch 拿到的是这个，不是全局的那个
+  const forMatch = () => {
+    let matchSpent = 0;
+    let matchStop = null;
+    return {
+      ...shared,
+      forMatch,
+      startMatch() {
+        matchSpent = 0;
+        matchStop = null;
+      },
+      charge(meta, price) {
+        const c = chargeRun(meta, price);
+        matchSpent += c;
+        if (perMatchUsd != null && matchSpent >= perMatchUsd) matchStop = `单场上限 $${perMatchUsd} 触顶`;
+        return c;
+      },
+      exceeded: () => runStop != null || matchStop != null,
+      reason: () => runStop ?? matchStop,
+      matchSpent: () => +matchSpent.toFixed(4),
+    };
+  };
+
+  // 顶层对象自己也是一份账本（串行调用方照旧能用）
+  return { ...forMatch(), reason: () => runStop ?? null };
 }
 
 // 缓存验收（Q53 的坑）：**可缓存的最小前缀是分档的**（各家不同，短前缀会静默失效）。
