@@ -202,6 +202,7 @@ const ownActDesc = (a, ob) => {
   if (a?.type === 'declare') return `宣言了「${DECL[a.declaration] ?? a.declaration}」`;
   if (a?.type === 'bid') return `报了 ${a.count} 个 ${a.face}`;
   if (a?.type === 'peek') return '掀盅看了骰';
+  if (a?.type === 'challenge') return '开了牌'; // 只出现在跨局回灌（开牌终结一局）
   if (a?.type === 'calc') return '当众拨了算盘（这局你手上有准数了）';
   if (!a?.type) return '（无动作）';
   const meta = modActionMeta(ob, a.type);
@@ -267,7 +268,13 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
   const canBid = legalActions.some((a) => a.type === 'bid');
   const faces = ob.zhai ? [1, 2, 3, 4, 5, 6] : [2, 3, 4, 5, 6];
   const memory = normalizedMemory(profile, ctx.hypotheses ?? []);
-  memory.currentRoundSelf = clone(ctx.ownLog ?? []);
+  // 自我留档跨局回灌：本局逐条全量；前几局只留有私有内容的条目（动作本身在公开历史里）。
+  // 心理线（诈的计划、对对手的判断）因此跨局连续——长局（打到剩一两颗骰）的记忆支撑。
+  const own = clone(ctx.ownLog ?? []);
+  memory.currentRoundSelf = own.filter((l) => l.round == null || l.round === ob.round);
+  memory.pastRoundsSelf = own.filter(
+    (l) => l.round != null && l.round !== ob.round && (l.say || l.belief || l.note),
+  );
   return {
     schemaVersion: 2,
     stateId: stateIdOf(ob, ctx),
@@ -413,6 +420,18 @@ function serializeMemory(payload) {
   if (m.subjectiveNotes?.length) lines.push(`主观笔记：${m.subjectiveNotes.map((x) => clean(typeof x === 'string' ? x : x.text, 300)).join('；')}`);
   if (m.hypotheses?.length)
     lines.push(`主观假设：${m.hypotheses.map((h) => `「${clean(h.text, 160)}」（自记证据${h.hits ?? 0}${h.misses?.length ? `，反例${h.misses.map((x) => clean(x, 80)).join('、')}` : ''}）`).join('；')}`);
+  if (m.pastRoundsSelf?.length) {
+    const byRound = new Map();
+    for (const l of m.pastRoundsSelf) {
+      if (!byRound.has(l.round)) byRound.set(l.round, []);
+      byRound.get(l.round).push(l);
+    }
+    lines.push(`前几局自我留档：${[...byRound.entries()].map(([r, ls]) =>
+      `第${r}局：${ls.map((l) =>
+        `${ownActDesc(l.action, { mods: payload.current.mods })}${l.say ? `，说「${clean(l.say, 80)}」` : ''}${l.belief ? `，判断「${clean(l.belief, 120)}」` : ''}${l.note ? `，记录「${clean(l.note, 100)}」` : ''}${l.speechMode === 'bait' ? '（那句是有意误导）' : ''}`,
+      ).join('；')}`,
+    ).join('｜')}`);
+  }
   if (m.currentRoundSelf?.length)
     lines.push(`本局自我留档：${m.currentRoundSelf.map((l) =>
       `${ownActDesc(l.action, { mods: payload.current.mods })}${l.say ? `；当时说「${clean(l.say, 200)}」` : ''}${l.belief ? `；当时判断「${clean(l.belief, 400)}」` : ''}${l.note ? `；当时记录「${clean(l.note, 300)}」` : ''}${l.speechMode === 'bait' ? '；当时标记为有意误导' : ''}${l.reaction ? `；当时对反驳的反应${l.reaction}` : ''}`,
@@ -578,6 +597,15 @@ export async function personaLine(channel, { persona, task, facts }, fetchFn) {
   }
 }
 
+// 假设槽位的通用裁剪（reflect／settleVerdict／擂台系列赛共用）：最多 4 条、文本 120 字、反例 3 条
+export const clipHypotheses = (arr) =>
+  Array.isArray(arr)
+    ? arr
+        .slice(0, 4)
+        .map((h) => ({ text: String(h.text ?? '').slice(0, 120), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+        .filter((h) => h.text)
+    : null;
+
 // 被打脸即时反思（§3.3 复盘学习触发①）：开错或被反杀的局，当场修订规律假设。
 // 输入全部为已公开信息（开牌即公开，合宪）。失败返回 null（假设不动）。
 export async function reflect(channel, { persona, factText, hypotheses = [] }, fetchFn) {
@@ -602,11 +630,7 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
       fetchFn,
     );
     const j = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
-    if (!Array.isArray(j.hypotheses)) return null;
-    return j.hypotheses
-      .slice(0, 4)
-      .map((h) => ({ text: String(h.text ?? '').slice(0, 120), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
-      .filter((h) => h.text); // Q49：他的本子是他的场合，假设错得离谱也是他的一部分
+    return clipHypotheses(j.hypotheses); // Q49：他的本子是他的场合，假设错得离谱也是他的一部分
   } catch {
     return null;
   }
@@ -640,12 +664,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
     return {
       verdict: j.verdict.slice(0, 300) || null,
       note: (j.note ?? '').slice(0, 200),
-      hypotheses: Array.isArray(j.hypotheses)
-        ? j.hypotheses
-            .slice(0, 4)
-            .map((h) => ({ text: String(h.text ?? '').slice(0, 120), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
-            .filter((h) => h.text)
-        : null,
+      hypotheses: clipHypotheses(j.hypotheses),
     };
   } catch {
     return null;
@@ -674,11 +693,13 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 提示词拼装也进降级链：任何异常都不许把桌子冻住，最多退成沉默 bot
       let prompts = null;
       try {
-        // 自我记忆回灌：同一局里自己的动作/台词/心思喂回下一手——每手独立调用天然失忆，
-        // 宣言（keepTurn）把一个心理动作拆成两次调用，不回灌就会"说斋两个6、报出两个3"
+        // 自我记忆回灌：自己的动作/台词/心思喂回下一手——每手独立调用天然失忆，
+        // 宣言（keepTurn）把一个心理动作拆成两次调用，不回灌就会"说斋两个6、报出两个3"。
+        // 跨局也回灌（带局号，呈现时前几局压缩）：诈的伏笔与对对手的判断跨局连续。
         const ownLog = logs
-          .filter((l) => l.round === ob.round && !l.silentFallback)
+          .filter((l) => !l.silentFallback)
           .map((l) => ({
+            round: l.round,
             action: l.action,
             say: l.say,
             note: l.note,
@@ -697,34 +718,43 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       let raw = null;
       let error = null;
       let outcome = 'silent'; // 合规层归因（A3）：这一发到底怎么了
-      const meta = {}; // 用量/费用/后端/耗时回填（A4 成本护栏；也是 A2 供应商锁的验尺）
+      let meta = {}; // 用量/费用/后端/耗时回填（A4 成本护栏；也是 A2 供应商锁的验尺）
+      let firstOutcome = null; // 瞬态重试后保留首发归因（审计不丢原始事实）
       if (ch) {
-        try {
-          // 不禁用模型原生推理；为通用型号留出完整思考与 JSON 落地的信封，
-          // 已知需要更大信封的型号由 persona.gear 只调技术上限。
-          raw = await chat(
-            ch,
-            {
-              ...prompts,
-              maxTokens: persona.gear?.maxTokens ?? DECISION_MAX_TOKENS,
-              timeoutMs: persona.gear?.timeoutMs ?? DECISION_TIMEOUT_MS,
-              extra:
-                persona.gear?.extra || ch.decisionExtra
-                  ? { ...persona.gear?.extra, ...ch.decisionExtra }
-                  : undefined,
-              meta,
-            },
-            fetchFn,
-          );
-          decision = parseDecision(raw, ob);
-          outcome = classifyOutput(raw, ob);
-          // 被 max_tokens 截断 ≠ 它不守契约。finish_reason=length 时另立类目，
-          // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
-          if (decision === null && meta.finish === 'length') outcome = 'truncated';
-          if (decision === null) error = 'bad-output';
-        } catch (e) {
-          error = e?.message ?? 'unknown';
-          outcome = meta.finish === 'length' ? 'truncated' : /abort/i.test(error) ? 'timeout' : 'error';
+        // 瞬态传输失败（超时/网络/空响应）重试一次（G6 最小实现：最戏剧的一手不无谓降级）。
+        // 模型侧的合规失败（no-json/bad-json/illegal/refusal/truncated）不重试——那是被测项，不是路况。
+        for (let attempt = 0; attempt < 2; attempt++) {
+          meta = {};
+          error = null;
+          try {
+            // 不禁用模型原生推理；为通用型号留出完整思考与 JSON 落地的信封，
+            // 已知需要更大信封的型号由 persona.gear 只调技术上限。
+            raw = await chat(
+              ch,
+              {
+                ...prompts,
+                maxTokens: persona.gear?.maxTokens ?? DECISION_MAX_TOKENS,
+                timeoutMs: persona.gear?.timeoutMs ?? DECISION_TIMEOUT_MS,
+                extra:
+                  persona.gear?.extra || ch.decisionExtra
+                    ? { ...persona.gear?.extra, ...ch.decisionExtra }
+                    : undefined,
+                meta,
+              },
+              fetchFn,
+            );
+            decision = parseDecision(raw, ob);
+            outcome = classifyOutput(raw, ob);
+            // 被 max_tokens 截断 ≠ 它不守契约。finish_reason=length 时另立类目，
+            // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
+            if (decision === null && meta.finish === 'length') outcome = 'truncated';
+            if (decision === null) error = 'bad-output';
+          } catch (e) {
+            error = e?.message ?? 'unknown';
+            outcome = meta.finish === 'length' ? 'truncated' : /abort/i.test(error) ? 'timeout' : 'error';
+          }
+          if (decision !== null || !['timeout', 'error', 'empty'].includes(outcome)) break;
+          firstOutcome = outcome;
         }
       }
       const silentFallback = decision === null;
@@ -734,8 +764,9 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
       // 都是这个对手的活性，不是故障（判据交给盲测玩家："它在玩我" vs "模型又胡说"）。
       // 系统场合（结算/报告数据面/档案客观层/表盘）另有把关：那些数字根本不经过他的嘴，
       // 由引擎盖章渲染——错了才是 bug（见 test/factcheck.test.js 的数据面回归）。
-      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, observedStateId, silentFallback, error, outcome, meta });
-      return { ...decision, observedStateId, silentFallback, error, outcome, meta };
+      const retried = firstOutcome ? { retried: true, firstOutcome } : {};
+      logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, observedStateId, silentFallback, error, outcome, meta, ...retried });
+      return { ...decision, observedStateId, silentFallback, error, outcome, meta, ...retried };
     },
   };
 }

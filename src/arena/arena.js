@@ -16,12 +16,15 @@
 //     那是模型速度不是性格——延迟另记在 latencyMs 里，不许进牌桌叙事污染读心。
 //   · **每场独立、无跨场档案**：v1 只测行为分化，跨场记忆会带来顺序效应。
 //     档案槽位仍在（提示词里是"生面孔"），不是把接口拆了。
+//     素颜默认不变；`playSeries`（文件尾）是另一条**记忆赛道**（Q90 的联赛方向），两本账不混流。
 
 import { createMatch } from '../engine.js';
-import { createOpponent } from '../ai/agent.js';
+import { createOpponent, clipHypotheses } from '../ai/agent.js';
 import { createSilentBot } from '../ai/silent.js';
+import { chat } from '../ai/llm.js';
 import { isOpenRouter, providerLock } from '../ai/openrouter.js';
 import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS } from '../ai/personas.js';
+import { seatStats } from './metrics.js';
 
 // 钉死的采样参数（纪律③）。**这不是调参，是钉子**：改了它，跨批次的数就不能比了。
 // max_tokens 单独走 gear（chat 的 maxTokens 参数），别在这儿重复下发。
@@ -77,7 +80,7 @@ export function pinSampling(channel) {
 
 // 一场：两个 AI 客户端坐同一张引擎桌（§4 结构红利——引擎不知道对面是谁）。
 // seats: {A:{channel,label}, B:{channel,label}}；budget 可选（A4：跑爆就当场收手）
-export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget, relaySpeech = true } = {}) {
+export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget, relaySpeech = true, memory = null } = {}) {
   const ids = ['A', 'B'];
   const m = await createMatch({ seed, config: { players: ids } });
   // 让它们互相听得见（2026-08-10 修）。此前擂台没传 ctx，两个模型从头到尾收不到对方一个字——
@@ -90,7 +93,7 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
   for (const id of ids)
     ai[id] = createOpponent({
       channel: pinSampling(seats[id].channel),
-      profile: '',
+      profile: memory?.[id] ?? '', // 素颜＝''（生面孔）；记忆赛道由 playSeries 递进来
       persona: ARENA_SEAT,
       ctx: relaySpeech ? { dialogue: dialogue[id] } : {},
       fetchFn,
@@ -208,3 +211,106 @@ export async function runArena({
 // 全对全（模型两两配对，不自己打自己）
 export const roundRobin = (entrants) =>
   entrants.flatMap((x, i) => entrants.slice(i + 1).map((y) => [x, y]));
+
+// ==================== 记忆赛道（Q90 的另一条轨：联赛/夜场方向） ====================
+//
+// 三局两胜式系列赛：同一对模型连打多场，场间各自带走两样东西——
+//   ① **裁判层系列事实**（比分与上一场引擎侧统计，程序算的，错即 bug）；
+//   ② **自己的主观假设**（场间一次蒸馏调用；蒸馏失败原样带旧假设，不阻塞系列）。
+// 提示词机制零新增：两样都走既有的【档案】分区（核验统计＋主观假设），全席 system 仍逐字相同。
+//
+// ⚠️ 纪律（Q90 两本账不混流）：有记忆＝顺序效应。系列赛的数字**不可**进素颜榜、
+// 不可作统计断言——它回答的是"当宿敌分不分得开"，是内容不是实验。
+
+// 一场的裁判层小结（从事件流复算，不问模型）——系列档案与场间反思共用
+export function seriesGameFact(match, seat, index) {
+  const opp = seat === 'A' ? 'B' : 'A';
+  const st = seatStats(match, seat);
+  const so = seatStats(match, opp);
+  const res = match.winner == null ? '未终局' : match.winner === seat ? '你胜' : '你负';
+  return (
+    `第${index + 1}场${res}（${st.rounds}局）：你开牌${st.myChallenges}次中${st.myChallengeHits}次；` +
+    `对手开牌${so.myChallenges}次中${so.myChallengeHits}次；对手看骰后报价${so.seenBids}口、其中虚报${so.myBluffs}口；` +
+    `对手拨算盘${so.myCalcs}次、宣盲${so.myBlinds}次、扳抬${so.myRaises}次`
+  );
+}
+
+// 场间蒸馏：把这场的裁判层事实＋自己的留档收敛成对对手的假设（一次调用，失败返回 null）。
+// Q86 口径：system 只有任务与 schema，不教它怎么读、不催它记仇。
+export async function seriesReflect(channel, { ownLog = [], factText, hypotheses = [], price, budget } = {}, fetchFn) {
+  const said = ownLog
+    .filter((l) => !l.auto && !l.silentFallback && (l.say || l.belief))
+    .slice(-12)
+    .map((l) => `第${l.round}局${l.say ? `说「${l.say}」` : ''}${l.belief ? `（当时判断「${l.belief}」）` : ''}`)
+    .join('；');
+  const meta = {};
+  try {
+    const raw = await chat(
+      channel,
+      {
+        system:
+          '系列赛两场之间，你在整理对同一个对手的判断。只依据给你的事实与留档。' +
+          '严格输出一行 JSON：{"hypotheses":[{"text":"一句关于对手的假设","hits":证据次数,"misses":["反例"]}]}，最多 4 条。',
+        user: `刚打完的一场：${factText}
+你本场的留档：${said || '（无）'}
+你既有的假设：${
+          hypotheses.length
+            ? hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}${h.misses?.length ? `，反例：${h.misses.join('、')}` : ''}）`).join('；')
+            : '（还没有）'
+        }`,
+        maxTokens: MAX_TOKENS,
+        timeoutMs: TIMEOUT_MS,
+        meta,
+      },
+      fetchFn,
+    );
+    budget?.charge?.(meta, price);
+    return clipHypotheses(JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).hypotheses);
+  } catch {
+    budget?.charge?.(meta, price);
+    return null;
+  }
+}
+
+// 系列赛主循环：先到 need 胜为止（最多 bestOf 场）。每场换骰种（seed0+g），座位不换——
+// 换座会把"记忆里的对手"换成另一副骰运，先手差留给镜像系列（调用方跑两个方向）。
+export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true } = {}) {
+  const need = (bestOf >> 1) + 1;
+  const ids = ['A', 'B'];
+  const wins = { A: 0, B: 0 };
+  const hypotheses = { A: [], B: [] };
+  const games = [];
+  const trail = { A: [], B: [] }; // 每场之后的假设快照——"它学到了什么"的观察窗
+  const bud = budget?.forMatch?.() ?? budget;
+  while (games.length < bestOf && wins.A < need && wins.B < need && !bud?.runExceeded?.()) {
+    const g = games.length;
+    const memory = {};
+    for (const id of ids) {
+      const opp = id === 'A' ? 'B' : 'A';
+      memory[id] = {
+        verified: [
+          `系列赛（${bestOf}场${need}胜，同一对手连打）：当前比分 你${wins[id]}胜、对手${wins[opp]}胜，即将开第${g + 1}场`,
+          ...games.map((r, i) => seriesGameFact(r, id, i)),
+        ],
+        subjective: { notes: [], hypotheses: hypotheses[id] },
+      };
+    }
+    const r = await playMatch({ seed: seed0 + g, seats, fetchFn, budget, relaySpeech, memory });
+    games.push(r);
+    if (r.winner) wins[r.winner] += 1;
+    if (r.aborted) break;
+    if (!(games.length < bestOf && wins.A < need && wins.B < need)) break; // 没有下一场就不必反思
+    bud?.startMatch?.();
+    for (const id of ids) {
+      const next = await seriesReflect(
+        pinSampling(seats[id].channel),
+        { ownLog: r.logs[id], factText: seriesGameFact(r, id, g), hypotheses: hypotheses[id], price: seats[id].price, budget: bud },
+        fetchFn,
+      );
+      if (next) hypotheses[id] = next;
+      trail[id].push(structuredClone(hypotheses[id]));
+    }
+  }
+  const winner = wins.A >= need ? 'A' : wins.B >= need ? 'B' : null;
+  return { bestOf, seed0, seats: { A: seats.A.label, B: seats.B.label }, games, wins: { ...wins }, winner, hypothesesTrail: trail };
+}

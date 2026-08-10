@@ -236,6 +236,91 @@ test('自我记忆回灌：同局自己的宣言/台词/心思进下一手提示
   assert.ok(!system.includes('say 必须贴着'), 'Q86：嘴手一致条款已删');
 });
 
+test('跨局自我留档：前几局的台词与判断压缩回灌，本局照旧全量，无私有内容的旧条目不回灌', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  await m.act('B', { type: 'challenge' }); // 第 1 局收束，进第 2 局
+  const ob = m.observe('B');
+  assert.equal(ob.round, 2);
+  const { user } = buildPrompts(ob, '', undefined, {
+    ownLog: [
+      { round: 1, action: { type: 'bid', count: 2, face: 4 }, say: '两个4。', belief: '虚的，试探他', speechMode: 'bait' },
+      { round: 1, action: { type: 'peek' } }, // 无 say/belief/note → 不回灌（动作已在公开历史）
+      { round: 2, action: { type: 'calc' }, note: '这局先算' },
+    ],
+  });
+  assert.ok(user.includes('前几局自我留档：第1局：报了 2 个 4，说「两个4。」，判断「虚的，试探他」（那句是有意误导）'), user);
+  assert.ok(!user.includes('第1局：掀盅看了骰'), '无私有内容的旧条目不回灌');
+  assert.ok(user.includes('本局自我留档：当众拨了算盘'), '本局条目照旧全量格式');
+  assert.ok(user.includes('当时记录「这局先算」'));
+});
+
+test('createOpponent：跨局回灌走真实决策日志——第 2 局的提示词里带着第 1 局的心思', async () => {
+  const m = await createMatch({ seed: 5 });
+  const prompts = [];
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    fetchFn: mockFetch((url, h, body) => {
+      prompts.push(body.messages[1].content);
+      const u = body.messages[1].content;
+      const raw = /掀盅看骰/.test(u)
+        ? '{"action":{"type":"peek"},"say":"","belief":""}'
+        : /开牌（\{"type":"challenge"\}）/.test(u)
+          ? '{"action":{"type":"challenge"},"say":"开。","belief":"第1局我诈了他"}'
+          : '{"action":{"type":"bid","count":2,"face":4},"say":"两个4。","belief":"虚报钓他"}';
+      return { choices: [{ message: { content: raw } }] };
+    }),
+  });
+  // 第 1 局：B 先看骰，A 报价，B 开牌收束
+  await m.act('A', { type: 'peek' });
+  let d = await ai.decide(m.observe('B')); // peek
+  await m.act('B', d.action);
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  d = await ai.decide(m.observe('B')); // challenge，第 1 局结束
+  await m.act('B', d.action);
+  assert.equal(m.observe('B').round, 2);
+  // 第 2 局第一手：提示词应携带第 1 局的 belief
+  await ai.decide(m.observe('B'));
+  assert.ok(prompts.at(-1).includes('前几局自我留档：第1局：开了牌，说「开。」，判断「第1局我诈了他」'), prompts.at(-1).slice(-600));
+});
+
+test('瞬态失败重试一次：网络错误后第二发成功不落沉默 bot；格式失败是被测项，不重试', async () => {
+  const m = await createMatch({ seed: 9 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  await m.act('B', { type: 'peek' });
+  let calls = 0;
+  const flaky = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    fetchFn: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('network down');
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"开。"}' } }] }) };
+    },
+  });
+  const d = await flaky.decide(m.observe('B'));
+  assert.equal(calls, 2);
+  assert.equal(d.action.type, 'challenge');
+  assert.equal(d.silentFallback, false);
+  assert.equal(d.retried, true);
+  assert.equal(d.firstOutcome, 'error');
+
+  let gcalls = 0;
+  const garbage = createOpponent({
+    channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
+    fetchFn: mockFetch(() => {
+      gcalls += 1;
+      return { choices: [{ message: { content: '???' } }] };
+    }),
+  });
+  const d2 = await garbage.decide(m.observe('B'));
+  assert.equal(gcalls, 1, '格式失败（no-json）不重试——那是合规层的被测项');
+  assert.equal(d2.silentFallback, true);
+  assert.equal(d2.retried, undefined);
+});
+
 test('createOpponent：决策日志自动回灌——第二手调用的提示词含第一手的台词', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'bid', count: 2, face: 4 });

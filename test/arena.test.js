@@ -14,6 +14,7 @@ import {
   pinSampling,
   playMatch,
   playMirrorPair,
+  playSeries,
   runArena,
   roundRobin,
 } from '../src/arena/arena.js';
@@ -611,4 +612,83 @@ test('推理吃完整个信封、正文为空时也归因 truncated，不算网�
   assert.equal(d.outcome, 'truncated');
   assert.equal(d.silentFallback, true);
   assert.equal(d.meta.finish, 'length');
+});
+
+// ---------- 记忆赛道（Q90 联赛方向）：系列赛跨场携带比分与假设，与素颜两本账不混流 ----------
+test('playSeries：先到两胜即止；第二场提示词携带系列比分、上场裁判层小结与蒸馏假设', async () => {
+  const decisionUsers = [];
+  const reflectUsers = [];
+  const sysOf = (msg) => (Array.isArray(msg.content) ? msg.content.map((c) => c.text).join('') : msg.content);
+  const fetchFn = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const system = sysOf(body.messages[0]);
+    const user = body.messages[1].content;
+    if (system.includes('系列赛两场之间')) {
+      reflectUsers.push(user);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: '{"hypotheses":[{"text":"他冲动，报价一深就开","hits":1}]}' } }],
+          usage: { prompt_tokens: 500, completion_tokens: 40 },
+        }),
+      };
+    }
+    decisionUsers.push(user);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(fakeDecide(user)) } }],
+        usage: { prompt_tokens: 1000, completion_tokens: 60 },
+      }),
+    };
+  };
+  const seats = {
+    A: { label: 'x', channel: openrouterChannel({ apiKey: 'k', model: 'x', providerTag: 'p/fp8' }), price: {} },
+    B: { label: 'y', channel: openrouterChannel({ apiKey: 'k', model: 'y', providerTag: 'p/fp8' }), price: {} },
+  };
+  const s = await playSeries({ seed0: 42, bestOf: 3, seats, fetchFn });
+  // 系列结构：有人拿满 2 胜，场数介于 2 和 3
+  assert.ok(s.winner, '假模型对打必然分出胜负');
+  assert.equal(s.wins[s.winner], 2);
+  assert.ok(s.games.length >= 2 && s.games.length <= 3, `场数 ${s.games.length}`);
+  assert.equal(s.games.length, s.wins.A + s.wins.B);
+  // 第一场就知道自己在打系列赛（框架是数据），但没有过往场次、没有假设
+  assert.ok(decisionUsers[0].includes('即将开第1场'), '首场带系列框架');
+  assert.ok(!/第1场(你胜|你负)/.test(decisionUsers[0]), '首场没有过往战绩');
+  assert.ok(!decisionUsers[0].includes('主观假设'), '首场没有假设');
+  // 第二场起：比分、上场小结、蒸馏假设全部进档案分区
+  const second = decisionUsers.find((u) => u.includes('即将开第2场'));
+  assert.ok(second, '第二场提示词должен携带系列比分');
+  assert.match(second, /系列赛（3场2胜，同一对手连打）/);
+  assert.match(second, /第1场(你胜|你负)（\d+局）：你开牌\d+次中\d+次/);
+  assert.ok(second.includes('他冲动，报价一深就开'), '蒸馏出的假设进第二场档案');
+  // 蒸馏调用拿到的是裁判层小结＋自己的留档
+  assert.ok(reflectUsers[0].includes('刚打完的一场：第1场'));
+  assert.ok(reflectUsers[0].includes('你既有的假设：（还没有）'));
+  // 假设演化留痕（每个座位每个场间一格）
+  assert.equal(s.hypothesesTrail.A.length, s.games.length - 1);
+  assert.deepEqual(s.hypothesesTrail.A[0][0].text, '他冲动，报价一深就开');
+});
+
+test('playSeries：胜负 2–0 提前收场，不打第三场也不再蒸馏', async () => {
+  // 让 A 席稳定更准：A 用 aggressive（会算），B 一律不算——沉默 bot 都不用，全走假模型
+  const fetchFn = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const sys = body.messages[0].content;
+    if ((Array.isArray(sys) ? sys.map((c) => c.text).join('') : sys).includes('系列赛两场之间'))
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"hypotheses":[]}' } }] }) };
+    const user = body.messages[1].content;
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(fakeDecide(user)) } }] }) };
+  };
+  const seats = {
+    A: { label: 'x', channel: openrouterChannel({ apiKey: 'k', model: 'x', providerTag: 'p/fp8' }), price: {} },
+    B: { label: 'y', channel: openrouterChannel({ apiKey: 'k', model: 'y', providerTag: 'p/fp8' }), price: {} },
+  };
+  const s = await playSeries({ seed0: 7, bestOf: 3, seats, fetchFn });
+  if (s.wins[s.winner] === 2 && s.games.length === 2) {
+    assert.equal(s.hypothesesTrail.A.length, 1, '2–0 只有一次场间蒸馏');
+  }
+  assert.ok(s.games.length <= 3);
 });

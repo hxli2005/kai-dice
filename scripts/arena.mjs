@@ -14,7 +14,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
-import { runArena, roundRobin, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
+import { runArena, roundRobin, playSeries, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
 import { chat } from '../src/ai/llm.js';
 import { summarize, routingIntegrity, flavorSpread } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
@@ -48,6 +48,9 @@ const perMatchUsd = flag('per-match') ? +flag('per-match') : null;
 const concurrency = Math.max(1, +(flag('concurrency', 4) || 4));
 // 对照臂：--no-relay 关掉「把对家台词转发进提示词」，其余全同
 const relaySpeech = !has('no-relay');
+// 记忆赛道（Q90 联赛方向）：--bestof N＝每对打两个方向的 N 场 M 胜系列赛，
+// 场间携带比分、裁判层小结与蒸馏假设。⚠️ 有记忆＝顺序效应，产出不与素颜批次比较。
+const bestOf = flag('bestof') ? Math.max(1, Math.floor(+flag('bestof'))) : null;
 
 const base = process.env.OPENROUTER_BASE ?? OPENROUTER_BASE; // 本地假服务器可覆盖（集成自测用）
 
@@ -171,10 +174,12 @@ entrants.length = 0;
 entrants.push(...fit);
 
 const pairs = roundRobin(entrants);
-const est = estimateRun({ pairs, games });
+const est = estimateRun({ pairs, games: bestOf ?? games });
 console.log(
-  `\n预估：${pairs.length} 对 × ${games} 组镜像 = ${est.matches} 场 / ${est.calls} 次调用　**约 $${est.usd}**（${est.note}）` +
-    `\n并发 ${concurrency} 场（--concurrency 可改；开太高会把上游限流拍进合规层）`,
+  bestOf
+    ? `\n预估（记忆赛道上界）：${pairs.length} 对 × 双向 × 至多 ${bestOf} 场 = ≤${est.matches} 场 / ≤${est.calls} 次调用　**约 $${est.usd}**（${est.note}；提前分出胜负会少打）`
+    : `\n预估：${pairs.length} 对 × ${games} 组镜像 = ${est.matches} 场 / ${est.calls} 次调用　**约 $${est.usd}**（${est.note}）` +
+        `\n并发 ${concurrency} 场（--concurrency 可改；开太高会把上游限流拍进合规层）`,
 );
 if (capUsd) console.log(`整批上限 $${capUsd}${perMatchUsd ? `　单场上限 $${perMatchUsd}` : ''}`);
 if (!has('yes')) {
@@ -184,24 +189,48 @@ if (!has('yes')) {
 
 const budget = createBudget({ capUsd, perMatchUsd });
 let done = 0;
-const matches = await runArena({
-  pairs,
-  games,
-  seed0,
-  budget,
-  concurrency,
-  relaySpeech,
-  onMatch: (m) => {
-    done += 1;
-    const line =
-      `跑完 ${done}/${est.matches} 场　实花 $${budget.spent()}　` +
-      `${m.aborted ? `[中断:${m.aborted}] ` : ''}${m.seats.A} vs ${m.seats.B} → ${m.seats[m.winner] ?? '未终局'}`;
-    // TTY 上原地刷新好看；**管道里必须换行**——否则 node 会把 \r 全缓冲住，
-    // 跑一个小时输出文件还是 0 字节，只能靠查账单反推进度（2026-08-10 实测踩过）。
-    if (process.stdout.isTTY) process.stdout.write(`\r${line}   `);
-    else console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
-  },
-});
+let matches;
+let seriesResults = null;
+if (bestOf) {
+  console.log(`\n记忆赛道开跑：系列赛内跨场携带比分与假设（产出不作统计断言、不与素颜批次比较——Q90）。`);
+  const jobs = pairs.flatMap(([x, y]) => [{ A: x, B: y }, { A: y, B: x }]); // 双向＝先手差各吃一遍
+  const out = new Array(jobs.length).fill(null);
+  let nextJob = 0;
+  const worker = async () => {
+    while (true) {
+      const i = nextJob++;
+      if (i >= jobs.length || budget.runExceeded()) return;
+      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech });
+      out[i] = s;
+      console.log(
+        `[系列赛] ${s.seats.A} ${s.wins.A}–${s.wins.B} ${s.seats.B}（${s.games.length} 场）→ ` +
+          `${s.winner ? `${s.seats[s.winner]} 拿下` : '未分出'}　实花 $${budget.spent()}`,
+      );
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
+  seriesResults = out.filter(Boolean);
+  matches = seriesResults.flatMap((s) => s.games);
+} else {
+  matches = await runArena({
+    pairs,
+    games,
+    seed0,
+    budget,
+    concurrency,
+    relaySpeech,
+    onMatch: (m) => {
+      done += 1;
+      const line =
+        `跑完 ${done}/${est.matches} 场　实花 $${budget.spent()}　` +
+        `${m.aborted ? `[中断:${m.aborted}] ` : ''}${m.seats.A} vs ${m.seats.B} → ${m.seats[m.winner] ?? '未终局'}`;
+      // TTY 上原地刷新好看；**管道里必须换行**——否则 node 会把 \r 全缓冲住，
+      // 跑一个小时输出文件还是 0 字节，只能靠查账单反推进度（2026-08-10 实测踩过）。
+      if (process.stdout.isTTY) process.stdout.write(`\r${line}   `);
+      else console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
+    },
+  });
+}
 console.log('');
 if (budget.exceeded()) console.log(`⚠️ 刹车触发：${budget.reason()}`);
 
@@ -210,13 +239,18 @@ const integrity = routingIntegrity(rows);
 const spread = flavorSpread(rows);
 const cache = cacheReport(rows);
 const at = new Date().toISOString().slice(0, 16).replace('T', ' ');
-const board = renderBoard(rows, {
-  run: { seed0, games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech },
-  integrity,
-  cache,
-  spread,
-  estimate: est,
-});
+const memoryNote = bestOf
+  ? `> ⚠️ **记忆赛道**（--bestof ${bestOf}）：系列赛内跨场携带比分与假设，有记忆＝顺序效应。本榜数字**不作统计断言、不与素颜批次比较**（Q90 两本账不混流）。\n\n`
+  : '';
+const board =
+  memoryNote +
+  renderBoard(rows, {
+    run: { seed0, games: bestOf ?? games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech },
+    integrity,
+    cache,
+    spread,
+    estimate: est,
+  });
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const dir = `${outDir}/${stamp}`;
@@ -237,13 +271,44 @@ for (const m of matches) {
 }
 writeFileSync(`${dir}/lines.md`, lines.join('\n'));
 
+// 系列赛战报（记忆赛道专属）：比分、逐场、假设演化——"它学到了什么"直接可读
+if (seriesResults) {
+  const md = ['# 系列赛战报（记忆赛道）', '', memoryNote.trim(), ''];
+  for (const s of seriesResults) {
+    md.push(`## ${s.seats.A} vs ${s.seats.B}（${s.seats.A} 先手）`);
+    md.push(`比分 **${s.wins.A}–${s.wins.B}**，${s.winner ? `**${s.seats[s.winner]}** 拿下系列赛` : '未分出（中断或预算触顶）'}`);
+    s.games.forEach((g, i) => {
+      const end = g.events.at(-1);
+      md.push(`- 第${i + 1}场（seed ${g.seed}）：${g.winner ? `${g.seats[g.winner]} 胜` : '未终局'}，${end?.rounds ?? '?'} 局${g.aborted ? `（中断:${g.aborted}）` : ''}`);
+    });
+    for (const id of ['A', 'B']) {
+      const t = s.hypothesesTrail[id];
+      if (!t?.length) continue;
+      md.push(`\n${s.seats[id]} 的场间假设演化：`);
+      t.forEach((hyps, i) => {
+        md.push(`- 第${i + 1}场后：${hyps.length ? hyps.map((h) => `「${h.text}」（证据${h.hits}${h.misses?.length ? `，反例 ${h.misses.length}` : ''}）`).join('；') : '（没形成假设）'}`);
+      });
+    }
+    md.push('');
+  }
+  writeFileSync(`${dir}/series.md`, md.join('\n'));
+}
+
 writeFileSync(
   `${dir}/run.json`,
   JSON.stringify(
     {
       at,
       entrants: entrants.map((e) => ({ label: e.label, ...e.meta })),
-      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, handEstimate: HAND_ESTIMATE },
+      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, handEstimate: HAND_ESTIMATE },
+      series: seriesResults?.map((s) => ({
+        seats: s.seats,
+        bestOf: s.bestOf,
+        wins: s.wins,
+        winner: s.winner,
+        games: s.games.map((g) => ({ seed: g.seed, winner: g.winner, aborted: g.aborted })),
+        hypothesesTrail: s.hypothesesTrail,
+      })) ?? null,
       estimate: est,
       spent: budget.spent(),
       integrity,
@@ -266,5 +331,7 @@ writeFileSync(
 );
 writeFileSync(`${dir}/board.md`, board);
 console.log(board);
-console.log(`\n落盘：${dir}/board.md（榜）　${dir}/lines.md（台词留样）　${dir}/run.json（全量事件与决策日志，不入库）`);
+console.log(
+  `\n落盘：${dir}/board.md（榜）　${dir}/lines.md（台词留样）${seriesResults ? `　${dir}/series.md（系列赛战报）` : ''}　${dir}/run.json（全量事件与决策日志，不入库）`,
+);
 if (!integrity.ok) process.exit(1);
