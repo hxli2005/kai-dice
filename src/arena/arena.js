@@ -32,9 +32,12 @@ export const SAMPLING = Object.freeze({
   reasoning: { enabled: false },
 });
 
-// 每手输出＝小 JSON ＋ 一句台词（A4 降本二：收紧 max_tokens）。
-// 别再紧了：紧到截断，测出来的"格式失败"就成了我们自己的手笔。
-export const MAX_TOKENS = 400;
+// 每手输出＝小 JSON ＋ 一句台词 ＋ 留档。**别再紧了**——注释早写着这句，我们还是犯了：
+// 400 的预算下，deepseek-v4-pro 有 25 手 finish_reason=length（输出中位 231、p90 377、
+// 29 手顶到 400），而 gpt-5.6-luna 最大才 213，一次都没碰到。同一个上限，话多的那个被
+// 系统性砍断，然后它的"格式失败率"上了榜——那不是它不守契约，是我们的盒子装不下它。
+// 800 是按被截断的分布留了余量；**若 `finish=length` 还出现就继续加**，别反过来怪模型。
+export const MAX_TOKENS = 800;
 export const TIMEOUT_MS = 30_000; // 擂台是离屏跑的，不吃 §2.5-bis 的 ≤4s 节拍预算
 
 // 擂台席位：一个没有脸的座位。三个 gear 的取值都必须是"中性"的——

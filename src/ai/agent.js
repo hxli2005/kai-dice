@@ -459,6 +459,9 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
           );
           decision = parseDecision(raw, ob);
           outcome = classifyOutput(raw, ob);
+          // 被 max_tokens 截断 ≠ 它不守契约。finish_reason=length 时另立类目，
+          // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
+          if (decision === null && meta.finish === 'length') outcome = 'truncated';
           if (decision === null) error = 'bad-output';
         } catch (e) {
           error = e?.message ?? 'unknown';

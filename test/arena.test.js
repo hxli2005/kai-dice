@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
-import { buildPrompts, classifyOutput } from '../src/ai/agent.js';
+import { buildPrompts, classifyOutput, createOpponent } from '../src/ai/agent.js';
 import {
   ARENA_SEAT,
   SAMPLING,
@@ -507,4 +507,33 @@ test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', 
   // 其余照旧：规则、局面、动作叙事、自我回灌都不动
   assert.ok(users.some((u) => /本局进程/.test(u)), '对照臂只关台词转发，别的不动');
   assert.ok(users.some((u) => /你自己这局刚做过/.test(u)), '自我回灌不受影响');
+});
+
+// ---------- 截断归因：我们的预算不许算成它的合规失败 ----------
+test('被 max_tokens 截断另立类目，不计入格式失败', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  const ai = createOpponent({
+    channel: { baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', model: 'm' },
+    persona: ARENA_SEAT,
+    // 断在半句上的 JSON ＋ finish_reason=length：这正是 400 预算下的真实形态
+    fetchFn: async () => ({
+      ok: true, status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"开","note":"对方拨算盘后报' }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 900, completion_tokens: 800 },
+      }),
+    }),
+  });
+  await m.act('B', { type: 'peek' });
+  const d = await ai.decide(m.observe('B'));
+  assert.equal(d.outcome, 'truncated', '截断要有自己的类目');
+  assert.notEqual(d.outcome, 'bad-json', '不许算成它不守契约');
+  assert.equal(d.silentFallback, true, '这一手仍然由沉默 bot 顶——但账记在我们头上');
+
+  const rows = summarize([{ seats: { A: 'x', B: 'y' }, events: [], logs: { A: ai.logs, B: [] }, rejects: {} }]);
+  const row = rows.find((r) => r.label === 'x');
+  assert.ok(row.compliance.truncatedRate > 0, '榜上单独一列');
+  assert.equal(row.compliance.formatFailRate, 0, '不许混进格式失败');
 });

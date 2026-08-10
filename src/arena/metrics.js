@@ -33,6 +33,7 @@ const emptyAcc = () => ({
   timeout: 0,
   error: 0,
   silentFallback: 0,
+  truncated: 0, // 被我们的 max_tokens 砍断的（不算它的合规失败）
   engineRejects: 0,
   // 棋力层
   matches: 0,
@@ -106,6 +107,7 @@ function accumulate(acc, match, seat, { keepLines = 6 } = {}) {
     else if (o === 'empty') acc.empty += 1;
     else if (o === 'refusal') acc.refusal += 1;
     else if (o === 'timeout') acc.timeout += 1;
+    else if (o === 'truncated') acc.truncated += 1;
     else if (o === 'error' || o === 'silent') acc.error += 1;
     if (l.silentFallback) acc.silentFallback += 1;
     if (l.say) {
@@ -143,6 +145,7 @@ export function finalize(acc) {
       formatFailRate: r2(div(acc.noJson + acc.badJson + acc.empty, responded)),
       refusalRate: r2(div(acc.refusal, responded)),
       silentFallbackRate: r2(div(acc.silentFallback, acc.calls)),
+      truncatedRate: r2(div(acc.truncated, acc.calls)),
       timeouts: acc.timeout,
       errors: acc.error,
       engineRejects: acc.engineRejects, // 非零＝我们的校验漏了，不是模型的锅

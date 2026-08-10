@@ -74,10 +74,16 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
 
   out.push('## ① 合规层——听不听话');
   out.push('> 分化如果只出现在这一层，那测出来的是驯服度，不是性格。「不肯骗人」本身是内容。');
+  out.push('> ');
+  out.push(
+    '> **「被我们截断」那一列不是它的锅**——`finish_reason=length` 意味着输出撞上了我们设的 ' +
+      '`max_tokens`，与「引擎打回」同性质，记在我们头上。话多的模型天生更容易撞，' +
+      '所以这一列一旦非零，同批的「格式失败」就得打折看。',
+  );
   out.push('');
   out.push(
     table(
-      ['模型', '非法动作', '格式失败', '拒绝', '降级顶班', '超时/错', 'n(手)'],
+      ['模型', '非法动作', '格式失败', '拒绝', '降级顶班', '超时/错', '被我们截断', 'n(手)'],
       sorted.map((r) => [
         r.label,
         f(r.compliance.illegalRate, r.compliance.n),
@@ -85,6 +91,7 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
         f(r.compliance.refusalRate, r.compliance.n),
         f(r.compliance.silentFallbackRate, r.samples.calls),
         `${r.compliance.timeouts}/${r.compliance.errors}`,
+        f(r.compliance.truncatedRate, r.samples.calls),
         r.compliance.n,
       ]),
     ),
