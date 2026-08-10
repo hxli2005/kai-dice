@@ -78,9 +78,22 @@ export function pinSampling(channel) {
 export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget } = {}) {
   const ids = ['A', 'B'];
   const m = await createMatch({ seed, config: { players: ids } });
+  // 让它们互相听得见（2026-08-10 修）。此前擂台没传 ctx，两个模型从头到尾收不到对方一个字——
+  // 于是「牌手层允许诈」（DESIGN §3）在擂台上完全空转，bait 率数的是**对着不存在的听众演戏**。
+  //
+  // 走宿主转发，**不动引擎**：台词不是动作，不该进事件流（§2.1 引擎只认 observe/act）；
+  // 而 extraFacts 本就是宿主往提示词里塞真实事实的既有通道（好友房短语盘、玩家的「戳」同款）。
+  // 只转 say，**belief 永不外传**——那是私有留档（§3 三锁）。
+  const heard = { A: [], B: [] };
   const ai = {};
   for (const id of ids)
-    ai[id] = createOpponent({ channel: pinSampling(seats[id].channel), profile: '', persona: ARENA_SEAT, fetchFn });
+    ai[id] = createOpponent({
+      channel: pinSampling(seats[id].channel),
+      profile: '',
+      persona: ARENA_SEAT,
+      ctx: { extraFacts: heard[id] },
+      fetchFn,
+    });
   const backup = createSilentBot(ARENA_SEAT.strategy);
   const rejects = { A: 0, B: 0 }; // 引擎当场打回的动作（parseDecision 之后仍不合法＝我们的 bug，不是模型的）
   let aborted = null;
@@ -99,6 +112,13 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget 
     }
     const d = await ai[p].decide(ob);
     bud?.charge?.(d.meta ?? {}, seats[p].price); // 逐发记账（A4）
+
+    // 把这一手说的话递给对家（滚动窗口，只留最近几句——省 token，也省得越滚越长）
+    if (d.say && !d.silentFallback) {
+      const other = p === 'A' ? 'B' : 'A';
+      heard[other].push(`第 ${ob.round} 局，对方${sayContext(d.action)}时说：「${d.say}」`);
+      if (heard[other].length > 6) heard[other].shift();
+    }
     try {
       await m.act(p, d.action, { elapsedMs: null }); // 不喂用时（见文件头自决）
     } catch {
@@ -133,6 +153,15 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget 
     aborted,
   };
 }
+
+// 转发台词时带上它当时在做什么——嘴和手对不对得上，本来就是可读的东西
+const sayContext = (a) =>
+  a?.type === 'bid' ? `报 ${a.count} 个 ${a.face}`
+  : a?.type === 'challenge' ? '开牌'
+  : a?.type === 'calc' ? '拨算盘'
+  : a?.type === 'peek' ? '掀盅'
+  : a?.type === 'declare' ? `宣言「${{ zhai: '斋', blind: '盲', raise: '抬' }[a.declaration] ?? a.declaration}」`
+  : '行动';
 
 // 镜像对（纪律②）：同一副骰种打两遍，第二遍互换座位。
 // 座位 A 的骰子序列只由 seed 决定，所以两遍里"A 手上的那副牌"是同一副——

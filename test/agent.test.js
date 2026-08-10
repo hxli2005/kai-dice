@@ -63,7 +63,7 @@ test('Q45 算盘：拨过才给准数，且"算"进得了叙事（何时算＝�
   const { user, system } = buildPrompts(ob, '');
   assert.match(user, /你这局拨过算盘：按你的骰子算，此话为真的概率 \d+%/);
   assert.ok(!user.includes('只算骰面，不算人'), 'Q86：解释是非程序性的，只留数据');
-  assert.match(system, /没拨算盘你手上就没有准数/, '这条是规则，留在规则区');
+  assert.match(system, /未拨算盘你手上就没有准数/, 'Q45：这条是规则，留在规则区');
   // 对手侧：拨算盘是公开动作，必须进局面叙事
   const { user: userA } = buildPrompts(m.observe('A'), '');
   assert.match(userA, /对方当众拨了算盘/);
@@ -203,10 +203,11 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   assert.equal(sysAvatar, sysModel, '全席 system 必须完全相同');
 
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
-  assert.match(sysModel, /至少有 N 个 X 点/, '规则');
+  assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysModel, /没拨算盘你手上就没有准数/, '规则：Q45');
-  assert.match(sysModel, /不合法的动作会被引擎打回/, '操作');
+  assert.match(sysModel, /未拨算盘你手上就没有准数/, '规则：Q45');
+  assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
+  assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');
 
   // 删干净的东西——任何一条回来都是偷塞人格（Q85/Q86）

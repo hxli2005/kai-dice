@@ -176,7 +176,7 @@ const matches = await runArena({
     done += 1;
     const line =
       `跑完 ${done}/${est.matches} 场　实花 $${budget.spent()}　` +
-      `${m.aborted ? `[中断:${m.aborted}] ` : ''}${m.seats.A} vs ${m.seats.B} → ${m.winner ?? '未终局'}`;
+      `${m.aborted ? `[中断:${m.aborted}] ` : ''}${m.seats.A} vs ${m.seats.B} → ${m.seats[m.winner] ?? '未终局'}`;
     // TTY 上原地刷新好看；**管道里必须换行**——否则 node 会把 \r 全缓冲住，
     // 跑一个小时输出文件还是 0 字节，只能靠查账单反推进度（2026-08-10 实测踩过）。
     if (process.stdout.isTTY) process.stdout.write(`\r${line}   `);

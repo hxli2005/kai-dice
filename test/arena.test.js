@@ -31,22 +31,23 @@ import {
 } from '../src/ai/openrouter.js';
 
 // ---------- 假模型：从提示词里读出合法动作再回，够跑完整场 ----------
-function fakeDecide(user, { aggressive = false } = {}) {
-  if (/掀盅看骰/.test(user)) return { action: { type: 'peek' }, say: '先看看', belief: '先摸底' };
-  if (aggressive && /当众拨算盘/.test(user)) return { action: { type: 'calc' }, say: '我算算', belief: '要个准数' };
+function fakeDecide(user, { aggressive = false, say, belief } = {}) {
+  const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
+  if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
+  if (aggressive && /当众拨算盘/.test(user)) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
   const cur = user.match(/报「(\d+) 个 (\d+)」/);
   const canChallenge = /可选动作：开牌/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
-    return { action: { type: 'challenge' }, say: '开。', belief: '他撑不住' };
+    return fix({ action: { type: 'challenge' }, say: '开。', belief: '他撑不住' });
   const cand = user.match(/候选：(\d+)个(\d+)/);
   if (cand)
-    return {
+    return fix({
       action: { type: 'bid', count: +cand[1], face: +cand[2] },
       say: `${cand[1]}个${cand[2]}`,
       belief: '往上顶一格',
       speechMode: aggressive ? 'bait' : 'straight',
-    };
-  return { action: { type: 'challenge' }, say: '开。', belief: '没得抬了' };
+    });
+  return fix({ action: { type: 'challenge' }, say: '开。', belief: '没得抬了' });
 }
 
 const fakeChannel = (opts = {}) => async (url, init) => {
@@ -90,9 +91,10 @@ test('A2：擂台席的系统提示词全席逐字相同，且不含任何身份
   for (const banned of ['老李头', '阿飞', '先生', '客席', 'deepseek', 'claude'])
     assert.ok(!sysA.toLowerCase().includes(banned.toLowerCase()), `擂台提示词不许出现「${banned}」`);
   // Q86 二准入：只剩规则与操作＋输出格式（三锁与内容底线已随 Q85/Q86 退场）
-  assert.match(sysA, /至少有 N 个 X 点/, '规则');
+  assert.match(sysA, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysA, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysA, /不合法的动作会被引擎打回/, '操作');
+  assert.match(sysA, /前置不满足的动作被引擎拒绝/, '操作');
+  assert.match(sysA, /每名非胜者向胜者支付赔付/, '结算：倍率是双向的（本次补上）');
   assert.match(sysA, /严格输出一行 JSON/, '输出格式');
   for (const gone of ['信息边界', '真迹不可改', '不作人身攻击', '你自己的判断', '铁律'])
     assert.ok(!sysA.includes(gone), `Q85/Q86：「${gone}」应已退场`);
@@ -472,4 +474,20 @@ test('并发：单场上限只收那一场，不误伤同时在跑的别场', as
   assert.equal(one.exceeded(), true, '第一场该刹');
   assert.equal(two.exceeded(), false, '第二场不该被连累');
   assert.equal(b.spent(), 5, '整批的账仍然是共用的');
+});
+
+// ---------- 互相听得见（2026-08-10）：此前两个模型收不到对方一个字 ----------
+test('台词转发：对家说过的话进得了提示词，belief 永不外传', async () => {
+  const seen = [];
+  await playMatch({
+    seed: 11,
+    seats: { A: seat('mx'), B: seat('my') },
+    fetchFn: fakeChannel({ seen, say: '你这手牌怕是不硬', belief: '其实我五五开' }),
+  });
+  const users = seen.map((r) => r.body.messages[1].content);
+  const heard = users.filter((u) => u.includes('对方') && u.includes('你这手牌怕是不硬'));
+  assert.ok(heard.length > 0, '对家的台词必须进得了提示词——否则「牌手层允许诈」是空转');
+  assert.ok(heard.some((u) => /第 \d+ 局，对方(报|开牌|拨算盘|掀盅|宣言)/.test(u)), '要带上它当时在做什么');
+  // 私有留档不许外传（§3 三锁）
+  for (const u of users) assert.ok(!u.includes('其实我五五开'), 'belief 永不外传');
 });

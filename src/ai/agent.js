@@ -28,12 +28,36 @@ import { DEFAULT_PERSONA } from './personas.js';
 // 原"不许联手针对第三方"是行为要求，Q86 删——串牌本就由信息隔离物理阻断。
 const TABLE_TALK = `\n这张桌上没有队伍，各自为战。`;
 
-const RULES_BRIEF = (three) =>
-  `大话骰。${
-    three
-      ? '三人各摇 5 颗暗骰，只看得见自己的，轮流报"桌上（三家合计）至少有 N 个 X 点"；开牌只能开上家（对上一个报价者）。'
-      : '双方各摇 5 颗暗骰，只看得见自己的，轮流报"桌上至少有 N 个 X 点"。'
-  }后报的必须比前一口高：数量加大，或数量相同而点数加大；首报数量至少 2。引擎不校验报价真假——任何满足阶梯的报价都合法。不接受上一口报价时可以开牌：清点全桌骰子，报价成立则开牌方输，不成立则报价方输，输家掉一颗骰子，骰子掉光出局。默认 1 点计入任何点数（斋局除外）。每次报数全桌各追 1 注入池；轮到自己可宣「抬」，本局池×2，每人每局一次；报价到第 6 手起池自动再×2。未看骰时可掀盅，掀盅是公开动作；未看骰时可宣「盲」，本局池×2，宣后整局不得看骰；本局首报者在首报前可宣「斋」，本局池×1.5。拨算盘是公开动作：全桌看得见你在算，算出的概率只有你自己看得见——没拨算盘你手上就没有准数。不合法的动作会被引擎打回。`;
+const RULES_BRIEF = (three) => `大话骰 · 引擎规则
+
+场：各 5 骰。每局败者掉 1 骰，掉光出局，余一人则场终。
+局：重掷、全部盖住（自己也看不见），承诺哈希开局公开、摊牌可验（无人能重掷）；掀盅/盲/斋/抬/算盘状态清零。
+首报者：首局＝玩家；之后＝上局败者，该人若出局则为其下家。${
+    three ? '\n三人桌：开牌只能开上家（当前报价者）。桌上没有队伍，各自为战。' : ''
+  }
+
+动作 ｜ 前置 ｜ 效果
+掀盅 ｜ 本局未掀且未宣盲（唯一不需轮到你的动作） ｜ 自己可见本局骰面
+拨算盘 ｜ 轮到你，本局未算 ｜ 得「当前报价为真」的精确概率；未拨算盘你手上就没有准数，只有粗略手感
+宣盲 ｜ 轮到你，未掀盅、未宣盲（已报过价不影响） ｜ 整局不得掀盅；倍率 ×2
+宣斋 ｜ 轮到你，你是首报者，报价次数＝0，未宣斋 ｜ 1 不再万能；倍率 ×1.5
+扳抬 ｜ 轮到你，本局未抬 ｜ 倍率 ×2
+报价 ｜ 轮到你，存在合法报价 ｜ 成为当前报价；行动权交下家
+开牌 ｜ 轮到你，当前报价存在且不是你报的 ｜ 立即清点结算
+
+除报价外，动作后行动权仍在你。动作事件全部公开；骰面与算出的概率不公开。前置不满足的动作被引擎拒绝。
+
+报价 (N,X)＝「全场骰子中 X 点至少 N 个」
+合法 ⟺ 2≤N≤总骰数 ∧ X∈(斋局?{1..6}:{2..6}) ∧ (无当前报价 ∨ N>N₀ ∨ (N=N₀ ∧ X>X₀))
+引擎不校验报价真假，满足上式即合法。
+
+清点：实有 ＝ |{ d : d＝X ∨ (非斋局 ∧ d＝1) }|，每颗至多计一次
+成立 ⟺ 实有 ≥ N。成立→报价者胜、开牌者败；否则开牌者胜、报价者败。败者掉 1 骰。
+
+结算：注数 ＝ 1 ＋ 报价次数
+倍率 ＝ 2^(宣盲人次＋扳抬人次) × (斋局?1.5:1) × (报价次数≥6?2:1)
+赔付 ＝ round(注数 × 倍率)
+每名非胜者向胜者支付赔付。筹码可为负，不影响胜负与终局。`;
 
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
 {"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词，上屏","belief":"你此刻的判断，不上屏，存档","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","note":"决策理由，不上屏，存档","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
@@ -249,10 +273,14 @@ export function parseDecision(text, ob) {
               : a.type === 'peek' || a.type === 'calc'
                 ? { type: a.type }
                 : { type: 'challenge' },
-      say: typeof j.say === 'string' ? j.say.slice(0, 60) : '',
-      note: typeof j.note === 'string' ? j.note.slice(0, 120) : '',
+      // 上限是**防失控的护栏，不是控长度的手段**（长度归 max_tokens，Q86「约束长在管线上」）。
+      // 原来的 60/100/120 是"台词一两句即可"那个年代定的；Q86 把那句话删了却留着铡刀，
+      // 结果 19% 的 belief、15% 的 note 被拦腰砍断（802 条留档实测）——复盘室右栏是产品内容，
+      // 切一半等于内容没了。现在把护栏放宽到正常输出碰不到，要截也该截在渲染层。
+      say: typeof j.say === 'string' ? j.say.slice(0, 200) : '',
+      note: typeof j.note === 'string' ? j.note.slice(0, 300) : '',
       // 留档字段（Q47／Q49：留档不是审查）：永不上屏，只进决策日志与复盘室
-      belief: typeof j.belief === 'string' ? j.belief.slice(0, 100) : '',
+      belief: typeof j.belief === 'string' ? j.belief.slice(0, 400) : '',
       speechMode: j.speechMode === 'bait' ? 'bait' : 'straight',
       // F9「戳他」：被反驳后的三岔口——嘴硬/改口/没理，进档案的嘴硬率与读心通道
       reaction: ['hold', 'fold', 'ignore'].includes(j.reaction) ? j.reaction : null,
@@ -295,7 +323,7 @@ export async function personaLine(channel, { persona, task, facts }, fetchFn) {
       fetchFn,
     );
     // Q49：开场白也是他的场合——不再对账（他把上回的账记歪，是他这个人的事）
-    return raw.trim().replace(/^["「『]|["」』]$/g, '').slice(0, 90) || null;
+    return raw.trim().replace(/^["「『]|["」』]$/g, '').slice(0, 200) || null;
   } catch {
     return null;
   }
@@ -328,7 +356,7 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
     if (!Array.isArray(j.hypotheses)) return null;
     return j.hypotheses
       .slice(0, 4)
-      .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+      .map((h) => ({ text: String(h.text ?? '').slice(0, 120), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
       .filter((h) => h.text); // Q49：他的本子是他的场合，假设错得离谱也是他的一部分
   } catch {
     return null;
@@ -361,12 +389,12 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
     // Q49：判词是他的意见话、假设是他的本子——都不再对账。
     // 报告卡的数据面（局数/虚报率/蒙报/开牌命中…）由引擎渲染，压根不经他的嘴。
     return {
-      verdict: j.verdict.slice(0, 120) || null,
-      note: (j.note ?? '').slice(0, 80),
+      verdict: j.verdict.slice(0, 300) || null,
+      note: (j.note ?? '').slice(0, 200),
       hypotheses: Array.isArray(j.hypotheses)
         ? j.hypotheses
             .slice(0, 4)
-            .map((h) => ({ text: String(h.text ?? '').slice(0, 60), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
+            .map((h) => ({ text: String(h.text ?? '').slice(0, 120), hits: +h.hits || 0, misses: (h.misses ?? []).slice(0, 3).map(String) }))
             .filter((h) => h.text)
         : null,
     };
