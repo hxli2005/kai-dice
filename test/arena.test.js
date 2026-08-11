@@ -664,6 +664,9 @@ test('playSeries：先到两胜即止；第二场提示词携带系列比分、�
   assert.match(second, /系列赛（3场2胜，同一对手连打）/);
   assert.match(second, /第1场(你胜|你负)（\d+局）：你开牌\d+次中\d+次/);
   assert.ok(second.includes('他冲动，报价一深就开'), '蒸馏出的假设进第二场档案');
+  // 互相明牌（默认开）：第二场能看到对手的本子怎么写自己，且标签言明双方互见
+  assert.ok(second.includes('对手的明牌本子'), '对手假设对翻可见');
+  assert.ok(second.includes('双方互相可见'), '机制在数据标签里如实说明');
   // 蒸馏调用拿到的是裁判层小结＋自己的留档
   assert.ok(reflectUsers[0].includes('刚打完的一场：第1场'));
   assert.ok(reflectUsers[0].includes('你既有的假设：（还没有）'));
@@ -686,7 +689,7 @@ test('playSeries：胜负 2–0 提前收场，不打第三场也不再蒸馏', 
     A: { label: 'x', channel: openrouterChannel({ apiKey: 'k', model: 'x', providerTag: 'p/fp8' }), price: {} },
     B: { label: 'y', channel: openrouterChannel({ apiKey: 'k', model: 'y', providerTag: 'p/fp8' }), price: {} },
   };
-  const s = await playSeries({ seed0: 7, bestOf: 3, seats, fetchFn });
+  const s = await playSeries({ seed0: 7, bestOf: 3, seats, fetchFn, openBook: false });
   if (s.wins[s.winner] === 2 && s.games.length === 2) {
     assert.equal(s.hypothesesTrail.A.length, 1, '2–0 只有一次场间蒸馏');
   }

@@ -51,6 +51,10 @@ const relaySpeech = !has('no-relay');
 // 记忆赛道（Q90 联赛方向）：--bestof N＝每对打两个方向的 N 场 M 胜系列赛，
 // 场间携带比分、裁判层小结与蒸馏假设。⚠️ 有记忆＝顺序效应，产出不与素颜批次比较。
 const bestOf = flag('bestof') ? Math.max(1, Math.floor(+flag('bestof'))) : null;
+// 互相明牌（用户裁决 2026-08-11）：系列赛场间双方假设本对翻；--no-openbook 为对照臂
+const openBook = !has('no-openbook');
+// 海选模式：--vs <model>＝该模型坐庄，其余候选逐一对打（N 场而非 N² 场）
+const vsAnchor = typeof flag('vs') === 'string' ? flag('vs').split('@')[0] : null;
 
 const base = process.env.OPENROUTER_BASE ?? OPENROUTER_BASE; // 本地假服务器可覆盖（集成自测用）
 
@@ -175,7 +179,18 @@ if (fit.length < 2) {
 entrants.length = 0;
 entrants.push(...fit);
 
-const pairs = roundRobin(entrants);
+let pairs;
+if (vsAnchor) {
+  const a = entrants.find((e) => e.label === vsAnchor);
+  if (!a) {
+    console.error(`--vs ${vsAnchor} 不在（或没通过体检的）参赛名单里`);
+    process.exit(2);
+  }
+  pairs = entrants.filter((e) => e !== a).map((c) => [a, c]);
+  console.log(`海选模式：${a.label} 坐庄，${pairs.length} 位候选逐一对打`);
+} else {
+  pairs = roundRobin(entrants);
+}
 const est = estimateRun({ pairs, games: bestOf ?? games });
 console.log(
   bestOf
@@ -202,7 +217,7 @@ if (bestOf) {
     while (true) {
       const i = nextJob++;
       if (i >= jobs.length || budget.runExceeded()) return;
-      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech });
+      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech, openBook });
       out[i] = s;
       console.log(
         `[系列赛] ${s.seats.A} ${s.wins.A}–${s.wins.B} ${s.seats.B}（${s.games.length} 场）→ ` +
@@ -275,7 +290,7 @@ writeFileSync(`${dir}/lines.md`, lines.join('\n'));
 
 // 系列赛战报（记忆赛道专属）：比分、逐场、假设演化——"它学到了什么"直接可读
 if (seriesResults) {
-  const md = ['# 系列赛战报（记忆赛道）', '', memoryNote.trim(), ''];
+  const md = ['# 系列赛战报（记忆赛道）', '', memoryNote.trim(), '', `互相明牌：${openBook ? '开（场间双方假设本对翻）' : '关（对照臂）'}`, ''];
   for (const s of seriesResults) {
     md.push(`## ${s.seats.A} vs ${s.seats.B}（${s.seats.A} 先手）`);
     md.push(`比分 **${s.wins.A}–${s.wins.B}**，${s.winner ? `**${s.seats[s.winner]}** 拿下系列赛` : '未分出（中断或预算触顶）'}`);
@@ -302,7 +317,7 @@ writeFileSync(
     {
       at,
       entrants: entrants.map((e) => ({ label: e.label, ...e.meta })),
-      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, handEstimate: HAND_ESTIMATE },
+      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, openBook, vsAnchor, handEstimate: HAND_ESTIMATE },
       series: seriesResults?.map((s) => ({
         seats: s.seats,
         bestOf: s.bestOf,

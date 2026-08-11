@@ -278,7 +278,12 @@ export async function seriesReflect(channel, { ownLog = [], factText, hypotheses
 
 // 系列赛主循环：先到 need 胜为止（最多 bestOf 场）。每场换骰种（seed0+g），座位不换——
 // 换座会把"记忆里的对手"换成另一副骰运，先手差留给镜像系列（调用方跑两个方向）。
-export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true } = {}) {
+//
+// openBook（用户裁决 2026-08-11）：**场间互相明牌**——每场结束后双方的假设本对翻，
+// 下一场你能看到对手的本子上怎么写你（他也知道你看得到）。这是 §2.4 明牌档案
+// （"看过档案的你会试图反装，而反装也是它的阅读材料"）在 AI 对 AI 上的对称应用；
+// 喂的是数据、机制在数据标签里如实说明，Q86 合规。--no-openbook 为对照臂。
+export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true, openBook = true } = {}) {
   const need = (bestOf >> 1) + 1;
   const ids = ['A', 'B'];
   const wins = { A: 0, B: 0 };
@@ -297,6 +302,7 @@ export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget
           ...games.map((r, i) => seriesGameFact(r, id, i)),
         ],
         subjective: { notes: [], hypotheses: hypotheses[id] },
+        ...(openBook ? { rivalHypotheses: hypotheses[opp] } : {}),
       };
     }
     const r = await playMatch({ seed: seed0 + g, seats, fetchFn, budget, relaySpeech, memory });

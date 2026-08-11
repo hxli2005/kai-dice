@@ -227,13 +227,15 @@ function modCandidateLine(meta, ob, fmtP) {
 
 const normalizedMemory = (profile, hypotheses = []) => {
   if (!profile)
-    return { verified: [], subjectiveNotes: [], hypotheses: clone(hypotheses), legacyText: null };
+    return { verified: [], subjectiveNotes: [], hypotheses: clone(hypotheses), rivalHypotheses: null, legacyText: null };
   if (typeof profile === 'string')
-    return { verified: [], subjectiveNotes: [], hypotheses: clone(hypotheses), legacyText: clean(profile, 2000) };
+    return { verified: [], subjectiveNotes: [], hypotheses: clone(hypotheses), rivalHypotheses: null, legacyText: clean(profile, 2000) };
   return {
     verified: clone(profile.verified ?? []),
     subjectiveNotes: clone(profile.subjective?.notes ?? profile.subjectiveNotes ?? []),
     hypotheses: clone(profile.subjective?.hypotheses ?? hypotheses ?? []),
+    // 互相明牌（系列赛 openBook）：对手的假设本，双方互见——机制在渲染标签里如实说明
+    rivalHypotheses: clone(profile.rivalHypotheses ?? null),
     legacyText: null,
   };
 };
@@ -432,6 +434,8 @@ function serializeMemory(payload) {
   if (m.subjectiveNotes?.length) lines.push(`主观笔记：${m.subjectiveNotes.map((x) => clean(typeof x === 'string' ? x : x.text, 300)).join('；')}`);
   if (m.hypotheses?.length)
     lines.push(`主观假设：${m.hypotheses.map((h) => `「${clean(h.text, 160)}」（自记证据${h.hits ?? 0}${h.misses?.length ? `，反例${h.misses.map((x) => clean(x, 80)).join('、')}` : ''}）`).join('；')}`);
+  if (m.rivalHypotheses?.length)
+    lines.push(`对手的明牌本子（他场间整理的对你的假设；双方互相可见——他也看得到你的本子）：${m.rivalHypotheses.map((h) => `「${clean(h.text, 160)}」（他自记证据${h.hits ?? 0}）`).join('；')}`);
   if (m.pastRoundsSelf?.length) {
     const byRound = new Map();
     for (const l of m.pastRoundsSelf) {
