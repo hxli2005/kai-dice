@@ -45,6 +45,7 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 
 报价 (N,X)＝「全场骰子中 X 点至少 N 个」
 合法 ⟺ 2≤N≤总骰数 ∧ X∈(斋局?{1..6}:{2..6}) ∧ (无当前报价 ∨ N>N₀ ∨ (N=N₀ ∧ X>X₀))
+非斋局不可报 1 点（1 是万能，只参与清点，不作报点）；斋局才可报 1。
 引擎不校验报价真假，满足上式即合法。
 
 清点：实有 ＝ |{ d : d＝X ∨ (非斋局 ∧ d＝1) }|，每颗至多计一次
@@ -497,7 +498,7 @@ function serializeCurrent(payload, who) {
     const meta = modActionMeta({ mods: c.mods }, a.type);
     return meta ? modCandidateLine(meta, modOb, fmtP) : a.type;
   });
-  lines.push(`合法动作：${actions.join('；') || '无'}。`);
+  lines.push(`合法动作（仅限以下，清单外的会被引擎拒绝）：${actions.join('；') || '无'}。`);
   if (c.legal.bid)
     lines.push(`报价边界：总骰${c.legal.bid.totalDice}；数量${c.legal.bid.minCount}–${c.legal.bid.maxCount}；点数${c.legal.bid.faces.join('/')}；${c.currentBid ? `必须高于${c.currentBid.count}个${c.currentBid.face}` : '首报数量至少2'}。`);
   return lines.join('\n');
@@ -527,7 +528,12 @@ export function parseDecision(text, ob) {
   try {
     const m = text.match(/\{[\s\S]*\}/);
     const j = JSON.parse(m[0]);
-    const a = j.action;
+    // 宣言软归一（体检同款宽容度）：{"type":"raise"} 语义无歧义，是我们把一个动作拆成
+    // 两层名字造成的失败面——归一不是放水，全席同一把尺子。
+    const a0 = j.action ?? {};
+    const a = ['blind', 'zhai', 'raise'].includes(a0.type)
+      ? { type: 'declare', declaration: a0.type }
+      : a0;
     const total = ob.diceCount.you + ob.diceCount.opp;
     const modMeta = modActionMeta(ob, a.type);
     const ok =

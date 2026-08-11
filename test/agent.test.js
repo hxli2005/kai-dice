@@ -194,6 +194,10 @@ test('parseDecision：合法动作通过，非法与坏输出拒绝', async () =
   assert.equal(parseDecision('{"action":{"type":"bid","count":2,"face":3}}', ob), null); // 阶梯外
   assert.equal(parseDecision('{"action":{"type":"declare","declaration":"zhai"}}', ob), null); // 非首报者
   assert.equal(parseDecision('胡言乱语', ob), null);
+  // 宣言软归一：{"type":"raise"} 语义无歧义（实测多模型这样输出过），归一成 declare 形状
+  const flat = parseDecision('{"action":{"type":"raise"},"say":"抬"}', ob);
+  assert.deepEqual(flat.action, { type: 'declare', declaration: 'raise' });
+  assert.equal(parseDecision('{"action":{"type":"zhai"}}', ob), null, '归一后仍过合法性校验（非首报者宣斋照拒）');
 });
 
 test('createOpponent：LLM 垃圾输出与无通道时降级沉默模式，日志可审计', async () => {
