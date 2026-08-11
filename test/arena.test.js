@@ -36,7 +36,7 @@ import {
 function fakeDecide(user, { aggressive = false, say, belief } = {}) {
   const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
   if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
-  if (aggressive && /当众拨算盘/.test(user)) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
+  if (aggressive && user.includes('拨算盘，动作所有对手可见（{"type":"calc"}）')) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
   const cur = user.match(/当前报价：(?:你|对方)报(\d+)个(\d+)/);
   const canChallenge = /开牌（\{"type":"challenge"\}）/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
