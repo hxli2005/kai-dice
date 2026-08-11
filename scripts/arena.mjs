@@ -207,6 +207,22 @@ if (!has('yes')) {
 }
 
 const budget = createBudget({ capUsd, perMatchUsd });
+// 逐场增量落盘：每场打完立即把台词与留档写进 live/，中途就能翻牌（跑完后的正式产物不变）
+const liveDir = `${outDir}/.live-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+mkdirSync(liveDir, { recursive: true });
+const dumpLive = (m) => {
+  const lines = [`# ${m.seats.A} vs ${m.seats.B}（seed ${m.seed}${m.aborted ? `，中断:${m.aborted}` : ''}）`, ''];
+  for (const s of ['A', 'B']) {
+    lines.push(`## ${m.seats[s]}（座 ${s}）`);
+    for (const l of m.logs[s] ?? []) {
+      if (l.auto) continue;
+      lines.push(`- 第${l.round}局 ${JSON.stringify(l.action)}${l.say ? `　说：「${l.say}」` : '　（没说话）'}${l.speechMode === 'bait' ? '〔诈〕' : ''}`);
+      if (l.belief) lines.push(`  想：${l.belief.slice(0, 200)}`);
+    }
+    lines.push('');
+  }
+  writeFileSync(`${liveDir}/match-${m.seed}-${m.seats.A.split('/').pop()}.md`, lines.join('\n'));
+};
 let done = 0;
 let matches;
 let seriesResults = null;
@@ -239,6 +255,7 @@ if (bestOf) {
     concurrency,
     relaySpeech,
     onMatch: (m) => {
+      dumpLive(m);
       done += 1;
       const line =
         `跑完 ${done}/${est.matches} 场　实花 $${budget.spent()}　` +
