@@ -85,8 +85,17 @@ async function classify(model, items, who) {
   return out;
 }
 
-// ---- 分类 ----
-const labels = await classify(CLS_MODEL, rows, '分类');
+// ---- 分类（--summarize-only 时从既有 labels.jsonl 装载，不发任何调用）----
+let labels;
+if (argv.includes('--summarize-only') && existsSync(`${dir}/labels.jsonl`)) {
+  labels = new Map(
+    readFileSync(`${dir}/labels.jsonl`, 'utf8').split('\n').filter(Boolean)
+      .map((l) => JSON.parse(l)).map((x) => [x.lineId, { label: x.label, reason: x.reason }]),
+  );
+  console.log('summarize-only：从 labels.jsonl 装载');
+} else {
+  labels = await classify(CLS_MODEL, rows, '分类');
+}
 writeFileSync(
   `${dir}/labels.jsonl`,
   rows.map((r) => JSON.stringify({ lineId: r.lineId, model: r.model, label: labels.get(r.lineId).label, reason: labels.get(r.lineId).reason, classifier: CLS_MODEL })).join('\n'),
@@ -95,7 +104,9 @@ writeFileSync(
 // ---- 审计（lineId 稳定哈希抽 ~1/7，审计员独立重判）----
 const h = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 0);
 const sampled = rows.filter((r) => h(r.lineId) % 7 === 0);
-const audited = await classify(AUD_MODEL, sampled, '审计');
+const audited = argv.includes('--summarize-only') && existsSync(`${dir}/audit.jsonl`)
+  ? new Map(readFileSync(`${dir}/audit.jsonl`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).map((x) => [x.lineId, { label: x.auditLabel }]))
+  : await classify(AUD_MODEL, sampled, '审计');
 const auditRows = sampled.map((r) => {
   const a = audited.get(r.lineId).label;
   const b = labels.get(r.lineId).label;
@@ -108,7 +119,7 @@ writeFileSync(`${dir}/audit.jsonl`, auditRows.map((r) => JSON.stringify(r)).join
 const byModel = {};
 for (const r of rows) {
   const lab = labels.get(r.lineId).label;
-  const mk = `${r.seed}:${r.lineId.split(':')[1]}`;
+  const mk = `${r.seed}:${r.lineId.split(':')[1]}:${r.opponent.split('/').pop()}`; // 场＝seed×座位×对手（坐庄批防跨臂碰撞）
   const m = (byModel[r.model] ??= { matches: {}, total: 0, subj: 0, unlabeled: 0 });
   const g = (m.matches[mk] ??= { total: 0, subj: 0, opponent: r.opponent });
   m.total += 1;
