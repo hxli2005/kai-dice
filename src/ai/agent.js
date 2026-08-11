@@ -56,7 +56,7 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 每名非胜者向胜者支付赔付。筹码可为负，不影响胜负与终局。`;
 
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"台词，上屏","belief":"你此刻的判断，不上屏，存档","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","note":"决策理由，不上屏，存档","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
+{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"你当众说出口的话，全桌都听得见；可留空＝这手不开口","belief":"你此刻的判断，不上屏，存档","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","note":"决策理由，不上屏，存档","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。

@@ -170,9 +170,10 @@ export function finalize(acc) {
       calcPerRound: r2(div(acc.calcs, acc.rounds)), // 算频（原生 tell：算不算是他自己的事）
       declarePerRound: r2(div(acc.declares, acc.rounds)), // 宣言使用率（盲＋抬）
       baitRate: r2(div(acc.baits, acc.says)), // 自认有意误导的比例
+      sayRate: r2(div(acc.says, responded)), // 话密度：开口的手占比（say 可留空后，沉默本身是 tell）
       avgSayLen: r2(div(acc.sayLenSum, acc.says)),
       lines: acc.lines, // 留样：台词质量评估等 G2
-      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says },
+      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says, hands: responded },
     },
     // 成本与后端（A4 实收账目／A2 路由锁的验尺）
     cost: {
@@ -220,7 +221,7 @@ export function routingIntegrity(rows) {
 
 // 风味分化的判据（Q51 证据闸门）：**只看风味层**。
 // 机器只能报"分没分开"，"分开得算不算一个人"由人看（红队条款：这里不下结论）。
-export const FLAVOR_AXES = ['bluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate'];
+export const FLAVOR_AXES = ['bluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate'];
 
 // 顶班率 ≥20% 的行不参与分化计算——那些数里掺着沉默 bot，拿它算"模型之间差多少"是自欺。
 export const CONTAMINATED_RATE = 0.2;

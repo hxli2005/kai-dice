@@ -135,10 +135,10 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push('');
   out.push(
     table(
-      ['模型', '虚报率', '蒙报率', '抬价深度', '算频/局', '宣言/局', 'bait 率', 'n(报价/局)'],
+      ['模型', '虚报率', '蒙报率', '抬价深度', '算频/局', '宣言/局', 'bait 率', '话密度', 'n(报价/局)'],
       sorted.map((r) =>
         spoiled(r)
-          ? [r.label, '—', '—', '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
+          ? [r.label, '—', '—', '—', '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
           : [
               r.label,
               f(r.flavor.bluffRate, r.flavor.n.seenBids),
@@ -147,6 +147,7 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
               num(r.flavor.calcPerRound),
               num(r.flavor.declarePerRound),
               f(r.flavor.baitRate, r.flavor.n.says),
+              f(r.flavor.sayRate, r.flavor.n.hands),
               `${r.flavor.n.bids}/${r.flavor.n.rounds}`,
             ],
       ),
