@@ -27,7 +27,7 @@ import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS, DEFAULT_PERSONA } from './per
 const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 
 场：各 5 骰。每局败者掉 1 骰，掉光出局，余一人则场终。
-局：重掷、全部盖住（自己也看不见），承诺哈希开局公开、摊牌可验（无人能重掷）；掀盅/盲/斋/抬/算盘状态清零。
+局：重掷、全部盖住（自己也看不见），承诺哈希开局公开、摊牌可验（无人能重掷）；掀盅/盲/斋/抬/算盘状态清零（宣言只在当局有效）。
 首报者：首局＝玩家；之后＝上局败者，该人若出局则为其下家。${
     three ? '\n三人桌：开牌只能开上家（当前报价者）。桌上没有队伍，各自为战。' : ''
   }
@@ -49,15 +49,18 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 引擎不校验报价真假，满足上式即合法。
 
 清点：实有 ＝ |{ d : d＝X ∨ (非斋局 ∧ d＝1) }|，每颗至多计一次
+清点范围＝全场所有骰子：d＝X 计入；非斋局的 d＝1（万能）也计入——不论那颗 1 在你手里还是对手手里。斋局报 1 时，1 按面值正常计入。
 成立 ⟺ 实有 ≥ N。成立→报价者胜、开牌者败；否则开牌者胜、报价者败。败者掉 1 骰。
 
 结算：注数 ＝ 1 ＋ 报价次数
-倍率 ＝ 2^(宣盲人次＋扳抬人次) × (斋局?1.5:1) × (报价次数≥6?2:1)
+倍率 ＝ 2^(宣盲人次＋扳抬人次) × (斋局?1.5:1) × (报价次数≥6?2:1)——末项是深水线：第 6 口报价起，池倍率自动再 ×2
 赔付 ＝ round(注数 × 倍率)
 每名非胜者向胜者支付赔付。筹码可为负，不影响胜负与终局。`;
 
-const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字：
-{"action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}，"say":"你当众说出口的话，全桌都听得见；可留空＝这手不开口","belief":"你此刻的判断，不上屏，存档","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","note":"决策理由，不上屏，存档","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
+// 字段顺序＝先想后落子（belief/note 在 action 之前）：实测过 action 先出、note 里推翻自己
+// 却收不回棋子的手口不一——输出顺序是操作语义，不是策略。
+const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
+{"belief":"你此刻的判断（先写这项），不上屏，存档","note":"决策理由，不上屏，存档","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（当众拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"你当众说出口的话，全桌都听得见；可留空＝这手不开口","speechMode":"straight 或 bait（bait＝这句 say 有意误导）","reaction":"仅当客人反驳你时填 hold、fold 或 ignore"}`;
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。
@@ -500,7 +503,7 @@ function serializeCurrent(payload, who) {
   });
   lines.push(`合法动作（仅限以下，清单外的会被引擎拒绝）：${actions.join('；') || '无'}。`);
   if (c.legal.bid)
-    lines.push(`报价边界：总骰${c.legal.bid.totalDice}；数量${c.legal.bid.minCount}–${c.legal.bid.maxCount}；点数${c.legal.bid.faces.join('/')}；${c.currentBid ? `必须高于${c.currentBid.count}个${c.currentBid.face}` : '首报数量至少2'}。`);
+    lines.push(`报价边界：总骰${c.legal.bid.totalDice}；数量${c.legal.bid.minCount}–${c.legal.bid.maxCount}；点数${c.legal.bid.faces.join('/')}；${c.currentBid ? `必须高于${c.currentBid.count}个${c.currentBid.face}——数量更多，或数量相同、点数更大` : '首报数量至少2'}。`);
   return lines.join('\n');
 }
 
