@@ -136,7 +136,9 @@ for (const e of entrants) {
   );
   let ok = false;
   let lastErr = null;
-  for (const tag of tags.length ? tags : [null]) {
+  // 每个端点给两次机会：单发体检会让候选死于一次抽风（实测 qwen3.7-plus 上轮干净打完、
+  // 本轮体检回了句怪话就被淘汰）——比赛里同样的失败有沉默兜底，体检不该比比赛更脆。
+  for (const tag of (tags.length ? tags : [null]).flatMap((t) => [t, t])) {
     const ch = { ...e.channel, providerTag: tag };
     try {
       const pinned = pinSampling(ch);
