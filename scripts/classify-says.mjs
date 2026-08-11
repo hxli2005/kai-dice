@@ -10,7 +10,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { chat } from '../src/ai/llm.js';
-import { originHeaders, OPENROUTER_BASE } from '../src/ai/openrouter.js';
+import { fetchModels, openrouterChannel } from '../src/ai/openrouter.js';
 
 const argv = process.argv.slice(2);
 const dir = argv.find((a) => !a.startsWith('--'));
@@ -52,7 +52,9 @@ const RUBRIC = `任务：给大话骰牌桌台词逐句分类，只有两类。
 例：「四个5。」「我先看看自己的骰。」「开牌。」＝factual；「四个5？我不信，开牌。」「这把我陪你玩大的。」「三个5，先稳稳来。」＝subjective（"稳"是自评尾巴）。
 严格输出一行 JSON 数组，不要其他文字：[{"id":"…","label":"subjective"或"factual","reason":"≤20字"}]，逐行都要有。`;
 
-const channel = (model) => ({ baseUrl: OPENROUTER_BASE, apiKey, model, format: 'openai', headers: originHeaders() });
+// 通道必须走能力协商（教训：审计员 gemini 是重推理模型，裸 3072 会被推理吃光→全 unlabeled）
+const live = await fetchModels().catch(() => null);
+const channel = (model) => openrouterChannel({ apiKey, model, modelInfo: live?.find((m) => m.id === model) });
 const parseArr = (raw) => {
   const m = raw.match(/\[[\s\S]*\]/);
   return JSON.parse(m[0]);
@@ -97,7 +99,8 @@ const audited = await classify(AUD_MODEL, sampled, '审计');
 const auditRows = sampled.map((r) => {
   const a = audited.get(r.lineId).label;
   const b = labels.get(r.lineId).label;
-  return { lineId: r.lineId, model: r.model, label: b, auditLabel: a, agree: a === b, auditor: AUD_MODEL };
+  // unlabeled＝审计腿自身失败，只报失败数，不算分歧（算进去会把管线故障伪装成口径分歧）
+  return { lineId: r.lineId, model: r.model, label: b, auditLabel: a, agree: a === 'unlabeled' ? null : a === b, auditor: AUD_MODEL };
 });
 writeFileSync(`${dir}/audit.jsonl`, auditRows.map((r) => JSON.stringify(r)).join('\n'));
 
@@ -118,11 +121,12 @@ for (const [model, m] of Object.entries(byModel)) {
   const rates = Object.values(m.matches).map((g) => g.subj / g.total);
   const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
   const sd = rates.length > 1 ? Math.sqrt(rates.reduce((a, b) => a + (b - mean) ** 2, 0) / (rates.length - 1)) : 0;
-  const agr = auditRows.filter((r) => r.model === model);
+  const agr = auditRows.filter((r) => r.model === model && r.agree !== null);
+  const afail = auditRows.filter((r) => r.model === model && r.agree === null).length;
   md.push(`## ${model}`);
   md.push(`- 主观率（按场，n=${rates.length} 场）：**${(mean * 100).toFixed(0)}% ± ${(sd * 100).toFixed(0)}pt**　句级 ${m.subj}/${m.total}${m.unlabeled ? `（未标 ${m.unlabeled}）` : ''}`);
   md.push(`- 各场：${Object.entries(m.matches).map(([k, g]) => `${k} vs ${g.opponent.split('/').pop()}＝${((g.subj / g.total) * 100).toFixed(0)}%(${g.subj}/${g.total})`).join('；')}`);
-  md.push(`- 审计一致率：${agr.length ? `${((agr.filter((r) => r.agree).length / agr.length) * 100).toFixed(0)}%（n=${agr.length}）` : '（未抽中）'}`);
+  md.push(`- 审计一致率：${agr.length ? `${((agr.filter((r) => r.agree).length / agr.length) * 100).toFixed(0)}%（n=${agr.length}${afail ? `，审计失败另计 ${afail}` : ''}）` : afail ? `（审计腿全部失败 ${afail} 句）` : '（未抽中）'}`);
   md.push('');
 }
 writeFileSync(`${dir}/subjectivity.md`, md.join('\n'));
