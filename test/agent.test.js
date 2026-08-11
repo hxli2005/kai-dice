@@ -230,7 +230,7 @@ test('自我记忆回灌：同局自己的宣言/台词/心思进下一手提示
   const { user } = buildPrompts(ob, '', undefined, {
     ownLog: [{ action: { type: 'declare', declaration: 'zhai' }, say: '斋。两个6等着。', note: '装强，钓他开' }],
   });
-  assert.match(user, /本局自我留档：宣言了「斋」/);
+  assert.match(user, /你本局此前：宣言了「斋」/);
   assert.match(user, /当时说「斋。两个6等着。」/);
   assert.match(user, /当时记录「装强，钓他开」/);
   // Q86：回灌的是**数据**（自己刚做过什么），后面那句"必须接得上、不许自相矛盾"是要求，已删。
@@ -275,9 +275,9 @@ test('跨局自我留档：前几局的台词与判断压缩回灌，本局照�
       { round: 2, action: { type: 'calc' }, note: '这局先算' },
     ],
   });
-  assert.ok(user.includes('前几局自我留档：第1局：报了 2 个 4，说「两个4。」，判断「虚的，试探他」（那句是有意误导）'), user);
+  assert.ok(user.includes('你前几局：第1局：报了 2 个 4，说「两个4。」，判断「虚的，试探他」（那句是有意误导）'), user);
   assert.ok(!user.includes('第1局：掀盅看了骰'), '无私有内容的旧条目不回灌');
-  assert.ok(user.includes('本局自我留档：拨了算盘'), '本局条目照旧全量格式');
+  assert.ok(user.includes('你本局此前：拨了算盘'), '本局条目照旧全量格式');
   assert.ok(user.includes('当时记录「这局先算」'));
 });
 
@@ -307,7 +307,7 @@ test('createOpponent：跨局回灌走真实决策日志——第 2 局的提示
   assert.equal(m.observe('B').round, 2);
   // 第 2 局第一手：提示词应携带第 1 局的 belief
   await ai.decide(m.observe('B'));
-  assert.ok(prompts.at(-1).includes('前几局自我留档：第1局：开了牌，说「开。」，判断「第1局我诈了他」'), prompts.at(-1).slice(-600));
+  assert.ok(prompts.at(-1).includes('你前几局：第1局：开了牌，说「开。」，判断「第1局我诈了他」'), prompts.at(-1).slice(-600));
 });
 
 test('Anthropic 格式：thinking 块不挡正文提取；stop_reason=max_tokens 归因 truncated 并加倍信封重试', async () => {
@@ -353,7 +353,7 @@ test('幻影记忆防线：打了 stale 标的决策不进自我回灌（引擎�
   await ai.decide(m.observe('B'));
   ai.logs.at(-1).stale = true; // 宿主丢弃了这手（过期重决）
   await ai.decide(m.observe('B'));
-  assert.ok(!prompts[1].includes('自我留档'), '被丢弃的那手不得回灌');
+  assert.ok(!(prompts[1].includes('你本局此前') || prompts[1].includes('你前几局')), '被丢弃的那手不得回灌');
 });
 
 test('瞬态失败重试一次：网络错误后第二发成功不落沉默 bot；格式失败是被测项，不重试', async () => {
@@ -408,8 +408,8 @@ test('createOpponent：决策日志自动回灌——第二手调用的提示词
   assert.equal(d1.action.type, 'declare');
   await m.act('B', d1.action);
   await ai.decide(m.observe('B')); // 同局第二手
-  assert.ok(!prompts[0].includes('本局自我留档'), '首手无自我记忆');
-  assert.match(prompts[1], /本局自我留档：宣言了「抬」；当时说「抬了，跑不了」；当时记录「先把池做大」/);
+  assert.ok(!prompts[0].includes('你本局此前'), '首手无自我记忆');
+  assert.match(prompts[1], /你本局此前：宣言了「抬」；当时说「抬了，跑不了」；当时记录「先把池做大」/);
 });
 
 // 提示词二准入（Q86，用户裁决 2026-08-10）：**只准装规则与操作 ＋ 数据**。

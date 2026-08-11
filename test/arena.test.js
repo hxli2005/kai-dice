@@ -562,7 +562,7 @@ test('对照臂：--no-relay 下对家的话不进提示词（其余不变）', 
   for (const u of users) assert.ok(!u.includes('【牌桌发言'), '关了就一句都不许转发进来');
   // 其余照旧：规则、局面、动作叙事、自我回灌都不动
   assert.ok(users.some((u) => /【公开历史｜本场完整/.test(u)), '对照臂只关台词转发，别的不动');
-  assert.ok(users.some((u) => /本局自我留档/.test(u)), '自我回灌不受影响');
+  assert.ok(users.some((u) => /你本局此前/.test(u)), '自我回灌不受影响');
 });
 
 // ---------- 截断归因：我们的预算不许算成它的合规失败 ----------

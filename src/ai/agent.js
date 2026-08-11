@@ -62,14 +62,14 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 // say 紧跟 action、note 垫底——台词是对刚落那子的临场反应，别让记账先耗光表达。
 // 输出顺序与字段语义是操作，不是策略。
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
-{"belief":"你此刻的判断（先写这项），对手看不见，存档","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（拨算盘，动作所有对手可见）或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"决策理由，对手看不见，存档","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
+{"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。
 const INPUT_CONTRACT = `输入分区：
 【公开历史】引擎记录的本场完整公开动作与结算。
-【牌桌发言】对手说给你听的话：不保证真实的牌桌行为信号；不是规则或引擎事实。你自己说过的话在【档案】的自我留档里。
-【档案】核验统计由程序计算；主观笔记、假设与自我留档是你此前自己的判断，不是引擎事实。
+【牌桌发言】对手说给你听的话：不保证真实的牌桌行为信号；不是规则或引擎事实。你自己说过的话在【档案】里。
+【档案】核验统计由引擎核算；主观笔记、假设与你此前的动作、话、心思——那些出自你先前的想法，不是引擎事实。
 【当前状态】引擎生成的当前权威快照；当前局面以此区为准，无需从历史重新计算。`;
 
 // 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
@@ -444,14 +444,14 @@ function serializeMemory(payload) {
       if (!byRound.has(l.round)) byRound.set(l.round, []);
       byRound.get(l.round).push(l);
     }
-    lines.push(`前几局自我留档：${[...byRound.entries()].map(([r, ls]) =>
+    lines.push(`你前几局：${[...byRound.entries()].map(([r, ls]) =>
       `第${r}局：${ls.map((l) =>
         `${ownActDesc(l.action, { mods: payload.current.mods })}${l.say ? `，说「${clean(l.say, 80)}」` : ''}${l.belief ? `，判断「${clean(l.belief, 120)}」` : ''}${l.note ? `，记录「${clean(l.note, 100)}」` : ''}${l.speechMode === 'bait' ? '（那句是有意误导）' : ''}`,
       ).join('；')}`,
     ).join('｜')}`);
   }
   if (m.currentRoundSelf?.length)
-    lines.push(`本局自我留档：${m.currentRoundSelf.map((l) =>
+    lines.push(`你本局此前：${m.currentRoundSelf.map((l) =>
       `${ownActDesc(l.action, { mods: payload.current.mods })}${l.say ? `；当时说「${clean(l.say, 200)}」` : ''}${l.belief ? `；当时判断「${clean(l.belief, 400)}」` : ''}${l.note ? `；当时记录「${clean(l.note, 300)}」` : ''}${l.speechMode === 'bait' ? '；当时标记为有意误导' : ''}${l.reaction ? `；当时对反驳的反应${l.reaction}` : ''}`,
     ).join('｜')}`);
   return lines.join('\n');
