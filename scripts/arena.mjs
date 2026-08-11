@@ -13,6 +13,9 @@
 // A4 红线：禁止把消费级订阅桥接成 API 后端（见 src/arena/cost.js）。
 
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { seatSystem, PROMPT_VERSION } from '../src/ai/agent.js';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
 import { runArena, roundRobin, playSeries, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
 import { chat } from '../src/ai/llm.js';
@@ -24,8 +27,10 @@ const argv = process.argv.slice(2);
 // 参赛者是否显式指定了后端（`id@tag`）。**没指定就是不可复现的**：
 // /endpoints 的顺序不稳定，同一条命令两次跑可能落到不同后端与量化档（实测 streamlake/fp8
 // 与 novita/fp8 轮着来），跨批次比对时那就是一个偷偷变化的自变量（Q52②）。
-const tagOverrideOf = (label) =>
-  argv.some((a) => typeof a === 'string' && a.includes(`${label}@`));
+const tagOverrideOf = (label) => {
+  const id = label.replace('#nothink', '');
+  return argv.some((a) => typeof a === 'string' && a.includes(`${id}@`));
+};
 const flag = (name, dflt = null) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? (argv[i + 1]?.startsWith('--') ? true : argv[i + 1]) : dflt;
@@ -84,10 +89,12 @@ if (!wanted.length) {
   process.exit(2);
 }
 
-// 解析参赛者：价格、后端锁、思考型标注
+// 解析参赛者：价格、后端锁、思考型标注。
+// 语法 id[@tag][#nothink]——#nothink＝显式关闭推理（推理开关实验臂），标签带后缀单独成行。
 const entrants = [];
 for (const raw of wanted) {
-  const [id, tagOverride] = raw.split('@');
+  const noThink = raw.includes('#nothink');
+  const [id, tagOverride] = raw.replace('#nothink', '').split('@');
   const model = live.find((m) => m.id === id);
   if (!model) {
     console.error(`✗ 清单里没有 ${id}（拼错了，或它下架了）`);
@@ -105,12 +112,24 @@ for (const raw of wanted) {
       console.warn(`  ! ${id} 拉不到 endpoint 清单，本次不锁后端（方差里可能混后端差异）`);
     }
   }
+  const channel = openrouterChannel({ apiKey, model: id, modelInfo: model, providerTag: tag, base });
+  if (noThink) {
+    // 推理开关臂：OpenRouter 统一口径显式关推理；chat() 会据此不再下发推理信封
+    channel.extra = { ...channel.extra, reasoning: { enabled: false } };
+    delete channel.reasoningProfile;
+  }
   entrants.push({
-    label: id,
+    label: id + (noThink ? '#nothink' : ''),
     price: model,
-    channel: openrouterChannel({ apiKey, model: id, modelInfo: model, providerTag: tag, base }),
+    channel,
     endpoints, // 体检轮换用：首选端点可能在你的数据策略下不可达
-    meta: { tag, quant, thinking: thinkingNote(model) },
+    meta: {
+      tag,
+      quant,
+      thinking: thinkingNote(model),
+      // 溯源：这一席"要求的"推理形态；"实际的"（回执 reasoningTokens）跑完由 run.json 汇总
+      reasoningRequested: noThink ? 'off' : channel.reasoningProfile ? `native+budget${channel.reasoningProfile.maxTokens}` : 'native',
+    },
   });
   console.log(
     `  · ${id}　${model.priceKnown ? `$${(model.promptPrice * 1e6).toFixed(2)}/$${(model.completionPrice * 1e6).toFixed(2)} 每百万` : '价格不定'}` +
@@ -330,12 +349,61 @@ if (seriesResults) {
   writeFileSync(`${dir}/series.md`, md.join('\n'));
 }
 
+// 溯源（可复现三件）：代码位＋提示词版本与哈希——跨批可比性先验这三个字段
+const gitCommit = (() => {
+  try { return execSync('git rev-parse HEAD').toString().trim(); } catch { return null; }
+})();
+const systemPromptHash = createHash('sha256').update(seatSystem(false)).digest('hex').slice(0, 16);
+// 每席"实际的"推理形态：从回执 reasoningTokens 汇总（承诺不算数，回执才算——A2 同款纪律）
+const reasoningActualOf = (label) => {
+  const toks = [];
+  let hands = 0;
+  for (const m of matches)
+    for (const s of ['A', 'B']) {
+      if (m.seats[s] !== label) continue;
+      for (const l of m.logs[s] ?? []) {
+        if (l.auto || !l.meta) continue;
+        hands += 1;
+        const r = l.meta.reasoningTokens ?? 0;
+        if (r > 0) toks.push(r);
+      }
+    }
+  toks.sort((a, b) => a - b);
+  return {
+    hands,
+    reasoningShare: hands ? +(toks.length / hands).toFixed(2) : null,
+    medianReasoningTokens: toks.length ? toks[(toks.length - 1) >> 1] : 0,
+  };
+};
+
+// 逐句制品（分类管线的输入）：lineId 决定性可追溯（seed:座位:日志序）
+const saysRows = [];
+for (const m of matches)
+  for (const s of ['A', 'B']) {
+    const opp = m.seats[s === 'A' ? 'B' : 'A'];
+    (m.logs[s] ?? []).forEach((l, i) => {
+      if (l.auto || l.silentFallback || !l.say) return;
+      saysRows.push({
+        lineId: `${m.seed}:${s}:${i}`,
+        model: m.seats[s],
+        opponent: opp,
+        seed: m.seed,
+        round: l.round,
+        action: l.action,
+        say: l.say,
+        speechMode: l.speechMode ?? 'straight',
+      });
+    });
+  }
+writeFileSync(`${dir}/says.jsonl`, saysRows.map((r) => JSON.stringify(r)).join('\n'));
+
 writeFileSync(
   `${dir}/run.json`,
   JSON.stringify(
     {
       at,
-      entrants: entrants.map((e) => ({ label: e.label, ...e.meta })),
+      provenance: { gitCommit, promptVersion: PROMPT_VERSION, systemPromptHash },
+      entrants: entrants.map((e) => ({ label: e.label, ...e.meta, reasoningActual: reasoningActualOf(e.label) })),
       setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, openBook, vsAnchor, handEstimate: HAND_ESTIMATE },
       series: seriesResults?.map((s) => ({
         seats: s.seats,

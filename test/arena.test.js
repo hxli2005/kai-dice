@@ -711,3 +711,19 @@ test('sayRate 口径：分母只算模型自己产出合法决策的手，错误
   assert.equal(rx.flavor.sayRate, +(saysN / okN).toFixed(3));
   assert.ok(rx.flavor.sayRate < 1, '选择沉默的那手计入分母，拉低话密度');
 });
+
+// ---------- 推理开关实验臂：#nothink 的通道级 reasoning 关断要真的进请求体 ----------
+test('推理开关臂：channel.extra.reasoning={enabled:false} 原样下发，且不再套推理信封', async () => {
+  const seen = [];
+  const ch = pinSampling({
+    baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', model: 'm',
+    extra: { reasoning: { enabled: false } },
+    reasoningProfile: { enabled: true, maxTokens: 2048, minCompletionTokens: 3072 },
+  });
+  await createOpponent({ channel: ch, fetchFn: async (url, init) => {
+    seen.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"action":{"type":"peek"}}' } }] }) };
+  } }).decide((await createMatch({ seed: 3 })).observe('A'));
+  assert.deepEqual(seen[0].reasoning, { enabled: false }, '关断显式下发');
+  assert.equal(seen[0].max_tokens, MAX_TOKENS, '显式关断后不套推理信封（裸 3072）');
+});

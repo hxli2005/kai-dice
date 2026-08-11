@@ -74,7 +74,10 @@ const INPUT_CONTRACT = `输入分区：
 
 // 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
 // 三个机位与擂台席拿到的 system 完全逐字相同（Q53 全席同构在此兑现，测试断言全等）。
-const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
+// **版本锁**：v3＝世界语义契约（用户裁决冻结，2026-08-11）。改动本文件的提示词文本
+// 必须升版本号——擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
+export const PROMPT_VERSION = 'v3';
+export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
 
