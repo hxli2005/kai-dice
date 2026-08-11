@@ -692,3 +692,19 @@ test('playSeries：胜负 2–0 提前收场，不打第三场也不再蒸馏', 
   }
   assert.ok(s.games.length <= 3);
 });
+
+// ---------- sayRate 口径：沉默是选择，故障不是 ----------
+test('sayRate 口径：分母只算模型自己产出合法决策的手，错误/顶班手不稀释话密度', async () => {
+  const m = await playMatch({ seed: 7, seats: { A: seat('mx'), B: seat('my') }, fetchFn: fakeChannel({}) });
+  // 人工补两条手：一条网络错（不该进分母）、一条 ok 但选择沉默（该进分母）
+  m.logs.A.push({ round: 99, outcome: 'error', silentFallback: true, say: '', meta: {} });
+  m.logs.A.push({ round: 99, outcome: 'ok', silentFallback: false, say: '', belief: '这手不说话', meta: {} });
+  const rows = summarize([m]);
+  const rx = rows.find((r) => r.label === 'mx');
+  const logs = m.logs.A.filter((l) => !l.auto);
+  const okN = logs.filter((l) => l.outcome === 'ok').length;
+  const saysN = logs.filter((l) => l.say).length;
+  assert.equal(rx.flavor.n.hands, okN, '分母＝ok 手数（错误手不入）');
+  assert.equal(rx.flavor.sayRate, +(saysN / okN).toFixed(3));
+  assert.ok(rx.flavor.sayRate < 1, '选择沉默的那手计入分母，拉低话密度');
+});

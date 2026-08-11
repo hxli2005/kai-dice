@@ -215,3 +215,35 @@ test('观战旁注：出局者可押、活人不可押、结算零和入房内�
   }
   assert.fail('12 个种子里竟无一局有人先出局');
 });
+
+// ---------- 不代言：健康模型交回 say="" 是它自己选的沉默（Q95 口径） ----------
+test('健康模型 say="" 开牌不代言：F2 事实模板只属于降级', async () => {
+  const respond = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const user = body.messages[1].content;
+    let content = '';
+    if (!user.includes('合法动作：')) content = ''; // 开场白/反思/判词等非决策调用：一律不说
+    else if (/开牌（\{"type":"challenge"\}）/.test(user)) content = '{"action":{"type":"challenge"},"say":"","belief":"直接开，不说话"}';
+    else if (/掀盅看骰/.test(user)) content = '{"action":{"type":"peek"},"say":""}';
+    else content = '{"action":{"type":"bid","count":2,"face":5},"say":""}';
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  const h = harness({ fetchFn: respond });
+  h.core.handle('h1', { t: 'hello', device: 'devA', tab: 't1', seal: '虎', hostKey: 'HK', pass: 'pw' });
+  h.core.handle('g1', { t: 'hello', device: 'devB', tab: 't2', seal: '雀' });
+  h.core.handle('h1', { t: 'start' });
+  await until(() => h.last('h1', 'ob'));
+  // 座次：主家=实际 A，客人=实际 B，AI=实际 C（开只能开上家 → 要让 AI 开的是客人的价）
+  // 主家首报 → 客人跟价 → AI 按脚本开牌且一字不说
+  h.core.handle('h1', { t: 'act', action: { type: 'peek' }, elapsedMs: 1 });
+  h.core.handle('h1', { t: 'act', action: { type: 'bid', count: 2, face: 4 }, elapsedMs: 1 });
+  await until(() => h.last('g1', 'ob')?.ob?.turn === 'A'); // 客人视角自己恒为 A
+  h.core.handle('g1', { t: 'act', action: { type: 'peek' }, elapsedMs: 1 });
+  h.core.handle('g1', { t: 'act', action: { type: 'bid', count: 2, face: 5 }, elapsedMs: 1 });
+  await until(() => {
+    const ob = h.last('h1', 'ob')?.ob;
+    return ob && (ob.round > 1 || ob.over); // AI 开牌 → 第 1 局收束
+  });
+  assert.equal(h.count('h1', 'say'), 0, '健康模型的沉默开牌不许被事实模板代言');
+  assert.equal(h.count('g1', 'say'), 0);
+});

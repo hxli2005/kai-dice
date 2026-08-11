@@ -124,6 +124,7 @@ export function createRoomCore({
       profile: '', // 好友房无跨设备档案：AI 对两位客人都从本房现场读起（房内多场连续）
       persona: defaultAiPersona(),
       ctx: promptCtxFor(seat),
+      fetchFn, // 注入的传输层要跟到决策调用（此前只有开场白/判词在用，决策漏走了全局 fetch）
     });
     return opponents[seat];
   }
@@ -270,8 +271,10 @@ export function createRoomCore({
           markStaleLog(ai, d); // 引擎拒绝的那手同样没发生过
           break; // 引擎拒绝（不应发生；沉默 bot 兜底本身合法）——停泵防死循环
         }
-        // F2 沉默模式的"被读"底线：没暗号的房间（沉默主持）开牌时也得说出为什么——事实模板，零编造
-        const line = d.say || (d.action.type === 'challenge' ? silentSay(defaultAiPersona(), ob) : '');
+        // F2 事实模板只属于降级（沉默主持/顶班的"被读"底线）；健康模型交回 say=""
+        // 是它自己选的沉默，不代言（Q95 口径）
+        const line =
+          d.say || (d.silentFallback && d.action.type === 'challenge' ? silentSay(defaultAiPersona(), ob) : '');
         if (line) say(seat === 'B' ? line : `（代打${sealName(seat)}）${line}`, seat, d.action, ob.round);
         pushObs();
         drainEvents();

@@ -170,10 +170,12 @@ export function finalize(acc) {
       calcPerRound: r2(div(acc.calcs, acc.rounds)), // 算频（原生 tell：算不算是他自己的事）
       declarePerRound: r2(div(acc.declares, acc.rounds)), // 宣言使用率（盲＋抬）
       baitRate: r2(div(acc.baits, acc.says)), // 自认有意误导的比例
-      sayRate: r2(div(acc.says, responded)), // 话密度：开口的手占比（say 可留空后，沉默本身是 tell）
+      // 话密度口径：分母只算它**自己产出合法决策**的手（ok）——错误/超时/顶班的手它没得选，
+      // 算进去会把"故障"稀释成"沉默"，污染这个 tell。
+      sayRate: r2(div(acc.says, acc.ok)),
       avgSayLen: r2(div(acc.sayLenSum, acc.says)),
       lines: acc.lines, // 留样：台词质量评估等 G2
-      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says, hands: responded },
+      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says, hands: acc.ok },
     },
     // 成本与后端（A4 实收账目／A2 路由锁的验尺）
     cost: {

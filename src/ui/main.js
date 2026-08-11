@@ -901,9 +901,10 @@ async function aiTurnFor(seat) {
     return driveTurn();
   }
   const elapsedMs = performance.now() - t0;
-  // F2 沉默模式的"被读"底线：没通道也得说出为什么开你（事实模板，零编造）
+  // F2 事实模板只属于**降级**（沉默模式的"被读"底线）——健康模型交回 say=""
+  // 是它自己选的沉默，代它开口就是代言（Q95 口径：宁可没有，不由我们代它说）。
   if (d.action.type === 'challenge')
-    return doShowdown(seat, { elapsedMs, sayText: d.say || silentSay(ai.persona, o) });
+    return doShowdown(seat, { elapsedMs, sayText: d.say || (d.silentFallback ? silentSay(ai.persona, o) : '') });
   const meta = modMetaOf(o, d.action.type);
   if (meta?.terminal) return doShowdown(seat, { elapsedMs, sayText: d.say, actionType: d.action.type });
   await match.act(seat, d.action, { elapsedMs });
