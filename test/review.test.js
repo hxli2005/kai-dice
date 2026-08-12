@@ -56,10 +56,10 @@ test('F8 双轨：公开事实与内心留档逐手配对，bait 与算的私有
 test('F8 戏眼：平淡的局折叠，开牌/高倍/被打脸的局展开', () => {
   const evs = [
     { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
-    { type: 'bid', player: 'A', count: 2, face: 4 },
+    { type: 'bid', actor: 'A', count: 2, face: 4 },
     { type: 'roundEnd', round: 1, loser: 'B', winner: 'A', transfer: 2, mult: 1 },
     { type: 'roundStart', round: 2, diceCount: { A: 5, B: 4 } },
-    { type: 'bid', player: 'A', count: 2, face: 4 },
+    { type: 'bid', actor: 'A', count: 2, face: 4 },
     { type: 'roundEnd', round: 2, loser: 'A', winner: 'B', transfer: 8, mult: 4 },
   ];
   const t = reviewTracks(evs, {});
@@ -127,7 +127,7 @@ test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本�
   const tracks = reviewTracks(
     [
       { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
-      { type: 'challenge', player: 'B' },
+      { type: 'challenge', actor: 'B', target: 'A' },
     ],
     { logsBySeat: { B: [ai.logs.at(-1)] } },
   );

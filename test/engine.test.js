@@ -139,10 +139,13 @@ test('Q45 算：轮到你才能算、每局一次、只落公开事实、下一�
   assert.equal(o.calced.A, true);
   assert.equal(o.calced.B, false);
   assert.equal(o.turn, 'A', '算完行动权还在你');
-  assert.ok(o.events.some((e) => e.type === 'calc' && e.player === 'A'));
+  assert.ok(o.events.some((e) => e.type === 'calc' && e.actor === 'A'));
   // 事件里只有"他算了"，没有算出来的数——结果私有（各自客户端用自己的骰算）
   const ev = o.events.find((e) => e.type === 'calc');
-  assert.deepEqual(Object.keys(ev).sort(), ['elapsedMs', 'i', 'player', 'timeout', 'type'].sort());
+  assert.deepEqual(
+    Object.keys(ev).sort(),
+    ['i', 'type', 'actor', 'target', 'action', 'round', 'elapsedMs', 'timeout'].sort(),
+  );
   assert.equal(m.observe('B').calced.A, true, '拨算盘全桌可见');
   await assert.rejects(() => m.act('A', { type: 'calc' }), /illegal calc/);
   // 下一局重新摆算盘
@@ -200,8 +203,8 @@ test('自对弈 200 场：终止、守恒、判定、承诺全部成立', async 
       if (e.type === 'bid') bids++;
       if (e.type === 'declare') {
         if (e.declaration === 'zhai') declares.zhai = true;
-        else if (e.declaration === 'raise') declares[`raise${e.player}`] = true;
-        else declares[`blind${e.player}`] = true;
+        else if (e.declaration === 'raise') declares[`raise${e.actor}`] = true;
+        else declares[`blind${e.actor}`] = true;
       }
       if (e.type === 'reveal') {
         // 骰面数量与承诺一致

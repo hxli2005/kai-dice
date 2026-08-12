@@ -86,6 +86,7 @@
 </div>
 
 <script type="module">
+import { groundEvents } from '../../src/grounding.js'; // G2：旧档在载入边界补齐四元组
 const $ = (i) => document.getElementById(i);
 const DEC = new Set(['bid', 'challenge', 'peek', 'calc', 'declare', 'modAction']);
 const W = { zhai: '斋', blind: '盲', raise: '抬' };
@@ -110,9 +111,9 @@ function weave(m) {
   for (const e of m.events) {
     if (e.type === 'roundStart') { rd = e.round; out.push({ kind: 'rd', round: rd }); continue; }
     if (e.type === 'reveal') { out.push({ kind: 'open', e, round: rd }); continue; }
-    if (!DEC.has(e.type) || !e.player) continue;
-    const l = q[e.player].shift() ?? null;
-    out.push({ kind: 'hand', e, l, round: rd, who: m.seats[e.player] });
+    if (!DEC.has(e.type) || !e.actor) continue;
+    const l = q[e.actor].shift() ?? null;
+    out.push({ kind: 'hand', e, l, round: rd, who: m.seats[e.actor] });
   }
   return out;
 }
@@ -206,7 +207,10 @@ $('copy').onclick = () => {
 $('fBait').onclick = () => { onlyBait = !onlyBait; $('fBait').classList.toggle('on', onlyBait); drawPane(); };
 $('fRecall').onclick = () => { onlyRecall = !onlyRecall; $('fRecall').classList.toggle('on', onlyRecall); drawPane(); };
 
-function load(j) { RUN = j; cur = 0; drawList(); drawPane(); }
+function load(j) {
+  RUN = { ...j, matches: (j.matches ?? []).map((m) => ({ ...m, events: groundEvents(m.events ?? []) })) };
+  cur = 0; drawList(); drawPane();
+}
 $('file').onchange = (e) => e.target.files[0]?.text().then((t) => load(JSON.parse(t)));
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => { e.preventDefault(); e.dataTransfer.files[0]?.text().then((t) => load(JSON.parse(t))); });

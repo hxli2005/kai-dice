@@ -90,17 +90,17 @@ export function computeStats(events, you, myDiceByRound) {
         .filter(([k]) => k !== you)
         .reduce((a, [, v]) => a + v, 0);
     }
-    if (e.type === 'peek' && e.player === you) seenNow = true;
+    if (e.type === 'peek' && e.actor === you) seenNow = true;
     if (e.type === 'declare' && e.declaration === 'zhai') zhai = true;
-    if (e.type === 'declare' && e.declaration === 'blind' && e.player === you) s.myBlinds++;
-    if (e.type === 'declare' && e.declaration === 'raise' && e.player === you) s.myRaises++;
-    if (e.type === 'calc' && e.player === you) {
+    if (e.type === 'declare' && e.declaration === 'blind' && e.actor === you) s.myBlinds++;
+    if (e.type === 'declare' && e.declaration === 'raise' && e.actor === you) s.myRaises++;
+    if (e.type === 'calc' && e.actor === you) {
       s.myCalcs++;
       calcPending = true;
     }
     if (e.type === 'bid') {
       depth++;
-      if (e.player === you) {
+      if (e.actor === you) {
         judgeCalc('bid', { count: e.count, face: e.face });
         s.myBids++;
         // 面对已有报价而选择抬（没开）＝一次放过的开牌机会
@@ -135,33 +135,36 @@ export function computeStats(events, you, myDiceByRound) {
             s.slowest = { round, bid: { count: e.count, face: e.face }, ms: e.elapsedMs };
         }
       }
-      curBid = { count: e.count, face: e.face, player: e.player };
+      curBid = { count: e.count, face: e.face, player: e.actor };
     }
     if (e.type === 'reveal') {
       s.ladderDepths.push(depth);
-      const challenger = e.challenger ?? (e.stands ? e.loser : e.loser === 'A' ? 'B' : 'A');
+      // G2：谁开谁一律读引擎盖章的四元组（actor 开 target）。
+      // 旧写法从 stands/loser 回推、且把座位硬编码成 A/B——三人桌上必错。
+      const challenger = e.actor;
+      const opened = e.target;
       if (challenger === you) judgeCalc('challenge', e.bid);
       if (challenger === you && e.calza) {
         // 掐的判定是"恰好"，不是"成不成立"——两笔账分开记
         s.myCalzas++;
         if (e.exact) s.myCalzaHits++;
-        vs(e.bid.player).iOpened++;
-        if (e.exact) vs(e.bid.player).iOpenedHit++;
+        vs(opened).iOpened++;
+        if (e.exact) vs(opened).iOpenedHit++;
       } else if (challenger === you) {
         s.myChallenges++;
         if (!e.stands) s.myChallengeHits++;
-        vs(e.bid.player).iOpened++; // F0：这一开算在谁头上，写清楚
-        if (!e.stands) vs(e.bid.player).iOpenedHit++;
+        vs(opened).iOpened++; // F0：这一开算在谁头上，写清楚
+        if (!e.stands) vs(opened).iOpenedHit++;
         if (depth >= 4) cond.bigPotOpens++;
         else cond.smallPotOpens++;
         if (depth >= 4) cond.bigPotOpps++;
         else cond.smallPotOpps++;
-      } else if (e.bid.player === you) {
+      } else if (opened === you) {
         s.timesChallenged++;
         vs(challenger).theyOpenedMe++;
       }
       prevRoundLost = e.loser === you;
-      prevRoundChallenged = e.bid.player === you && e.loser === you; // 我被开且输了
+      prevRoundChallenged = opened === you && e.loser === you; // 我被开且输了
     }
     // F5 筹码记忆加权：≥×4 的池不许被忘掉——判词与下一场开场白优先引用
     if (e.type === 'roundEnd' && (e.mult ?? 1) >= 4)
@@ -258,13 +261,13 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
     }
     if (!cur) continue;
     if (ACT_EVENTS.has(e.type)) {
-      const mine = e.player === you;
-      const log = mine ? null : queues[e.player]?.shift();
+      const mine = e.actor === you;
+      const log = mine ? null : queues[e.actor]?.shift();
       const bait = log?.speechMode === 'bait';
       if (bait || e.type === 'challenge') cur.spotlight = true;
       push({
-        seat: e.player,
-        who: nameOf(e.player),
+        seat: e.actor,
+        who: nameOf(e.actor),
         kind: e.type,
         text: publicText(e, nameOf),
         inner: mine
@@ -285,7 +288,8 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
     if (e.type === 'reveal') {
       cur.reveal = {
         bid: e.bid,
-        challenger: e.challenger,
+        challenger: e.actor,
+        opened: e.target,
         actual: e.actual,
         stands: e.stands,
         calza: !!e.calza,
@@ -304,7 +308,7 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
 }
 
 function publicText(e, nameOf) {
-  const who = nameOf(e.player);
+  const who = nameOf(e.actor);
   switch (e.type) {
     case 'peek':
       return `${who}掀盅看骰`;
@@ -315,7 +319,7 @@ function publicText(e, nameOf) {
     case 'declare':
       return `${who}宣言「${DECL_CN[e.declaration] ?? e.declaration}」`;
     case 'challenge':
-      return `${who}拍桌开牌`;
+      return `${who}拍桌开${nameOf(e.target)}的价`;
     case 'modAction':
       return `${who}用了词条${e.face ? ` · 亮 ${e.face}` : ''}`;
     default:

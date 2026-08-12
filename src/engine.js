@@ -86,7 +86,12 @@ export async function createMatch({ seed, config = {} } = {}) {
   };
   const totalDice = () => players.reduce((s, p) => s + diceCount[p], 0);
   const currentBid = () => (bids.length ? bids.at(-1) : null);
-  const emit = (e) => events.push({ i: events.length, ...e });
+  // G2 事件接地（§3.5「事件接地」）：四元组在**发射口**统一补齐——
+  // actor=谁做的、target=对谁做的、action=做了什么、round=第几局。
+  // 单一出口保证"全事件统一"，个别事件按需覆盖（如 challenge 的 target＝被开的报价人）。
+  // actor/target 为 null 读作"这一条是引擎在说话"（roundStart/roundEnd/matchEnd），不是缺数据。
+  const emit = (e) =>
+    events.push({ i: events.length, round, actor: null, target: null, action: e.type, ...e });
   // §2.2/Q22 赔率乘法叠加：每名盲者 ×2、每记「抬」×2、斋 ×1.5、深水线（第 6 档起）×2、词条倍率
   const potMult = () =>
     aliveList().reduce((m, p) => m * (blind[p] ? 2 : 1) * (raises[p] ? 2 : 1), 1) *
@@ -206,6 +211,8 @@ export async function createMatch({ seed, config = {} } = {}) {
     const winner = stands ? bid.player : challenger; // 开牌局的胜者收池
     emit({
       type: 'reveal',
+      actor: challenger, // 摊牌由谁引发
+      target: bid.player, // 摊的是谁的价
       ...revealSnapshot(),
       bid: { ...bid },
       challenger,
@@ -246,6 +253,8 @@ export async function createMatch({ seed, config = {} } = {}) {
     const loser = exact ? null : caller;
     emit({
       type: 'reveal',
+      actor: caller,
+      target: bid.player,
       ...revealSnapshot(),
       bid: { ...bid },
       challenger: caller,
@@ -290,6 +299,7 @@ export async function createMatch({ seed, config = {} } = {}) {
     }
     usedRound[p][a.type] = (usedRound[p][a.type] ?? 0) + 1;
     usedMatch[p][a.type] = (usedMatch[p][a.type] ?? 0) + 1;
+    // 词条动作的 action 就是词条动作名（qia/liang/…），比统一写死 'modAction' 更接地
     for (const ef of a.effect) {
       switch (ef.op) {
         case 'revealOwnDie':
@@ -302,10 +312,17 @@ export async function createMatch({ seed, config = {} } = {}) {
           break;
         case 'returnBid':
           turn = currentBid().player;
-          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, to: turn, ...base });
+          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, to: turn, target: turn, ...base });
           break;
         case 'calzaResolve':
-          emit({ type: 'modAction', mod: mod.id, action: a.type, op: ef.op, ...base });
+          emit({
+            type: 'modAction',
+            mod: mod.id,
+            action: a.type,
+            op: ef.op,
+            target: currentBid().player, // 掐的是谁的价
+            ...base,
+          });
           await settleCalza(p);
           break;
         default:
@@ -319,7 +336,7 @@ export async function createMatch({ seed, config = {} } = {}) {
   async function act(p, action, meta = {}) {
     if (!players.includes(p)) throw new Error(`unknown player ${p}`);
     const legal = legalActions(p);
-    const base = { player: p, elapsedMs: meta.elapsedMs ?? null, timeout: meta.timeout ?? false };
+    const base = { actor: p, elapsedMs: meta.elapsedMs ?? null, timeout: meta.timeout ?? false };
     switch (action.type) {
       case 'peek':
         if (!legal.some((a) => a.type === 'peek')) throw new Error('illegal peek');
@@ -351,7 +368,8 @@ export async function createMatch({ seed, config = {} } = {}) {
       }
       case 'challenge':
         if (!legal.some((a) => a.type === 'challenge')) throw new Error('illegal challenge');
-        emit({ type: 'challenge', ...base });
+        // 开的是谁的价：引擎当场盖章，下游不许再从"上一条 bid"回推（G2 的核心那一刀）
+        emit({ type: 'challenge', target: currentBid().player, ...base });
         await settle(p);
         return;
       default: {

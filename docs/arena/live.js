@@ -1,4 +1,5 @@
 import { createMatch } from '../../src/engine.js';
+import { groundEvents } from '../../src/grounding.js';
 import { createOpponent } from '../../src/ai/agent.js';
 import { createSilentBot } from '../../src/ai/silent.js';
 import { ARENA_SEAT, pinSampling } from '../../src/arena/arena.js';
@@ -29,6 +30,12 @@ const esc = (value) => String(value ?? '').replace(/[<>&"]/g, (char) => ({
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const shortModel = (model) => String(model ?? '').split('/').at(-1) || '未命名型号';
 const modelLabel = (match, seat) => match?.seats?.[seat] ?? seat;
+// G2 旧档迁移：接地之前落盘的实录用 {player} 且不带 target，在**载入边界**补齐四元组。
+// 这是唯一允许回推主客体的地方，且只对历史数据；活引擎的事件本就自带四元组（幂等）。
+const groundRun = (run) => ({
+  ...run,
+  matches: (run.matches ?? []).map((match) => ({ ...match, events: groundEvents(match.events ?? []) })),
+});
 
 let stopped = false;
 let running = false;
@@ -427,7 +434,7 @@ async function runMatch() {
     aborted,
   };
   saveLocalMatch(record);
-  replayRun = { matches: localMatches() };
+  replayRun = groundRun({ matches: localMatches() });
   replayIndex = 0;
   renderLocalBoard();
 
@@ -506,21 +513,21 @@ $('clearLocal').addEventListener('click', () => {
 function alignLogs(match) {
   const queues = { A: [...(match.logs?.A ?? [])], B: [...(match.logs?.B ?? [])] };
   return (match.events ?? []).map((event) => (
-    DECIDED.has(event.type) && event.player ? queues[event.player].shift() ?? null : null
+    DECIDED.has(event.type) && event.actor ? queues[event.actor].shift() ?? null : null
   ));
 }
 
 function eventText(event, match) {
   const who = (seat) => shortModel(modelLabel(match, seat));
   if (event.type === 'roundStart') return `第 ${event.round} 局 · ${who(event.first)} 先报`;
-  if (event.type === 'peek') return `${who(event.player)} 掀盅看骰`;
-  if (event.type === 'calc') return `${who(event.player)} 当众拨算盘`;
-  if (event.type === 'bid') return `${who(event.player)} 报 ${event.count} 个 ${event.face}`;
-  if (event.type === 'declare') return `${who(event.player)} 宣「${DECL[event.declaration] ?? event.declaration}」`;
-  if (event.type === 'challenge') return `${who(event.player)} 开`;
+  if (event.type === 'peek') return `${who(event.actor)} 掀盅看骰`;
+  if (event.type === 'calc') return `${who(event.actor)} 当众拨算盘`;
+  if (event.type === 'bid') return `${who(event.actor)} 报 ${event.count} 个 ${event.face}`;
+  if (event.type === 'declare') return `${who(event.actor)} 宣「${DECL[event.declaration] ?? event.declaration}」`;
+  if (event.type === 'challenge') return `${who(event.actor)} 开 ${who(event.target)}`;
   if (event.type === 'reveal') return `开牌 · 实有 ${event.actual} 个 ${event.bid.face} · ${event.stands ? '报价成立' : '报价不成立'} · ${who(event.loser)} 掉一骰`;
   if (event.type === 'matchEnd') return `全场结束 · ${who(event.winner)} 胜`;
-  if (event.type === 'modAction') return `${who(event.player)} 使用词条`;
+  if (event.type === 'modAction') return `${who(event.actor)} 使用词条`;
   return '';
 }
 
@@ -574,7 +581,7 @@ async function loadArchive() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const value = await response.json();
     if (!Array.isArray(value.matches)) throw new Error('文件里没有 matches 数组');
-    replayRun = value;
+    replayRun = groundRun(value);
     replayIndex = 0;
     renderReplay();
     $('loadArchive').dataset.state = 'success';
@@ -595,7 +602,7 @@ $('runFile').addEventListener('change', async (event) => {
   try {
     const value = JSON.parse(await file.text());
     if (!Array.isArray(value.matches)) throw new Error('文件里没有 matches 数组');
-    replayRun = value;
+    replayRun = groundRun(value);
     replayIndex = 0;
     renderReplay();
   } catch (error) {
@@ -603,7 +610,7 @@ $('runFile').addEventListener('change', async (event) => {
   }
 });
 
-replayRun = { matches: localMatches() };
+replayRun = groundRun({ matches: localMatches() });
 renderLocalBoard();
 renderReplay();
 loadCatalog();

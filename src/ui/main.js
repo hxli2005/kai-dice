@@ -1139,7 +1139,7 @@ function roundFactText(rv, re, seat) {
   const diceStr = Object.entries(rv.dice)
     .map(([q, d]) => `${who(q)}[${d.join(',')}]`)
     .join('，');
-  return `第${re.round}局摊牌：${diceStr}。${who(rv.challenger)}开${who(rv.bid.player)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
+  return `第${re.round}局摊牌：${diceStr}。${who(rv.actor)}开${who(rv.target)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
 }
 
 // 写死的结算话术已废（用户裁决"台词只能出自角色"）：AI 拍开时的台词来自它自己的决策；
@@ -1767,7 +1767,6 @@ function enterRoom({ roomId, hostKey = null }) {
     roster: null,
     lastPhase: null,
     replayed: 0,
-    lastChallenger: null,
     pendingReport: null,
     matchEnded: false,
     queue: Promise.resolve(),
@@ -1849,7 +1848,6 @@ async function replayRoomEvents() {
     room.replayed = 0;
     room.matchEnded = false;
     room.pendingReport = null;
-    room.lastChallenger = null;
     myDiceByRound = {};
     sel = null;
     busy = false;
@@ -1873,9 +1871,9 @@ async function presentRoomEvent(e) {
       render();
       return;
     case 'peek':
-      if (e.player !== 'A') {
+      if (e.actor !== 'A') {
         sfx.land();
-        document.querySelectorAll(`#strip-${e.player} .die`).forEach((el) => el.classList.add('reveal'));
+        document.querySelectorAll(`#strip-${e.actor} .die`).forEach((el) => el.classList.add('reveal'));
       } else render();
       return;
     case 'bid':
@@ -1891,14 +1889,13 @@ async function presentRoomEvent(e) {
       render();
       return;
     case 'challenge':
-      room.lastChallenger = e.player;
-      return;
+      return; // 谁开谁由摊牌事件自带的四元组说了算，这里不用另记一份
     case 'reveal': {
       const o = ob();
       const next = o.events[room.replayed];
       const re = next?.type === 'roundEnd' ? (room.replayed++, next) : { transfers: {}, diceCount: {} };
       muteBubble();
-      await presentShowdown(e, re, e.challenger ?? room.lastChallenger ?? 'B');
+      await presentShowdown(e, re, e.actor);
       const ended = ob()?.over || ob()?.events.slice(0, room.replayed + 1).some((x) => x.type === 'matchEnd');
       if (!ended) finishShowdown(re);
       flushSays();

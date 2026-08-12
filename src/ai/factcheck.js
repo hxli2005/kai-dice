@@ -32,7 +32,7 @@ export function buildLedger(ob) {
   const lost = {};
   for (const e of ob?.events ?? []) {
     if (e.type === 'roundStart' && !start) start = { ...e.diceCount };
-    if (e.type === 'bid') bids.push({ count: e.count, face: e.face, player: e.player });
+    if (e.type === 'bid') bids.push({ count: e.count, face: e.face, player: e.actor });
   }
   for (const q of ob?.players ?? []) lost[q.id] = (start?.[q.id] ?? q.diceCount) - q.diceCount;
   return { round: ob?.round ?? 0, bids, lost, seq: bids.map(bidKey) };

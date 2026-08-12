@@ -489,7 +489,7 @@ test('擂台的统计全部从事件流复算——模型的嘴碰不到这些�
   const m = await playMatch({ seed: 13, seats: { A: seat('mx'), B: seat('my') }, fetchFn: fakeChannel({}) });
   const st = seatStats(m, 'A');
   assert.equal(st.rounds, m.events.filter((e) => e.type === 'roundStart').length);
-  assert.equal(st.myBids, m.events.filter((e) => e.type === 'bid' && e.player === 'A').length);
+  assert.equal(st.myBids, m.events.filter((e) => e.type === 'bid' && e.actor === 'A').length);
 });
 
 test('roundRobin：N 个模型两两配对，不自己打自己', () => {

@@ -100,7 +100,7 @@ export function toTubeView(o, {
   const alivePlayers = o.players.filter((p) => p.alive);
   const stakePerSeat = Math.round(o.potUnits * o.potMult);
   const roundStart = o.events?.findLast((e) => e.type === 'roundStart' && e.round === o.round);
-  const aiCalcCount = (o.events ?? []).filter((e) => e.type === 'calc' && e.player === 'B').length;
+  const aiCalcCount = (o.events ?? []).filter((e) => e.type === 'calc' && e.actor === 'B').length;
   const modActions = (o.mods ?? [])
     .flatMap((m) => m.actions.map((a) => ({ ...a, mod: m.name })))
     .filter((a) => legalTypes.has(a.type));

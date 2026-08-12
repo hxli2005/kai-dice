@@ -18,7 +18,7 @@ export function readClause(ob) {
   if (!bid) return null;
   const q = bid.player;
   const evs = ob.events.slice(ob.events.findLastIndex((e) => e.type === 'roundStart') + 1);
-  const mine = (e) => e.player === q;
+  const mine = (e) => e.actor === q;
   if (ob.blind?.[q]) return '你骰都没看就压我';
   if (ob.calced?.[q]) return '你算完才敢报这个数';
   if (ob.raises?.[q]) return '抬完就报这一口';

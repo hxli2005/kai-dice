@@ -40,7 +40,8 @@ test('Q93：发布包只带产品竞技场与裁剪后的公开实录', () => {
   const live = read('docs/arena/live.js');
   assert.match(live, /const ARCHIVE_RUN = 'verified-replay\.json'/);
   const serviceWorker = read('sw.js');
-  assert.match(serviceWorker, /const CACHE = 'kai-shell-v3'/);
+  // 只锁"缓存名带版本号"（改了壳就得升版，否则老客户端拿不到新代码），不锁具体第几版
+  assert.match(serviceWorker, /const CACHE = 'kai-shell-v\d+'/);
   assert.match(serviceWorker, /docs\/arena\/verified-replay\.json/);
 });
 

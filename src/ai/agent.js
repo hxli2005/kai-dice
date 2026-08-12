@@ -118,7 +118,6 @@ export function stateIdOf(ob, ctx = {}) {
 function semanticHistory(events = []) {
   const rounds = [];
   let round = null;
-  let lastBid = null;
   let terminal = null;
   const add = (event) => round?.events.push(event);
   for (const e of events) {
@@ -132,7 +131,6 @@ function semanticHistory(events = []) {
         events: [],
       };
       rounds.push(round);
-      lastBid = null;
       continue;
     }
     if (e.type === 'matchEnd') {
@@ -148,21 +146,20 @@ function semanticHistory(events = []) {
     }
     if (!round) continue;
     round.lastEventId = e.i;
-    const base = { id: e.i, type: e.type };
+    // G2：主客体直接从引擎的四元组抄，不在这里回推"上一条 bid 是谁报的"
+    const base = { id: e.i, type: e.type, actor: e.actor, ...(e.target != null ? { target: e.target } : {}) };
     const timed = timingOf(e);
     if (timed) base.timing = timed;
     if (e.timeout) base.timeout = true;
-    if (e.type === 'peek' || e.type === 'calc') add({ ...base, actor: e.player });
-    else if (e.type === 'declare') add({ ...base, actor: e.player, declaration: e.declaration });
+    if (e.type === 'peek' || e.type === 'calc') add({ ...base });
+    else if (e.type === 'declare') add({ ...base, declaration: e.declaration });
     else if (e.type === 'bid') {
-      lastBid = { player: e.player, count: e.count, face: e.face };
-      add({ ...base, actor: e.player, count: e.count, face: e.face });
+      add({ ...base, count: e.count, face: e.face });
     } else if (e.type === 'challenge') {
-      add({ ...base, actor: e.player, target: lastBid?.player ?? null });
+      add({ ...base });
     } else if (e.type === 'modAction') {
       add({
         ...base,
-        actor: e.player,
         mod: e.mod,
         action: e.action,
         op: e.op,
@@ -373,10 +370,9 @@ function serializeHistory(payload, who) {
       if (e.type === 'bid') return `${who(e.actor)}报${e.count}个${e.face}${t}`;
       if (e.type === 'challenge') return `${who(e.actor)}开${who(e.target)}${t}`;
       if (e.type === 'modAction') {
-        const raw = { player: e.actor, ...e };
         // 默认叙事用词条按钮名，不用动作 slug——中文叙事里混进"拍qia"是喂给全桌的走调材料
         const label = modActionMeta(payload.current, e.action)?.label ?? e.action;
-        return `${OPS[e.op]?.narrate?.(raw, who) ?? `${who(e.actor)}拍「${label}」`}${t}`;
+        return `${OPS[e.op]?.narrate?.(e, who) ?? `${who(e.actor)}拍「${label}」`}${t}`;
       }
       if (e.type === 'reveal') {
         const dice = Object.entries(e.dice ?? {}).map(([id, ds]) => `${who(id)}[${ds.join(',')}]`).join('、');

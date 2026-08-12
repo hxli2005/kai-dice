@@ -153,23 +153,23 @@ test('F0b 留档字段：belief/speechMode 进 schema 与决策日志', async ()
 const blindEvents = [
   { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
   // 故意不看骰，直接极限报价（用户实测：旧口径把他判成"虚报率 0% 老实人"）
-  { type: 'bid', player: 'A', count: 9, face: 6 },
+  { type: 'bid', actor: 'A', count: 9, face: 6 },
   {
-    type: 'reveal', bid: { player: 'A', count: 9, face: 6 }, challenger: 'B',
+    type: 'reveal', bid: { player: 'A', count: 9, face: 6 }, actor: 'B', target: 'A',
     dice: { A: [1, 2, 3, 4, 5], B: [1, 2, 3, 4, 5] }, zhai: false, stands: false, actual: 4, loser: 'A',
   },
   { type: 'roundEnd', round: 1, loser: 'A', winner: 'B', transfer: 2, mult: 1, chips: {}, diceCount: { A: 4, B: 5 } },
   { type: 'roundStart', round: 2, diceCount: { A: 4, B: 5 } },
-  { type: 'bid', player: 'A', count: 8, face: 6 },
+  { type: 'bid', actor: 'A', count: 8, face: 6 },
   {
-    type: 'reveal', bid: { player: 'A', count: 8, face: 6 }, challenger: 'B',
+    type: 'reveal', bid: { player: 'A', count: 8, face: 6 }, actor: 'B', target: 'A',
     dice: { A: [1, 2, 3, 4], B: [1, 2, 3, 4, 5] }, zhai: false, stands: false, actual: 3, loser: 'A',
   },
   { type: 'roundEnd', round: 2, loser: 'A', winner: 'B', transfer: 2, mult: 1, chips: {}, diceCount: { A: 3, B: 5 } },
   { type: 'roundStart', round: 3, diceCount: { A: 3, B: 5 } },
-  { type: 'bid', player: 'A', count: 7, face: 6 },
+  { type: 'bid', actor: 'A', count: 7, face: 6 },
   {
-    type: 'reveal', bid: { player: 'A', count: 7, face: 6 }, challenger: 'B',
+    type: 'reveal', bid: { player: 'A', count: 7, face: 6 }, actor: 'B', target: 'A',
     dice: { A: [1, 2, 3], B: [1, 2, 3, 4, 5] }, zhai: false, stands: false, actual: 2, loser: 'A',
   },
   { type: 'roundEnd', round: 3, loser: 'A', winner: 'B', transfer: 2, mult: 1, chips: {}, diceCount: { A: 2, B: 5 } },
@@ -190,9 +190,9 @@ test('F0c bug③：故意不看骰的极限报价不再被写成"老实人"', ()
 test('F0c：看过骰之后的报价才进虚报率，且宣言盲与事实未看分开跟踪', () => {
   const mixed = [
     { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
-    { type: 'bid', player: 'A', count: 3, face: 6 }, // 蒙报
-    { type: 'peek', player: 'A' },
-    { type: 'bid', player: 'A', count: 6, face: 6 }, // 看过之后再报
+    { type: 'bid', actor: 'A', count: 3, face: 6 }, // 蒙报
+    { type: 'peek', actor: 'A' },
+    { type: 'bid', actor: 'A', count: 6, face: 6 }, // 看过之后再报
   ];
   const st = computeStats(mixed, 'A', { 1: [6, 6, 6, 6, 6] });
   assert.equal(st.blindBids, 1);

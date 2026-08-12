@@ -11,6 +11,8 @@ export function mapFor(seat) {
 // 统一按"键在映射表中即换，字段名在名单上且值在映射表中即换"处理——
 // 词条 id、'you'/'opp' 这类键值不在映射表里，天然不受影响。
 const SEAT_VALUE_FIELDS = new Set([
+  // G2 四元组的 actor/target 同样是座位号，重命名后必须跟着换——否则客视角会把"谁开谁"读反
+  'actor', 'target',
   'you', 'turn', 'first', 'player', 'challenger', 'loser', 'winner', 'caller', 'to', 'id', 'seat', 'on', 'bettor',
 ]);
 const SEAT_ARRAY_FIELDS = new Set(['standings']);

@@ -46,12 +46,13 @@ test('三人桌 200 场：终止、守恒、轮转、开上家、判定、承诺
         assert.deepEqual(Object.keys(e.commits).sort(), [...aliveAtRound].sort());
       }
       if (e.type === 'bid') {
-        assert.ok(aliveAtRound.includes(e.player), '出局者报数');
-        lastBidder = e.player;
+        assert.ok(aliveAtRound.includes(e.actor), '出局者报数');
+        lastBidder = e.actor;
       }
       if (e.type === 'challenge') {
-        // §2.5 开只开上家：被开者必为当前报价者
-        assert.ok(lastBidder && e.player !== lastBidder, '自己开自己');
+        // §2.5 开只开上家：被开者必为当前报价者——G2 后由事件自带的 target 直接对账
+        assert.ok(lastBidder && e.actor !== lastBidder, '自己开自己');
+        assert.equal(e.target, lastBidder, '谁开谁');
       }
       if (e.type === 'reveal') {
         // 全桌摊牌与承诺验证

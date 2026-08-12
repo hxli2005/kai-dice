@@ -96,6 +96,7 @@
 </div>
 
 <script type="module">
+import { groundEvents } from '../../src/grounding.js'; // G2：旧档在载入边界补齐四元组
 const $ = (id) => document.getElementById(id);
 const PIP = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
@@ -105,7 +106,7 @@ const DECIDED = new Set(['bid', 'challenge', 'peek', 'calc', 'declare', 'modActi
 let run = null, mi = 0, k = 0, timer = null, speed = 2;
 
 function load(json) {
-  run = json;
+  run = { ...json, matches: (json.matches ?? []).map((m) => ({ ...m, events: groundEvents(m.events ?? []) })) };
   $('loader').hidden = true;
   $('app').hidden = false;
   $('match').innerHTML = run.matches
@@ -120,7 +121,7 @@ function load(json) {
 // 把决策日志按事件顺序摊到每个事件上（谁做的这一手、他说了什么、心里想什么）
 function align(m) {
   const q = { A: [...(m.logs.A ?? [])], B: [...(m.logs.B ?? [])] };
-  return m.events.map((e) => (DECIDED.has(e.type) && e.player ? q[e.player].shift() ?? null : null));
+  return m.events.map((e) => (DECIDED.has(e.type) && e.actor ? q[e.actor].shift() ?? null : null));
 }
 
 let M = null, LOGS = null;
@@ -146,9 +147,9 @@ function stateAt(idx) {
       if (e.diceCount) Object.assign(dice, e.diceCount);
     }
     if (e.type === 'bid') { bid = e; pot += 2; }
-    if (e.type === 'calc') calced[e.player] = true;
-    if (e.type === 'peek') peeked[e.player] = true;
-    if (e.type === 'declare') { if (e.declaration === 'zhai') zhai = true; if (e.declaration === 'blind') blind[e.player] = true; }
+    if (e.type === 'calc') calced[e.actor] = true;
+    if (e.type === 'peek') peeked[e.actor] = true;
+    if (e.type === 'declare') { if (e.declaration === 'zhai') zhai = true; if (e.declaration === 'blind') blind[e.actor] = true; }
     if (e.type === 'reveal' && e.loser) dice[e.loser] = Math.max(0, dice[e.loser] - 1);
   }
   // 本局的骰面：往后找这一局的 reveal
@@ -163,7 +164,7 @@ function stateAt(idx) {
 function seatHtml(s, st, e, log) {
   const label = M.seats[s];
   const hand = st.hands?.[s];
-  const isTurn = e && e.player === s;
+  const isTurn = e && e.actor === s;
   const fell = st.dice[s];
   const pips = hand
     ? hand.map((d, i) => `<span class="${i < fell ? '' : 'gone'}">${PIP[d]}</span>`).join('')
@@ -188,11 +189,11 @@ function evLine(e, i) {
   const w = (p) => esc(M.seats[p] ?? p);
   switch (e.type) {
     case 'roundStart': return `— 第 ${e.round} 局 —（${w(e.first)} 先报）`;
-    case 'peek': return `${w(e.player)} 掀盅看骰`;
-    case 'calc': return `${w(e.player)} 当众拨算盘`;
-    case 'bid': return `${w(e.player)} 报 ${e.count} 个 ${e.face}`;
-    case 'declare': return `${w(e.player)} 宣言「${DECL[e.declaration] ?? e.declaration}」`;
-    case 'challenge': return `${w(e.player)} 开！`;
+    case 'peek': return `${w(e.actor)} 掀盅看骰`;
+    case 'calc': return `${w(e.actor)} 当众拨算盘`;
+    case 'bid': return `${w(e.actor)} 报 ${e.count} 个 ${e.face}`;
+    case 'declare': return `${w(e.actor)} 宣言「${DECL[e.declaration] ?? e.declaration}」`;
+    case 'challenge': return `${w(e.actor)} 开 ${w(e.target)}！`;
     case 'reveal': return `开牌：实有 ${e.actual} 个 ${e.bid.face}，${e.stands ? '成立' : '不成立'} → ${w(e.loser)} 掉一骰`;
     case 'roundEnd': return `本局结束`;
     case 'matchEnd': return `全场结束：${w(e.winner)} 胜`;
