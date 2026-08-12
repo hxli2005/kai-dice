@@ -6,7 +6,8 @@
     "test": "node --test",
     "readgate": "node scripts/readgate.mjs",
     "arena": "node scripts/arena.mjs",
-    "dist": "rm -rf dist && mkdir -p dist && cp index.html about.html dist/ && cp -R src dist/src && cp infra/pages/_worker.js dist/",
+    "arena:archive": "node scripts/build-arena-replay.mjs",
+    "dist": "rm -rf dist && mkdir -p dist/docs/arena && cp index.html about.html manifest.webmanifest icon.svg sw.js tokens.css dist/ && cp -R src dist/src && cp docs/arena/live.html docs/arena/live.css docs/arena/live.js docs/arena/verified-replay.json dist/docs/arena/ && cp infra/pages/_worker.js dist/",
     "deploy": "npm run dist && npx wrangler pages deploy dist --project-name=kai-dice --commit-dirty=true"
   }
 }

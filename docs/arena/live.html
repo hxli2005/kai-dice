@@ -2,292 +2,199 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>素颜擂台 · 直播</title>
-<link rel="stylesheet" href="../../src/ui/style.css">
-<!--
-  擂台直播（内部工具，不进产品——Q81 占位：擂台只作内部证据）。
-  两个模型坐同一张引擎桌，**浏览器直接跑**——AI 客户端本就是外接客户端（§2.1 架构宪法），
-  擂台不必待在 node 里。钥匙只存这台设备，浏览器直连 OpenRouter（§5.2）。
-
-  三条纪律写进代码：
-  ① **它知道你才知道**——不是上帝视角。引擎压根没有上帝视角接口：`observe(p).yourDice`
-     只在该座位**掀过盅之后**才非 null（engine.js:389），那是 §2.1.4「引擎零后门」在起作用。
-     本页托管着两个客户端，所以能同时读两边的 observe——但读到的也只是**它们各自已经知道的**。
-     谁宣了盲，你就陪它一起盲到开牌。摊牌时从 reveal 事件补齐。
-  ② **不许把沉默 bot 的话挂在模型名下**（C4 报告归属错位＝P0）：降级顶班的手当场标红。
-  ③ **实验设置照钉**（Q52②）：提示词逐字相同、采样钉死、后端锁定——直播用的是同一套
-     `playMatch`，看到的就是跑批时发生的事，不是另一套演出。
--->
-<style>
-  body { overflow: auto; }
-  .live { max-width: 60rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
-  .live h1 { font-size: 1.1rem; letter-spacing: .28em; color: var(--lamp); font-weight: 400; margin: 0 0 .2rem; }
-  .live .sub { color: var(--dim); font-size: .8rem; margin-bottom: 1rem; }
-  .setup { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
-           background: var(--wood); border: 1px solid var(--wood-hi); border-radius: 6px; padding: .7rem; margin-bottom: 1rem; }
-  .setup input, .setup select, .setup button {
-    background: #12100e; color: var(--ink); border: 1px solid var(--wood-hi);
-    border-radius: 4px; padding: .35rem .6rem; font: inherit; font-size: .82rem; }
-  .setup input { min-width: 15rem; }
-  .setup select { max-width: 17rem; }
-  .setup button { cursor: pointer; }
-  .setup button:hover { border-color: var(--lamp); }
-  .setup button:disabled { opacity: .4; cursor: default; }
-  .stage { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
-  .side { background: var(--wood); border: 1px solid var(--wood-hi); border-radius: 6px; padding: .8rem; }
-  .side.act { border-color: var(--lamp); }
-  .side .nm { font-family: var(--mono); font-size: .82rem; color: var(--ink); }
-  .side .tag { color: var(--dim); font-size: .72rem; }
-  .felt { text-align: center; background: var(--wood); border: 1px solid var(--wood-hi);
-          border-radius: 6px; padding: .9rem; margin: .8rem 0; }
-  .felt .q { font-size: 1.7rem; color: var(--lamp); font-family: var(--serif); }
-  .felt .m { color: var(--dim); font-size: .8rem; }
-  .felt.open { border-color: var(--red); }
-  .felt.open .q { color: var(--red-hi); }
-  .talk { background: var(--wood); border: 1px solid var(--wood-hi); border-radius: 6px;
-          padding: .6rem .9rem; height: 22rem; overflow: auto; }
-  .talk .rd { color: var(--lamp-dim); font-size: .74rem; text-align: center; margin: .7rem 0 .3rem; letter-spacing: .2em; }
-  .talk .t { margin: .5rem 0; }
-  .talk .t .who { font-family: var(--mono); font-size: .72rem; color: var(--dim); }
-  .talk .t .act { color: var(--lamp); font-size: .78rem; margin-left: .4rem; }
-  .talk .t .say { display: block; margin-top: .15rem; }
-  .talk .t .bel { display: block; color: #5fb3b0; font-size: .8rem; }
-  .talk .t .bait { color: var(--red-hi); font-size: .72rem; }
-  .talk .t.warn { color: var(--red-hi); font-size: .82rem; }
-  .talk .big { color: var(--red-hi); text-align: center; margin: .5rem 0; }
-  .err { color: var(--red-hi); font-size: .82rem; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>《开！》模型竞技场</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Tomorrow:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="live.css">
 </head>
 <body>
-<div class="live">
-  <h1>素颜擂台 · 直播</h1>
-  <div class="sub">
-    两个模型现打，浏览器直连。<b style="color:var(--lamp)">它知道，你才知道</b>——
-    掀了盅才看得见它的骰；宣了盲，你陪它一起盲到开牌。
-    <span style="color:#5fb3b0">青色是它心里想的</span>，当时没上屏。
-  </div>
+<a class="skip-link" href="#arenaMain">跳到竞技场</a>
 
-  <div class="setup">
-    <input id="key" type="password" placeholder="OpenRouter key（只存这台设备）">
-    <select id="mA"></select>
-    <span style="color:var(--dim)">vs</span>
-    <select id="mB"></select>
-    <button id="go">开打</button>
-    <button id="stop" disabled>停</button>
-    <span id="stat" class="tag" style="margin-left:auto"></span>
-  </div>
+<header class="arena-nav">
+  <a class="arena-brand" href="../../index.html" aria-label="返回《开！》大厅">
+    <span class="arena-brand__mark">开！</span>
+    <span class="arena-brand__name">模型竞技场</span>
+  </a>
+  <nav class="arena-tabs" role="tablist" aria-label="竞技场页面">
+    <button id="tabMatch" class="arena-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="viewMatch" data-view-target="match">--开赛</button>
+    <button id="tabBoard" class="arena-tab" type="button" role="tab" aria-selected="false" aria-controls="viewBoard" data-view-target="board">--本桌榜</button>
+    <button id="tabReplay" class="arena-tab" type="button" role="tab" aria-selected="false" aria-controls="viewReplay" data-view-target="replay">--复盘</button>
+    <span class="arena-caret" aria-hidden="true">▮</span>
+  </nav>
+</header>
 
-  <div class="stage">
-    <div class="side" id="sideA"></div>
-    <div class="side" id="sideB"></div>
-  </div>
-  <div class="felt" id="felt"><div class="m">还没开打</div></div>
-  <div class="talk" id="talk"></div>
-</div>
+<main id="arenaMain" class="arena-main">
+  <section id="viewMatch" class="arena-view is-active" role="tabpanel" aria-labelledby="tabMatch" data-view="match">
+    <div class="arena-split">
+      <section class="control-deck" aria-labelledby="arenaTitle">
+        <div class="control-deck__intro">
+          <h1 id="arenaTitle">让两个模型<br>坐到同一张桌</h1>
+          <p>同一套规则、同一份提示词、同一组采样设置。你选人，它们自己打。</p>
+        </div>
 
-<script type="module">
-import { createMatch } from '../../src/engine.js';
-import { createOpponent } from '../../src/ai/agent.js';
-import { createSilentBot } from '../../src/ai/silent.js';
-import { ARENA_SEAT, pinSampling } from '../../src/arena/arena.js';
-import { openrouterChannel, fetchModels, fetchEndpoints, pickDefaults } from '../../src/ai/openrouter.js';
-import { chat } from '../../src/ai/llm.js';
+        <form id="matchForm" class="match-form" novalidate>
+          <div class="field">
+            <label for="key">OpenRouter API Key</label>
+            <input id="key" name="key" type="password" autocomplete="off" spellcheck="false" aria-describedby="keyHelp">
+            <p id="keyHelp" class="field__help">只存在这台设备，浏览器直接连接 OpenRouter。</p>
+          </div>
 
-const $ = (id) => document.getElementById(id);
-const KEY = 'kai.arena.key';
-const PIPS = { 1: ['c'], 2: ['tl', 'br'], 3: ['tl', 'c', 'br'], 4: ['tl', 'tr', 'bl', 'br'],
-  5: ['tl', 'tr', 'c', 'bl', 'br'], 6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'] };
-const die = (f, cls = '') => `<span class="die small ${cls}">${PIPS[f].map((p) => `<i class="p-${p}"></i>`).join('')}</span>`;
-const esc = (s) => String(s ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
-const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          <div class="versus-picker">
+            <div class="field">
+              <label for="mA">A 席 · 绿管</label>
+              <select id="mA" name="modelA" aria-describedby="catalogState">
+                <option value="">正在读取模型目录…</option>
+              </select>
+            </div>
+            <div class="versus-picker__join" aria-hidden="true">VS</div>
+            <div class="field">
+              <label for="mB">B 席 · 琥珀管</label>
+              <select id="mB" name="modelB" aria-describedby="catalogState">
+                <option value="">正在读取模型目录…</option>
+              </select>
+            </div>
+          </div>
+          <p id="catalogState" class="form-state" aria-live="polite">连接模型目录中。</p>
 
-$('key').value = localStorage.getItem(KEY) ?? '';
-$('key').onchange = () => localStorage.setItem(KEY, $('key').value.trim());
+          <dl class="match-contract">
+            <div><dt>赛制</dt><dd>单场直播</dd></div>
+            <div><dt>档案</dt><dd>本场独立</dd></div>
+            <div><dt>采样</dt><dd>全席钉死</dd></div>
+            <div><dt>后端</dt><dd>开赛前锁定</dd></div>
+          </dl>
 
-// 模型清单：动态拉取（禁硬编易腐名单，Q52①）
-let CATALOG = [];
-fetchModels({})
-  .then((live) => {
-    CATALOG = live;
-    const opts = live
-      .slice()
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((m) => `<option value="${esc(m.id)}">${esc(m.id)}</option>`)
-      .join('');
-    for (const s of ['mA', 'mB']) $(s).innerHTML = opts;
-    const d = pickDefaults(live).map((m) => m.id);
-    $('mA').value = d[0] ?? live[0]?.id;
-    $('mB').value = d[1] ?? live[1]?.id;
-    $('stat').textContent = `清单 ${live.length} 个`;
-  })
-  .catch((e) => ($('stat').innerHTML = `<span class="err">清单拉不到：${esc(e.message)}</span>`));
+          <div class="match-actions">
+            <button id="go" class="arena-button arena-button--primary" type="submit"><span class="button-label">启动比赛</span></button>
+            <button id="stop" class="arena-button arena-button--danger" type="button" disabled><span class="button-label">停止</span></button>
+          </div>
+        </form>
 
-let stopped = false;
-// 每席已知的骰面：来自各自的 observe（掀过盅才有），摊牌时由 reveal 补齐。
-// 不从引擎里抠——那要开后门（§2.1.4），而后门一开，公平就不是架构保证的了。
-let hands = { A: null, B: null };
+        <p class="legal-note">模型名仅作事实性标注。非官方 · 无关联。直播只走 BYOK，不使用官方免费通道。</p>
+      </section>
 
-function drawSides(ob, turn) {
-  for (const s of ['A', 'B']) {
-    const alive = ob.players.find((p) => p.id === s)?.diceCount ?? 0;
-    const h = hands[s];
-    $(`side${s}`).className = 'side' + (turn === s ? ' act' : '');
-    const row = h
-      ? h.map((f, i) => die(f, i < alive ? (f === 1 && !ob.zhai ? 'wild' : '') : 'dark')).join('')
-      : Array.from({ length: alive }, () => '<span class="die small back"></span>').join('');
-    $(`side${s}`).innerHTML =
-      `<div class="nm">${esc(SEATS[s])}</div>
-       <div class="tag">座 ${s} · ${alive} 颗${ob.blind?.[s] ? ' · 盲（它自己也没看）' : ''}${ob.calced?.[s] ? ' · 拨过算盘' : ''}${h ? '' : ' · 还没掀盅'}</div>
-       <div class="dicerow">${row}</div>`;
-  }
-}
-function drawFelt(ob, open) {
-  $('felt').className = 'felt' + (open ? ' open' : '');
-  $('felt').innerHTML = open
-    ? `<div class="q">${esc(open)}</div>`
-    : `<div class="q">${ob.currentBid ? `${ob.currentBid.count} 个 ${ob.currentBid.face}` : '——'}</div>
-       <div class="m">第 ${ob.round} 局 · 池 ${ob.potUnits} 注${ob.zhai ? ' · 斋局' : ''}</div>`;
-}
-function push(html, cls = '') {
-  const d = document.createElement('div');
-  d.className = cls;
-  d.innerHTML = html;
-  $('talk').append(d);
-  $('talk').scrollTop = $('talk').scrollHeight;
-}
-const actWord = (a) =>
-  a.type === 'bid' ? `报 ${a.count} 个 ${a.face}`
-  : a.type === 'challenge' ? '开！'
-  : a.type === 'calc' ? '当众拨算盘'
-  : a.type === 'peek' ? '掀盅看骰'
-  : a.type === 'declare' ? `宣言「${DECL[a.declaration] ?? a.declaration}」`
-  : a.type;
+      <section id="liveCabinet" class="live-cabinet" aria-labelledby="liveTitle" data-match-state="idle">
+        <header class="cabinet-head">
+          <div>
+            <p class="cabinet-kicker">AI × AI · 单场对局</p>
+            <h2 id="liveTitle">对局主屏</h2>
+            <p>两席共用同一套规则与采样设置。宣盲后，你和它一起盲到开牌。</p>
+          </div>
+          <div id="stat" class="cabinet-status" role="status" aria-live="polite" data-tone="idle"><span class="status-lamp" aria-hidden="true"></span><span>待机</span></div>
+        </header>
 
-let SEATS = { A: '', B: '' };
+        <div class="duel-stage">
+          <div class="tube-stack" aria-label="竞技场三管直播">
+            <section id="sideA" class="arena-tube arena-tube--a" aria-label="A 席">
+              <div class="tube-line"><span class="tube-seat">A 席 · 绿管</span><span class="tube-state">候场</span></div>
+              <div class="tube-id">等待模型入席</div>
+              <div class="tube-meta">选择型号后显示在这里</div>
+            </section>
 
-// 后端锁 ＋ 参赛体检（与跑批同规矩）。
-// `/endpoints` **不按账号的数据策略过滤**：列在第一位的端点在你的账号下可能直接 404
-// （实测 deepseek/deepseek-v4-pro）。所以这里逐个试，**换到通为止，但仍然锁死并说出来**。
-// 不这么做的下场刚在直播里见过：整场都是沉默 bot 顶着模型名在打。
-async function lockedChannel(apiKey, model) {
-  let tags = [];
-  try { tags = (await fetchEndpoints(model, {})).map((e) => e.tag).filter(Boolean); } catch {}
-  for (const tag of [...tags, null]) {
-    const ch = openrouterChannel({ apiKey, model, providerTag: tag });
-    try {
-      await chat(pinSampling(ch), { system: '回复 ok', user: 'ok', maxTokens: 16, timeoutMs: 20_000 });
-      return { ch, tag, err: null };
-    } catch (e) {
-      var last = e?.message ?? String(e);
-    }
-  }
-  return { ch: null, tag: null, err: last ?? '打不通' };
-}
+            <section id="felt" class="arena-tube arena-tube--judge" aria-label="裁判管">
+              <div class="judge-kicker">裁判 / 当前报价</div>
+              <div class="judge-reading">——</div>
+              <div class="judge-meta">还没开打</div>
+            </section>
 
-async function run() {
-  const apiKey = $('key').value.trim();
-  if (!apiKey) return ($('stat').innerHTML = '<span class="err">先填 key</span>');
-  localStorage.setItem(KEY, apiKey);
-  const a = $('mA').value, b = $('mB').value;
-  SEATS = { A: a, B: b };
-  stopped = false;
-  $('go').disabled = true;
-  $('stop').disabled = false;
-  $('talk').innerHTML = '';
-  $('stat').textContent = '连接中…';
+            <section id="sideB" class="arena-tube arena-tube--b" aria-label="B 席">
+              <div class="tube-line"><span class="tube-seat">B 席 · 琥珀管</span><span class="tube-state">候场</span></div>
+              <div class="tube-id">等待模型入席</div>
+              <div class="tube-meta">选择型号后显示在这里</div>
+            </section>
+          </div>
 
-  $('stat').textContent = '参赛体检…';
-  const chans = {};
-  for (const [s, model] of [['A', a], ['B', b]]) {
-    const r = await lockedChannel(apiKey, model);
-    if (!r.ch) {
-      $('stat').innerHTML = `<span class="err">${esc(model)} 打不通：${esc(r.err)}</span>`;
-      push(`✗ ${esc(model)} 打不通：${esc(r.err)}——不开打。若是 400 多半它不接受钉死的采样参数（如思维链强制开）；若是 404 是所有后端在你的数据策略下都不可达。`, 't warn');
-      $('go').disabled = false;
-      $('stop').disabled = true;
-      return;
-    }
-    chans[s] = r.ch;
-    push(`✓ ${esc(model)}${r.tag ? `（锁 ${esc(r.tag)}）` : '（未锁后端）'}`, 'rd');
-  }
-  const m = await createMatch({ seed: Math.floor(Math.random() * 1e6), config: { players: ['A', 'B'] } });
-  const ai = {};
-  for (const s of ['A', 'B'])
-    ai[s] = createOpponent({ channel: pinSampling(chans[s]), profile: '', persona: ARENA_SEAT });
-  const backup = createSilentBot(ARENA_SEAT.strategy);
+          <section class="signal-panel" aria-labelledby="signalTitle">
+            <header class="signal-panel__head">
+              <h3 id="signalTitle">逐手战报</h3>
+              <span>事实 / 当时留档</span>
+            </header>
+            <div id="talk" class="signal-log" tabindex="0" aria-label="比赛流水">
+              <div class="signal-log__empty">比赛开始后，动作、台词与当时留档会在这里逐手出现。</div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </section>
 
-  let round = 0;
-  $('stat').textContent = '开打';
-  for (let step = 0; step < 400 && !stopped; step++) {
-    const ob0 = m.observe('A');
-    if (ob0.over) break;
-    const p = ob0.turn;
-    const ob = p === 'A' ? ob0 : m.observe(p);
+  <section id="viewBoard" class="arena-view" role="tabpanel" aria-labelledby="tabBoard" data-view="board" hidden>
+    <header class="view-head">
+      <h1>只说这张桌上<br>真实发生过的事</h1>
+      <p>下面是 2026-08-12 的记忆赛道实录：2 个模型、8 场、350 次调用。样本不足以构成通用模型排名。</p>
+    </header>
 
-    if (ob.round !== round) {
-      round = ob.round;
-      push(`第 ${round} 局`, 'rd');
-    }
-    // 各席已知的骰面：掀过盅的才有（盲着打的一直是 null，跟它一起蒙到开牌）
-    hands = { A: m.observe('A').yourDice, B: m.observe('B').yourDice };
-    drawSides(ob, p);
-    drawFelt(ob, null);
+    <div class="board-split">
+      <section class="board-panel" aria-labelledby="boardResultTitle">
+        <div class="panel-heading">
+          <h2 id="boardResultTitle">胜负与合规</h2>
+          <span>n = 各项自己的分母</span>
+        </div>
+        <div class="board-table-wrap">
+          <table class="board-table">
+            <thead><tr><th scope="col">模型</th><th scope="col">胜率</th><th scope="col">开牌命中</th><th scope="col">降级</th><th scope="col">样本</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">deepseek-v4-pro</th><td data-label="胜率">75% · n=8</td><td data-label="开牌命中">29% · n=14</td><td data-label="降级">1% · n=187</td><td data-label="样本">8 场</td></tr>
+              <tr><th scope="row">gpt-5.6-luna</th><td data-label="胜率">25% · n=8</td><td data-label="开牌命中">31% · n=35</td><td data-label="降级">0% · n=162</td><td data-label="样本">8 场</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="board-caption">赛道带跨场记忆与「掐」词条，存在顺序效应；本数字不与素颜批次比较。</p>
+      </section>
 
-    const d = await ai[p].decide(ob);
-    if (stopped) break;
+      <section class="flavor-panel" aria-labelledby="flavorTitle">
+        <div class="panel-heading">
+          <h2 id="flavorTitle">打法指纹</h2>
+          <span>64 局行为观测</span>
+        </div>
+        <div class="flavor-row">
+          <div><strong>25%</strong><span>v4-pro 虚报率<br>n=48 口报价</span></div>
+          <div><strong>4%</strong><span>luna 虚报率<br>n=45 口报价</span></div>
+        </div>
+        <dl class="flavor-deltas">
+          <div><dt>算盘 / 局</dt><dd><span>0.45 · n=64</span><span>0.13 · n=64</span></dd></div>
+          <div><dt>宣言 / 局</dt><dd><span>0.34 · n=64</span><span>0.06 · n=64</span></dd></div>
+          <div><dt>诈术留档率</dt><dd><span>11% · n=180</span><span>2% · n=150</span></dd></div>
+        </dl>
+      </section>
+    </div>
 
-    if (d.silentFallback) {
-      push(`<span class="who">${esc(SEATS[p])}</span> ⚠️ 这一手是沉默 bot 顶的（${esc(d.outcome ?? d.error ?? '降级')}）——不是它打的`, 't warn');
-    } else {
-      push(
-        `<span class="who">${esc(SEATS[p])}</span><span class="act">${esc(actWord(d.action))}</span>` +
-          (d.say ? `<span class="say">「${esc(d.say)}」${d.speechMode === 'bait' ? '<span class="bait">〔诈〕</span>' : ''}</span>` : '') +
-          (d.belief ? `<span class="bel">心里：${esc(d.belief)}</span>` : ''),
-        't',
-      );
-    }
+    <section class="local-board" aria-labelledby="localBoardTitle">
+      <div class="panel-heading">
+        <div><h2 id="localBoardTitle">客场记录</h2><p>你在本机启动的比赛，只记在这台设备，不混进上面的实录。</p></div>
+        <button id="clearLocal" class="arena-button arena-button--quiet" type="button">清空本机记录</button>
+      </div>
+      <div id="localBoardRows" class="local-board__rows"></div>
+    </section>
+  </section>
 
-    try {
-      await m.act(p, d.action, { elapsedMs: null });
-    } catch {
-      const fb = backup.decide(ob);
-      const safe = ob.legal.some((x) => x.type === fb.type) ? fb : ob.legal[0];
-      if (!safe) break;
-      await m.act(p, safe, { elapsedMs: null });
-    }
+  <section id="viewReplay" class="arena-view" role="tabpanel" aria-labelledby="tabReplay" data-view="replay" hidden>
+    <header class="view-head">
+      <h1>从每一次报价<br>重新看它怎么想</h1>
+      <p>摊牌后的骰面已经公开。这里读取事件流与当时留档，不在赛后追问模型补写理由。</p>
+    </header>
 
-    // 开牌那一拍：把结果摊在桌上多停一会儿（爽感的落点）
-    const reveal = m.observe('A').events.findLast((e) => e.type === 'reveal');
-    if (d.action.type === 'challenge' && reveal) {
-      hands = reveal.dice; // 摊牌：这时候才两边全明
-      drawSides(m.observe('A'), null);
-      drawFelt(m.observe('A'), `实有 ${reveal.actual} 个 ${reveal.bid.face} · ${reveal.stands ? '成立，开的人输' : '不成立，报的人输'}`);
-      push(`开牌：${esc(SEATS[reveal.loser])} 掉一颗骰`, 'big');
-      await sleep(2600);
-    } else {
-      await sleep(400);
-    }
-  }
+    <div class="replay-tools">
+      <label class="file-control" for="runFile">导入 run.json<input id="runFile" type="file" accept="application/json"></label>
+      <button id="loadArchive" class="arena-button arena-button--quiet" type="button">载入验证实录 · 8 场</button>
+    </div>
 
-  const fin = m.observe('A');
-  const end = fin.events.at(-1);
-  if (end?.type === 'matchEnd') {
-    drawFelt(fin, `${SEATS[end.winner]} 胜`);
-    push(`全场结束：${esc(SEATS[end.winner])} 胜`, 'big');
-  }
-  $('stat').textContent = stopped ? '已停' : '打完了';
-  $('go').disabled = false;
-  $('stop').disabled = true;
-}
+    <div class="replay-split">
+      <div id="replayList" class="replay-list" aria-label="比赛列表"></div>
+      <article id="replayPane" class="replay-pane" aria-live="polite">
+        <div class="empty-state"><strong>还没有本机比赛</strong><span>先启动一场，或载入已有实录。</span><button class="arena-button arena-button--quiet" type="button" data-view-jump="match">去开一场</button></div>
+      </article>
+    </div>
+  </section>
+</main>
 
-$('go').onclick = () => run().catch((e) => {
-  $('stat').innerHTML = `<span class="err">${esc(e.message)}</span>`;
-  $('go').disabled = false;
-  $('stop').disabled = true;
-});
-$('stop').onclick = () => { stopped = true; $('stat').textContent = '停…'; };
-</script>
+<footer class="arena-footer">
+  <p>《开！》模型竞技场 · 全席同一份提示词 · 浏览器直连 BYOK · 模型名仅作事实性标注 · 非官方 · 无关联 · 榜单口径限定“在这张桌子上”</p>
+</footer>
+
+<script type="module" src="live.js"></script>
 </body>
 </html>
