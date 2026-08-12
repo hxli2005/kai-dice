@@ -10,6 +10,11 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* 导航条粘顶，任何别的粘顶元素都要让开它这一格 */
+  --nav-height: 4rem;
+}
+
 html,
 body {
   min-height: 100%;
@@ -829,7 +834,6 @@ h2 {
 .board-panel,
 .flavor-panel,
 .local-board,
-.replay-list,
 .replay-pane {
   min-width: 0;
   border-block-start: var(--rule-medium) solid var(--color-rule-strong);
@@ -1019,10 +1023,59 @@ h2 {
   outline-offset: 0.1875rem;
 }
 
+/* 挑场抽屉：44 场铺开有三千像素高，窄屏必须能收起来，宽屏也不许喧宾夺主 */
+.replay-picker {
+  align-self: start; /* 两栏时抽屉只占自己的高度，不跟着右栏一起拉长 */
+  min-width: 0;
+  border-block-start: var(--rule-medium) solid var(--color-rule-strong);
+  padding-block-start: var(--space-lg);
+}
+
+.replay-picker__summary {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+  justify-content: space-between;
+  min-height: 3rem;
+  padding-block: var(--space-xs);
+  color: var(--color-ink-2);
+  font-family: var(--font-outlier);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.replay-picker__summary::marker,
+.replay-picker__summary::-webkit-details-marker {
+  color: var(--color-accent);
+}
+
+.replay-picker__hint {
+  flex: none;
+  white-space: nowrap;
+}
+
+.replay-picker__hint::after {
+  content: "展开";
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.replay-picker[open] .replay-picker__hint {
+  flex: none;
+  white-space: nowrap;
+}
+
+.replay-picker__hint::after {
+  content: "收起";
+}
+
 .replay-list {
   display: grid;
   align-content: start;
   gap: 0;
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background-color: var(--color-transparent);
 }
 
@@ -1081,9 +1134,108 @@ h2 {
   font-size: var(--text-sm);
 }
 
+/* 分局：一场六十条事件平铺读不动，先按局切开 */
+/* 每局一节，默认收起（F8 戏眼口径）：收起时读一行结论，点开才是逐手 */
+.replay-round {
+  margin-block-end: var(--space-md);
+}
+
+.replay-round__head {
+  position: sticky;
+  inset-block-start: var(--nav-height, 4rem); /* 让开粘顶的导航条 */
+  z-index: 1;
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+  justify-content: space-between;
+  min-height: 2.75rem;
+  padding-block: var(--space-xs);
+  border-block-end: var(--rule-medium) solid var(--color-rule-strong);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-outlier);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.replay-round[open] .replay-round__head {
+  border-block-end-color: var(--color-accent);
+}
+
+.replay-round__no {
+  flex: none;
+}
+
+.replay-round__verdict {
+  flex: 1 1 12rem;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  text-align: end;
+}
+
+.replay-round__first {
+  padding-block: var(--space-2xs);
+  color: var(--color-neutral);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+}
+
 .replay-event {
-  padding-block: var(--space-sm);
+  padding-block: var(--space-xs);
+  padding-inline-start: var(--space-sm);
   border-block-end: var(--rule-hair) solid var(--color-rule);
+  border-inline-start: var(--rule-medium) solid var(--color-transparent);
+}
+
+.replay-event__warn {
+  margin-block-start: var(--space-3xs);
+  color: var(--color-error);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+}
+
+/* 席位身份沿用三管语言：A 绿、B 琥珀 */
+.replay-event[data-seat="A"] {
+  border-inline-start-color: var(--color-accent);
+}
+
+.replay-event[data-seat="B"] {
+  border-inline-start-color: var(--color-accent-2);
+}
+
+.replay-event__seat {
+  margin-inline-end: var(--space-xs);
+  color: var(--color-muted);
+}
+
+.replay-event[data-seat="A"] .replay-event__seat {
+  color: var(--color-accent);
+}
+
+.replay-event[data-seat="B"] .replay-event__seat {
+  color: var(--color-accent-2);
+}
+
+/* 当时留档默认收起（F8 戏眼口径）：只有开牌那一拍自动摊开 */
+.replay-belief {
+  margin-block-start: var(--space-2xs);
+}
+
+.replay-belief > summary {
+  min-height: 1.75rem;
+  color: var(--color-muted);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.replay-belief > p {
+  margin-block-start: var(--space-2xs);
+  max-width: 68ch;
+  color: var(--color-accent);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+  line-height: 1.7;
 }
 
 .replay-event__fact {
@@ -1093,14 +1245,7 @@ h2 {
 }
 
 .replay-event__say {
-  margin-block-start: var(--space-xs);
-}
-
-.replay-event__belief {
-  margin-block-start: var(--space-2xs);
-  color: var(--color-accent);
-  font-family: var(--font-outlier);
-  font-size: var(--text-xs);
+  margin-block-start: var(--space-3xs);
 }
 
 .replay-event.is-open .replay-event__fact,
@@ -1288,8 +1433,17 @@ h2 {
   .file-control,
   .field input,
   .field select,
-  .replay-item {
+  .replay-item,
+  .replay-picker__summary,
+  .replay-round__head,
+  .replay-belief > summary {
     min-height: 3rem;
+  }
+
+  /* 收起态下的留档开关是纯文字行，触屏上给它一条够按的横条 */
+  .replay-belief > summary {
+    display: flex;
+    align-items: center;
   }
 }
 

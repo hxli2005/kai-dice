@@ -579,22 +579,38 @@ function alignLogs(match) {
   ));
 }
 
-function eventText(event, match) {
-  const who = (seat) => shortModel(modelLabel(match, seat));
-  if (event.type === 'roundStart') return `第 ${event.round} 局 · ${who(event.first)} 先报`;
-  if (event.type === 'peek') return `${who(event.actor)} 掀盅看骰`;
-  if (event.type === 'calc') return `${who(event.actor)} 当众拨算盘`;
-  if (event.type === 'bid') return `${who(event.actor)} 报 ${event.count} 个 ${event.face}`;
-  if (event.type === 'declare') return `${who(event.actor)} 宣「${DECL[event.declaration] ?? event.declaration}」`;
-  if (event.type === 'challenge') return `${who(event.actor)} 开 ${who(event.target)}`;
-  if (event.type === 'reveal') return `开牌 · 实有 ${event.actual} 个 ${event.bid.face} · ${event.stands ? '报价成立' : '报价不成立'} · ${who(event.loser)} 掉一骰`;
-  if (event.type === 'matchEnd') return `全场结束 · ${who(event.winner)} 胜`;
-  if (event.type === 'modAction') return `${who(event.actor)} 使用词条`;
+function eventText(event, match, omitActor = false) {
+  // omitActor：行首已经有彩色席位标签时，这里就别再把自己的名字印一遍
+  const name = (seat) => shortModel(modelLabel(match, seat));
+  const who = (seat) => (omitActor && seat === event.actor ? '' : `${name(seat)} `);
+  if (event.type === 'roundStart') return `第 ${event.round} 局 · ${name(event.first)} 先报`;
+  if (event.type === 'peek') return `${who(event.actor)}掀盅看骰`;
+  if (event.type === 'calc') return `${who(event.actor)}当众拨算盘`;
+  if (event.type === 'bid') return `${who(event.actor)}报 ${event.count} 个 ${event.face}`;
+  if (event.type === 'declare') return `${who(event.actor)}宣「${DECL[event.declaration] ?? event.declaration}」`;
+  if (event.type === 'challenge') return `${who(event.actor)}开 ${name(event.target)}`;
+  if (event.type === 'reveal') return `开牌 · 实有 ${event.actual} 个 ${event.bid.face} · ${event.stands ? '报价成立' : '报价不成立'} · ${name(event.loser)} 掉一骰`;
+  if (event.type === 'matchEnd') return `全场结束 · ${name(event.winner)} 胜`;
+  if (event.type === 'modAction') return `${who(event.actor)}使用词条`;
   return '';
 }
 
+// 导航条粘顶且高度随换行变化（窄屏会变两行），把实测值交给 CSS，
+// 局头才知道自己该在哪一格粘住——写死 4rem 在手机上会被压在导航下面
+const syncNavHeight = () => {
+  const nav = document.querySelector('.arena-nav');
+  if (nav) document.documentElement.style.setProperty('--nav-height', `${Math.round(nav.getBoundingClientRect().height)}px`);
+};
+syncNavHeight();
+addEventListener('resize', syncNavHeight);
+
+// 宽屏＝两栏，列表常驻；窄屏＝一栏，列表是可收起的抽屉
+const wideScreen = () => matchMedia('(min-width: 60rem)').matches;
+
 function renderReplay() {
   const matches = replayRun.matches ?? [];
+  $('toggleBeliefs').hidden = !matches.length;
+  $('replayPicker').hidden = !matches.length;
   if (!matches.length) {
     $('replayList').innerHTML = '<div class="empty-state"><strong>没有可列出的比赛</strong><span>本机比赛和导入实录会出现在这里。</span></div>';
     $('replayPane').innerHTML = '<div class="empty-state"><strong>还没有本机比赛</strong><span>先启动一场，或载入已有实录。</span><button class="arena-button arena-button--quiet" type="button" data-replay-jump>去开一场</button></div>';
@@ -612,29 +628,96 @@ function renderReplay() {
   for (const button of $('replayList').querySelectorAll('[data-replay-index]')) {
     button.addEventListener('click', () => {
       replayIndex = Number(button.dataset.replayIndex);
+      // 窄屏上列表本身就有好几屏高：挑完就收起来，直接把人送到内容
+      if (!wideScreen()) {
+        $('replayPicker').open = false;
+        $('replayPicker').scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
       renderReplay();
     });
   }
-  renderReplayPane(matches[replayIndex]);
+  const chosen = matches[replayIndex];
+  $('replayPickerLabel').textContent =
+    `第 ${replayIndex + 1} / ${matches.length} 场 · ${shortModel(modelLabel(chosen, 'A'))} vs ${shortModel(modelLabel(chosen, 'B'))}`;
+  $('replayList').querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  renderReplayPane(chosen);
+}
+
+// 复盘详情：按局分组、按席位着色，**默认只开戏眼**（F8 口径）。
+// 一场六十条事件、每条还挂一段留档，平铺出来是十几屏；
+// 收成"每局一行结论、点开才是逐手"，长度就不再是阅读的障碍。
+const SPOTLIGHT = new Set(['challenge', 'modAction']);
+let expandAll = false;
+
+function eventRow(event, log, match) {
+  const fact = eventText(event, match, true);
+  if (!fact) return '';
+  const warning = log?.silentFallback;
+  const seat = event.actor ?? null;
+  const tone = event.type === 'reveal' || event.type === 'matchEnd'
+    ? ' is-open'
+    : warning
+      ? ' is-warning'
+      : '';
+  const who = seat ? `<span class="replay-event__seat">${esc(shortModel(modelLabel(match, seat)))}</span>` : '';
+  const belief = !warning && log?.belief
+    ? `<details class="replay-belief"${expandAll || SPOTLIGHT.has(event.type) ? ' open' : ''}>`
+      + `<summary>当时留档</summary><p>${esc(log.belief)}</p></details>`
+    : '';
+  return `<div class="replay-event${tone}"${seat ? ` data-seat="${esc(seat)}"` : ''}>`
+    + `<div class="replay-event__fact">${who}${esc(fact)}</div>`
+    + `${warning ? '<div class="replay-event__warn">沉默 bot 顶班，非模型输出</div>' : ''}`
+    + `${!warning && log?.say ? `<div class="replay-event__say">“${esc(log.say)}”</div>` : ''}`
+    + `${belief}</div>`;
+}
+
+// 一局的结论：谁开谁、成不成立、谁掉骰——收起状态下就读这一行
+function roundVerdict(round, match) {
+  const who = (seat) => shortModel(modelLabel(match, seat));
+  const reveal = round.events.find((e) => e.type === 'reveal');
+  if (!reveal) return round.events.length ? '未开牌' : '';
+  const call = reveal.actor && reveal.target ? `${who(reveal.actor)} 开 ${who(reveal.target)}` : '开牌';
+  const held = reveal.stands ? '报价成立' : '报价不成立';
+  const lost = reveal.loser ? ` · ${who(reveal.loser)} 掉一骰` : '';
+  return `${call} · ${held}${lost}`;
 }
 
 function renderReplayPane(match) {
   const logs = alignLogs(match);
-  const rows = (match.events ?? []).map((event, index) => {
-    const fact = eventText(event, match);
-    if (!fact) return '';
-    const log = logs[index];
-    const warning = log?.silentFallback;
-    const className = event.type === 'reveal' || event.type === 'matchEnd'
-      ? 'replay-event is-open'
-      : warning
-        ? 'replay-event is-warning'
-        : 'replay-event';
-    return `<div class="${className}"><div class="replay-event__fact">${esc(fact)}${warning ? ' · 沉默 bot 顶班，非模型输出' : ''}</div>${!warning && log?.say ? `<div class="replay-event__say">“${esc(log.say)}”</div>` : ''}${!warning && log?.belief ? `<div class="replay-event__belief">当时留档：${esc(log.belief)}</div>` : ''}</div>`;
-  }).join('');
+  const events = match.events ?? [];
+  const rounds = [];
+  let current = null;
+  events.forEach((event, index) => {
+    if (event.type === 'roundStart' || !current) {
+      current = { round: event.round ?? rounds.length + 1, first: event.first ?? null, rows: [], events: [] };
+      rounds.push(current);
+      if (event.type === 'roundStart') return;
+    }
+    current.events.push(event);
+    const row = eventRow(event, logs[index], match);
+    if (row) current.rows.push(row);
+  });
+
+  const live = rounds.filter((r) => r.rows.length);
+  const body = live
+    .map((r, index) => `<details class="replay-round"${expandAll || index === 0 ? ' open' : ''}>`
+      + `<summary class="replay-round__head"><span class="replay-round__no">第 ${r.round} 局</span>`
+      + `<span class="replay-round__verdict">${esc(roundVerdict(r, match))}</span></summary>`
+      + `${r.first ? `<p class="replay-round__first">${esc(shortModel(modelLabel(match, r.first)))} 先报 · ${r.rows.length} 手</p>` : ''}`
+      + `${r.rows.join('')}</details>`)
+    .join('');
+
   const winner = match.winner ? `${shortModel(modelLabel(match, match.winner))} 胜` : '比赛未完成';
-  $('replayPane').innerHTML = `<header class="replay-pane__head"><h2>${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</h2><p>seed ${esc(match.seed)} · ${esc(winner)} · ${(match.events ?? []).length} 条引擎事件${match.batch ? ` · 来自 ${esc(match.batch)}` : ''}</p></header>${rows || '<div class="empty-state"><strong>这场没有事件</strong><span>导入文件里没有可读取的引擎流水。</span></div>'}`;
+  $('replayPane').innerHTML = `<header class="replay-pane__head"><h2>${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</h2><p>seed ${esc(match.seed)} · ${esc(winner)} · ${live.length} 局 · ${events.length} 条引擎事件${match.batch ? ` · 来自 ${esc(match.batch)}` : ''}</p></header>${body || '<div class="empty-state"><strong>这场没有事件</strong><span>导入文件里没有可读取的引擎流水。</span></div>'}`;
 }
+
+$('toggleBeliefs').addEventListener('click', () => {
+  expandAll = !expandAll;
+  $('toggleBeliefs').setAttribute('aria-pressed', String(expandAll));
+  $('toggleBeliefs').textContent = expandAll ? '只看戏眼' : '展开全部';
+  const matches = replayRun.matches ?? [];
+  if (matches[replayIndex]) renderReplayPane(matches[replayIndex]);
+});
 
 async function loadArchive() {
   $('loadArchive').disabled = true;

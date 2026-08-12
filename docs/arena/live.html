@@ -175,10 +175,14 @@
     <div class="replay-tools">
       <label class="file-control" for="runFile">导入 run.json<input id="runFile" type="file" accept="application/json"></label>
       <button id="loadArchive" class="arena-button arena-button--quiet" type="button">载入验证实录 · 44 场</button>
+      <button id="toggleBeliefs" class="arena-button arena-button--quiet" type="button" aria-pressed="false">展开全部</button>
     </div>
 
     <div class="replay-split">
-      <div id="replayList" class="replay-list" aria-label="比赛列表"></div>
+      <details id="replayPicker" class="replay-picker" open>
+        <summary class="replay-picker__summary"><span id="replayPickerLabel">比赛列表</span><span class="replay-picker__hint" aria-hidden="true"></span></summary>
+        <div id="replayList" class="replay-list" aria-label="比赛列表"></div>
+      </details>
       <article id="replayPane" class="replay-pane" aria-live="polite">
         <div class="empty-state"><strong>还没有本机比赛</strong><span>先启动一场，或载入已有实录。</span><button class="arena-button arena-button--quiet" type="button" data-view-jump="match">去开一场</button></div>
       </article>
