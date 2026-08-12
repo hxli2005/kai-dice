@@ -1,0 +1,15 @@
+{
+  "scanned_at": "2026-08-12T22:21:48+08:00",
+  "revalidated_after": "package.json script-only update; dependencies unchanged",
+  "design_system": "DESIGN.md (locked, read-only)",
+  "font_stack": "Existing Songti SC and monospace foundation; arena adds Tomorrow, IBM Plex Sans, and IBM Plex Mono",
+  "palette": "Warm dark industrial phosphor palette through OKLCH custom properties",
+  "motion": "Motion-cut; no animation library",
+  "spacing": "Arena uses a named 4pt spacing scale",
+  "framework": "Vanilla HTML, CSS, and ES modules",
+  "preserve": [
+    "mobile-first 9:16 play surface",
+    "three-tube phosphor language",
+    "no-account local storage"
+  ]
+}
