@@ -11,6 +11,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { chat } from '../src/ai/llm.js';
 import { fetchModels, openrouterChannel } from '../src/ai/openrouter.js';
+import { saysRowsOf } from '../src/arena/metrics.js';
 
 const argv = process.argv.slice(2);
 const dir = argv.find((a) => !a.startsWith('--'));
@@ -27,23 +28,24 @@ const CLS_MODEL = flag('model', 'deepseek/deepseek-chat');
 const AUD_MODEL = flag('audit-model', 'google/gemini-3.6-flash');
 const BATCH = +flag('batch', '25');
 
-// ---- 行装载（says.jsonl 优先；缺则从 run.json 回填并落盘）----
+// ---- 行装载：says.jsonl 须为新格式（含 match 字段且 lineId 全唯一），否则从 run.json 重建 ----
+const rebuild = () => {
+  const run = JSON.parse(readFileSync(`${dir}/run.json`, 'utf8'));
+  const rs = saysRowsOf(run.matches);
+  writeFileSync(`${dir}/says.jsonl`, rs.map((r) => JSON.stringify(r)).join('\n'));
+  console.log(`says.jsonl 已从 run.json 重建：${rs.length} 句`);
+  return rs;
+};
 let rows;
 if (existsSync(`${dir}/says.jsonl`)) {
   rows = readFileSync(`${dir}/says.jsonl`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const stale = rows.some((r) => r.match == null) || new Set(rows.map((r) => r.lineId)).size !== rows.length;
+  if (stale) {
+    console.warn('says.jsonl 是碰撞旧格式，作废重建');
+    rows = rebuild();
+  }
 } else {
-  const run = JSON.parse(readFileSync(`${dir}/run.json`, 'utf8'));
-  rows = [];
-  for (const m of run.matches)
-    for (const s of ['A', 'B']) {
-      const opp = m.seats[s === 'A' ? 'B' : 'A'];
-      (m.logs[s] ?? []).forEach((l, i) => {
-        if (l.auto || l.silentFallback || !l.say) return;
-        rows.push({ lineId: `${m.seed}:${s}:${i}`, model: m.seats[s], opponent: opp, seed: m.seed, round: l.round, action: l.action, say: l.say, speechMode: l.speechMode ?? 'straight' });
-      });
-    }
-  writeFileSync(`${dir}/says.jsonl`, rows.map((r) => JSON.stringify(r)).join('\n'));
-  console.log(`says.jsonl 从 run.json 回填：${rows.length} 句`);
+  rows = rebuild();
 }
 console.log(`待分类 ${rows.length} 句（分类员 ${CLS_MODEL}，审计员 ${AUD_MODEL}）`);
 
@@ -119,9 +121,9 @@ writeFileSync(`${dir}/audit.jsonl`, auditRows.map((r) => JSON.stringify(r)).join
 const byModel = {};
 for (const r of rows) {
   const lab = labels.get(r.lineId).label;
-  const mk = `${r.seed}:${r.lineId.split(':')[1]}:${r.opponent.split('/').pop()}`; // 场＝seed×座位×对手（坐庄批防跨臂碰撞）
+  const mk = `m${r.match}`; // 场＝对局本身（唯一主键，不再用复合键近似）
   const m = (byModel[r.model] ??= { matches: {}, total: 0, subj: 0, unlabeled: 0 });
-  const g = (m.matches[mk] ??= { total: 0, subj: 0, opponent: r.opponent });
+  const g = (m.matches[mk] ??= { total: 0, subj: 0, opponent: r.opponent, seed: r.seed, seat: r.lineId.split(':')[2], sf: r.matchSilentHands ?? 0 });
   m.total += 1;
   g.total += 1;
   if (lab === 'subjective') { m.subj += 1; g.subj += 1; }
@@ -136,7 +138,7 @@ for (const [model, m] of Object.entries(byModel)) {
   const afail = auditRows.filter((r) => r.model === model && r.agree === null).length;
   md.push(`## ${model}`);
   md.push(`- 主观率（按场，n=${rates.length} 场）：**${(mean * 100).toFixed(0)}% ± ${(sd * 100).toFixed(0)}pt**　句级 ${m.subj}/${m.total}${m.unlabeled ? `（未标 ${m.unlabeled}）` : ''}`);
-  md.push(`- 各场：${Object.entries(m.matches).map(([k, g]) => `${k} vs ${g.opponent.split('/').pop()}＝${((g.subj / g.total) * 100).toFixed(0)}%(${g.subj}/${g.total})`).join('；')}`);
+  md.push(`- 各场：${Object.entries(m.matches).map(([k, g]) => `${k}(${g.seed}:${g.seat}) vs ${g.opponent.split('/').pop()}＝${((g.subj / g.total) * 100).toFixed(0)}%(${g.subj}/${g.total})${g.sf ? `〔顶班${g.sf}手〕` : ''}`).join('；')}`);
   md.push(`- 审计一致率：${agr.length ? `${((agr.filter((r) => r.agree).length / agr.length) * 100).toFixed(0)}%（n=${agr.length}${afail ? `，审计失败另计 ${afail}` : ''}）` : afail ? `（审计腿全部失败 ${afail} 句）` : '（未抽中）'}`);
   md.push('');
 }

@@ -18,7 +18,7 @@ import {
   runArena,
   roundRobin,
 } from '../src/arena/arena.js';
-import { summarize, routingIntegrity, flavorSpread, seatStats } from '../src/arena/metrics.js';
+import { summarize, routingIntegrity, flavorSpread, seatStats, saysRowsOf } from '../src/arena/metrics.js';
 import { callCost, createBudget, estimateRun, cacheReport, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
 import {
@@ -726,4 +726,17 @@ test('推理开关臂：channel.extra.reasoning={enabled:false} 原样下发，�
   } }).decide((await createMatch({ seed: 3 })).observe('A'));
   assert.deepEqual(seen[0].reasoning, { enabled: false }, '关断显式下发');
   assert.equal(seen[0].max_tokens, MAX_TOKENS, '显式关断后不套推理信封（裸 3072）');
+});
+
+// ---------- 逐句制品主键：跨臂同 seed 不得碰撞（2026-08-12 用户核数抓获的伪象根源） ----------
+test('saysRowsOf：同 seed 跨对局的 lineId 全批唯一，且携带对局序号与顶班注记', async () => {
+  const mk = async (label) =>
+    await playMatch({ seed: 1000, seats: { A: seat('anchor'), B: seat(label) }, fetchFn: fakeChannel({}) });
+  const matches = [await mk('cand1'), await mk('cand2')]; // 两臂同 seed —— 旧主键必然碰撞
+  const rows = saysRowsOf(matches);
+  assert.equal(new Set(rows.map((r) => r.lineId)).size, rows.length, 'lineId 全批唯一');
+  assert.ok(rows.every((r) => r.match === 0 || r.match === 1), '每行携带对局序号');
+  assert.ok(rows.every((r) => typeof r.matchSilentHands === 'number'), '干净度注记随行携带');
+  const m0 = rows.filter((r) => r.match === 0).map((r) => r.model);
+  assert.ok(!m0.includes('cand2'), '行归属不串臂');
 });

@@ -19,6 +19,38 @@ export function seatStats(match, seat) {
   return computeStats(match.events, seat, diceByRoundOf(match.events, seat));
 }
 
+// 逐句制品行（分类管线的输入）。**lineId 必须全批唯一：主键含对局序号**——
+// 同一批里 seed 会跨臂复用（--vs 坐庄批全用 1000/1001），只用 seed:座位:序号会跨场碰撞，
+// 分类/审计的 Map 互相覆盖（2026-08-12 用户核数抓获：R1 834 句只剩 104 个唯一键，
+// 全部主观率与"审计一致率 100%"随之作废）。唯一性在此硬断言，不许再靠约定。
+export function saysRowsOf(matches) {
+  const rows = [];
+  matches.forEach((m, mi) => {
+    for (const s of ['A', 'B']) {
+      const opp = m.seats[s === 'A' ? 'B' : 'A'];
+      const sf = (m.logs[s] ?? []).filter((l) => l.silentFallback).length;
+      (m.logs[s] ?? []).forEach((l, i) => {
+        if (l.auto || l.silentFallback || !l.say) return;
+        rows.push({
+          lineId: `m${mi}:${m.seed}:${s}:${i}`,
+          match: mi,
+          model: m.seats[s],
+          opponent: opp,
+          seed: m.seed,
+          round: l.round,
+          action: l.action,
+          say: l.say,
+          speechMode: l.speechMode ?? 'straight',
+          matchSilentHands: sf, // 该席本场顶班手数——干净度随行携带，报告按"整场零顶班"分档
+        });
+      });
+    }
+  });
+  const ids = new Set(rows.map((r) => r.lineId));
+  if (ids.size !== rows.length) throw new Error(`lineId 碰撞：${rows.length} 行只剩 ${ids.size} 个唯一键`);
+  return rows;
+}
+
 const emptyAcc = () => ({
   label: null,
   model: null,

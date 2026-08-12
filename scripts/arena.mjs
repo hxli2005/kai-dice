@@ -19,7 +19,7 @@ import { seatSystem, PROMPT_VERSION } from '../src/ai/agent.js';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
 import { runArena, roundRobin, playSeries, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
 import { chat } from '../src/ai/llm.js';
-import { summarize, routingIntegrity, flavorSpread } from '../src/arena/metrics.js';
+import { summarize, routingIntegrity, flavorSpread, saysRowsOf } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
 
@@ -376,25 +376,8 @@ const reasoningActualOf = (label) => {
   };
 };
 
-// 逐句制品（分类管线的输入）：lineId 决定性可追溯（seed:座位:日志序）
-const saysRows = [];
-for (const m of matches)
-  for (const s of ['A', 'B']) {
-    const opp = m.seats[s === 'A' ? 'B' : 'A'];
-    (m.logs[s] ?? []).forEach((l, i) => {
-      if (l.auto || l.silentFallback || !l.say) return;
-      saysRows.push({
-        lineId: `${m.seed}:${s}:${i}`,
-        model: m.seats[s],
-        opponent: opp,
-        seed: m.seed,
-        round: l.round,
-        action: l.action,
-        say: l.say,
-        speechMode: l.speechMode ?? 'straight',
-      });
-    });
-  }
+// 逐句制品（分类管线的输入）：lineId 全批唯一（含对局序号），构造与唯一性断言统一在 metrics.saysRowsOf
+const saysRows = saysRowsOf(matches);
 writeFileSync(`${dir}/says.jsonl`, saysRows.map((r) => JSON.stringify(r)).join('\n'));
 
 writeFileSync(
