@@ -236,7 +236,8 @@ export function seriesGameFact(match, seat, index) {
   const res = match.winner == null ? '未终局' : match.winner === seat ? '你胜' : '你负';
   return (
     `第${index + 1}场${res}（${st.rounds}局）：你开牌${st.myChallenges}次中${st.myChallengeHits}次；` +
-    `对手开牌${so.myChallenges}次中${so.myChallengeHits}次；对手看骰后报价${so.seenBids}口、其中虚报${so.myBluffs}口；` +
+    // G7：虚报拆两笔——明知（自见概率不足 15%）与估悬（15%–50%）
+    `对手开牌${so.myChallenges}次中${so.myChallengeHits}次；对手看骰后报价${so.seenBids}口、其中明知站不住${so.myKnowingBluffs}口、估悬${so.myThinBluffs}口；` +
     `对手拨算盘${so.myCalcs}次、宣盲${so.myBlinds}次、扳抬${so.myRaises}次`
   );
 }

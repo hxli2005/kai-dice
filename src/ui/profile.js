@@ -164,7 +164,7 @@ export function profileBrief(p, personaId = `model:${HOSTED_MODEL}`, withNotes =
   const resets = p.resets ?? 0;
   const head = `交手${p.matches}场，客人赢${p.wins}场${resets ? `，中途翻篇 ${resets} 次` : ''}。`;
   const habits = last
-    ? `上一场客人虚报率${Math.round(last.bluffRate * 100)}%，开牌${last.myChallenges}次命中${last.myChallengeHits}次，平均思考${(last.avgTimeMs / 1000).toFixed(1)}秒。`
+    ? `上一场客人虚报率${Math.round(last.bluffRate * 100)}%（其中明知站不住 ${last.myKnowingBluffs ?? 0} 口、只是估悬了 ${last.myThinBluffs ?? 0} 口），开牌${last.myChallenges}次命中${last.myChallengeHits}次，平均思考${(last.avgTimeMs / 1000).toFixed(1)}秒。`
     : '';
   // F6 算盘依赖度：他信数还是信人——AI 的剥削通道（"你只信档位，我把谎放在'大概'里"）
   const calc =
@@ -198,6 +198,10 @@ export function profilePromptData(p, personaId = `model:${HOSTED_MODEL}`) {
       verified.push({
         scope: 'lastMatch',
         bluffRate: last.bluffRate,
+        // G7：两笔分开的账。明知＝自见概率不足 15% 还报（他看过骰）；
+        // 估悬＝15%–50%，读得出概率读不出居心，别当成同一件事
+        knowingBluffs: last.myKnowingBluffs ?? null,
+        thinBluffs: last.myThinBluffs ?? null,
         challenges: last.myChallenges,
         challengeHits: last.myChallengeHits,
         calcs: last.myCalcs ?? null,
@@ -225,7 +229,10 @@ export function openerFacts(profile, ledger) {
   if ((profile.resets ?? 0) > 0) facts.push(`他把账翻篇过 ${profile.resets} 次`);
   if (!last) return facts;
   if (last.myChallenges > 0) facts.push(`上一场他开了 ${last.myChallenges} 次牌，中了 ${last.myChallengeHits} 次`);
-  if (last.bluffRate > 0.5) facts.push('上一场他一半以上的报价是虚的');
+  // G7：开场白是裁判层，只许说"没站住"这件已发生的事；
+  // 「明知」（自见概率不足 15%）才是他自己看过骰还报的，那一句才配点名
+  if (last.myKnowingBluffs >= 2) facts.push(`上一场他有 ${last.myKnowingBluffs} 口价是看过骰、明知站不住还报的`);
+  else if (last.bluffRate > 0.5) facts.push('上一场他一半以上的报价没站住（多半是估错，不是有意的）');
   if (last.timesChallenged >= 2) facts.push(`上一场他被掀了 ${last.timesChallenged} 回`);
   if (last.myBlinds >= 2) facts.push(`上一场他盲了 ${last.myBlinds} 把`);
   if (last.myCalcs === 0) facts.push('上一场他一次算盘都没拨');

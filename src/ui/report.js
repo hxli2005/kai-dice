@@ -10,7 +10,7 @@ export function diceByRoundOf(events, seat) {
   let round = 0;
   for (const e of events) {
     if (e.type === 'roundStart') round = e.round;
-    if (e.type === 'reveal' && e.dice[seat]) map[round] = e.dice[seat];
+    if (e.type === 'reveal' && e.dice?.[seat]) map[round] = e.dice[seat]; // 裁剪过的公开实录没有骰面
   }
   return map;
 }
@@ -22,6 +22,12 @@ export function computeStats(events, you, myDiceByRound) {
     roundsAlive: 0, // 你参战的局数（出局后桌子还在打——F0：两个数不许混成一个）
     myBids: 0,
     myBluffs: 0,
+    // G7：把"虚报"拆成两笔账——我们读得出概率，读不出居心。
+    // 明知＝报数时刻自见概率落进「纯扯」档（<0.15，DESIGN 既有粗档边界，不新设参数）；
+    // 看走眼＝0.15–0.5 的悬价。判词只许按这两笔说话，不许把两者都称作"说谎"。
+    myKnowingBluffs: 0,
+    myThinBluffs: 0,
+    knowingWildest: null, // {round, bid, p} 明知里最离谱的那一口
     // F0c 蒙报类目（Q46）：没看骰就报的价单列——它和"虚报"不是一回事，
     // 混在一起会把"故意闭着眼报到天上"算成老实人（用户实测 bug）
     seenBids: 0, // 看过骰之后报的手数（虚报率的分母）
@@ -128,7 +134,17 @@ export function computeStats(events, you, myDiceByRound) {
           cond.afterLossBids++;
           if (pv != null && pv < 0.5) cond.afterLossBluffs++;
         }
-        if (pv != null && pv < 0.5) s.myBluffs++;
+        // G7：虚报总数照旧（DESIGN 参数表口径 P<50%），但按粗档再切一刀——
+        // 「纯扯」档（P<0.15）＝看过骰还报这一口，估不出这么离谱；其余是悬，可能只是看走眼。
+        // 我们只知道概率，不知道他心里想什么：能证明意图的只有留档里的 bait（复盘室右栏）。
+        if (pv != null && pv < 0.5) {
+          s.myBluffs++;
+          if (pv < 0.15) {
+            s.myKnowingBluffs++;
+            if (!s.knowingWildest || pv < s.knowingWildest.p)
+              s.knowingWildest = { round, bid: { count: e.count, face: e.face }, p: pv };
+          } else s.myThinBluffs++;
+        }
         if (e.elapsedMs != null) {
           s.myTimes.push(e.elapsedMs);
           if (!s.slowest || e.elapsedMs > s.slowest.ms)
@@ -185,6 +201,9 @@ export function computeStats(events, you, myDiceByRound) {
     // 虚报率的分母改为"看过骰的报价"（F0c）：没看骰的手不进这笔账——
     // 旧口径下故意不看骰的人虚报率恒为 0，档案会把他写成老实人
     bluffRate: div(s.myBluffs, s.seenBids),
+    // G7：两笔账各自的比率（分母同为"看过骰之后报的口"）
+    knowingBluffRate: div(s.myKnowingBluffs, s.seenBids),
+    thinBluffRate: div(s.myThinBluffs, s.seenBids),
     blindBidRate: div(s.blindBids, s.myBids),
     challengedRate: div(s.timesChallenged, s.myBids),
     hitRate: div(s.myChallengeHits, s.myChallenges),
@@ -213,6 +232,16 @@ export function condBrief(st) {
   }
   if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
     bits.push('被开过一次，下一局的首报就明显缩');
+  // G7：虚报拆两笔——「明知」是他自己看过骰还报的纯扯价，「看走眼」是估不准。
+  // 这两件事对读心的意义完全相反：前者是敢，后者是菜。
+  if (st.myKnowingBluffs >= 2)
+    bits.push(
+      `有 ${st.myKnowingBluffs} 口是看过骰、明知站不住还报的${
+        st.knowingWildest ? `（最狠一口：第 ${st.knowingWildest.round} 局 ${st.knowingWildest.bid.count} 个 ${st.knowingWildest.bid.face}）` : ''
+      }`,
+    );
+  else if (st.myThinBluffs >= 3 && st.myKnowingBluffs === 0)
+    bits.push(`${st.myThinBluffs} 口没站住的价全压在"悬"这一档，看着更像估不准，不像有意骗`);
   // F0c 蒙报：连骰都不看就往上抬，是最响的一种信号
   if (st.blindBids >= 2)
     bits.push(
@@ -365,7 +394,15 @@ export function templateVerdict(st, won) {
     bits.push(
       `你有${st.blindBids}口价是闭着眼报的——第${st.blindWildest.round}局那个${st.blindWildest.bid.count}个${st.blindWildest.bid.face}，你自己都不知道手里是什么`,
     );
-  if (st.bluffRate > 0.5) bits.push(`看过骰的十句里${Math.round(st.bluffRate * 10)}句是空的，胆子不小`);
+  // G7：不把"没站住"一律说成"说谎"。明知（纯扯档）才配这句狠话，
+  // 悬价只说他估不准——判词是裁判层，编不出的东西就别断言。
+  if (st.myKnowingBluffs >= 2 && st.knowingWildest)
+    bits.push(
+      `第${st.knowingWildest.round}局那个${st.knowingWildest.bid.count}个${st.knowingWildest.bid.face}，你自己看过骰——报得出这口的人不是算错了，是想让我信`,
+    );
+  else if (st.bluffRate > 0.5 && st.myKnowingBluffs === 0)
+    bits.push(`看过骰的价一半以上没站住，可口口都在"悬"上——你不是骗我，你是真算不准`);
+  else if (st.bluffRate > 0.5) bits.push(`看过骰的十句里${Math.round(st.bluffRate * 10)}句没站住，胆子不小`);
   else if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3)
     bits.push('你看过骰之后几乎不说谎，所以你一抬价我就信');
   if (st.myChallenges > 0 && st.hitRate < 0.34)

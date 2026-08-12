@@ -1193,7 +1193,10 @@ async function showReport(end) {
       ? `三人桌，名次：${end.standings.map(dispName).join(' > ')}。你只写你自己名下的账：${duelText('B')}。` +
         `客人参战 ${stats.roundsAlive} 局，全桌打了 ${end.rounds} 局。以下为全桌口径的公共数据（不是你一个人打出来的）：`
       : `${end.rounds}局${won ? '客人赢' : '客人输'}；`) +
-    `虚报率${pct(stats.bluffRate)}（只算他看过骰之后报的 ${stats.seenBids} 口）；` +
+    // G7：交给它的是两笔分开的账，不是一个"说谎率"——概率读得出，居心读不出
+    `虚报率${pct(stats.bluffRate)}（只算他看过骰之后报的 ${stats.seenBids} 口；` +
+    `其中明知站不住（自见概率不足 15%）${stats.myKnowingBluffs} 口、只是悬 ${stats.myThinBluffs} 口——` +
+    `明知那几口是他自己看过骰还报的，悬的那几口可能只是估错）；` +
     (stats.blindBids
       ? `没看骰就报的有 ${stats.blindBids} 口${
           stats.blindWildest
@@ -1235,6 +1238,17 @@ async function showReport(end) {
         }
         <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}${sandbox ? '（沙盒·不记账）' : ''}</dd>
         <dt>虚报率</dt><dd>${pct(stats.bluffRate)}${stats.seenBids ? `（看过骰的 ${stats.seenBids} 口）` : '（没看过骰）'}</dd>
+        ${
+          // G7：没站住的价拆成两笔——明知（自见概率不足 15%）与看走眼（悬）。
+          // 报告卡是裁判层，只报数不判居心：能证明"故意"的只有它自己留档里的 bait。
+          stats.myBluffs
+            ? `<dt>其中</dt><dd>明知 ${stats.myKnowingBluffs} 口 · 看走眼 ${stats.myThinBluffs} 口${
+                stats.knowingWildest
+                  ? ` · 最狠 ${stats.knowingWildest.bid.count} 个 ${stats.knowingWildest.bid.face}`
+                  : ''
+              }</dd>`
+            : ''
+        }
         ${
           // F0c：蒙报单列——闭着眼报的价不进虚报率，但更要写在脸上
           stats.blindBids

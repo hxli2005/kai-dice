@@ -44,6 +44,48 @@ test('persona 与模板判词：可生成且引用真实局面', () => {
   assert.ok(!/\d秒/.test(v));
 });
 
+// ---------- G7：一张"没站住"的账拆成两笔 ----------
+// 手里 [2,3,4,5,2] 一个 6 都没有（也没癞子）：3 个 6 还有 0.21 的活路（悬＝可能只是估错），
+// 8 个／10 个 6 是 0.000（明知——他自己看过骰）。判词只许对后者说狠话。
+const g7 = [
+  { type: 'roundStart', round: 1, diceCount: { A: 5, B: 5 } },
+  { type: 'peek', actor: 'A' },
+  { type: 'bid', actor: 'A', count: 3, face: 6 },
+  { type: 'bid', actor: 'B', count: 4, face: 6 },
+  { type: 'bid', actor: 'A', count: 8, face: 6 },
+  { type: 'bid', actor: 'B', count: 9, face: 6 },
+  { type: 'bid', actor: 'A', count: 10, face: 6 },
+  {
+    type: 'reveal', actor: 'B', target: 'A', bid: { player: 'A', count: 10, face: 6 },
+    dice: { A: [2, 3, 4, 5, 2], B: [1, 2, 3, 4, 5] }, zhai: false, stands: false, actual: 1, loser: 'A',
+  },
+  { type: 'roundEnd', round: 1, loser: 'A', winner: 'B', transfer: 6, mult: 1, chips: {}, diceCount: { A: 4, B: 5 } },
+];
+
+test('G7：虚报拆成「明知」与「看走眼」两笔，总数不变', () => {
+  const st = computeStats(g7, 'A', { 1: [2, 3, 4, 5, 2] });
+  assert.equal(st.myBluffs, 3, '三口都没站住');
+  assert.equal(st.myKnowingBluffs, 2, '其中两口是自见概率不足 15% 的明知');
+  assert.equal(st.myThinBluffs, 1, '3 个 6 还有两成活路，算看走眼');
+  assert.equal(st.myKnowingBluffs + st.myThinBluffs, st.myBluffs, '两笔账合起来就是原来的虚报数');
+  assert.equal(st.knowingWildest.bid.count, 8, '明知里最离谱的那口留了痕（10 个 6 与 8 个 6 同为 0，取先到的）');
+});
+
+test('G7 文案：明知才配"想让我信"，估悬只说他算不准', () => {
+  const knowing = computeStats(g7, 'A', { 1: [2, 3, 4, 5, 2] });
+  const v = templateVerdict(knowing, false);
+  assert.match(v, /你自己看过骰/, '明知的那口要点名');
+  assert.doesNotMatch(v, /句是空的/, '旧口径把所有没站住的价都说成"空的"');
+  assert.match(condBrief(knowing), /明知站不住/);
+
+  // 同样超过一半没站住，但全是悬价：不许说成骗
+  const thin = { ...knowing, myKnowingBluffs: 0, myThinBluffs: 3, knowingWildest: null, bluffRate: 0.6 };
+  const tv = templateVerdict(thin, false);
+  assert.match(tv, /你是真算不准/);
+  assert.doesNotMatch(tv, /想让我信/);
+  assert.match(condBrief(thin), /更像估不准，不像有意骗/);
+});
+
 // F0：三人桌一场——A 开过李（B）也开过飞（C），并被 C 开过一次；A 第 2 局末出局，桌子继续打第 3 局
 const trio = [
   { type: 'roundStart', round: 1, diceCount: { A: 1, B: 5, C: 5 } },

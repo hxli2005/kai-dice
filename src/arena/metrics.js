@@ -80,6 +80,8 @@ const emptyAcc = () => ({
   // 风味层
   seenBids: 0,
   bluffs: 0,
+  knowingBluffs: 0, // G7：明知站不住（自见概率不足 15%）
+  thinBluffs: 0, // G7：只是估悬了（15%–50%）
   blindBids: 0,
   bids: 0,
   depthSum: 0,
@@ -117,6 +119,8 @@ function accumulate(acc, match, seat, { keepLines = 6 } = {}) {
   acc.calzaHits += st.myCalzaHits;
   acc.seenBids += st.seenBids;
   acc.bluffs += st.myBluffs;
+  acc.knowingBluffs += st.myKnowingBluffs;
+  acc.thinBluffs += st.myThinBluffs;
   acc.blindBids += st.blindBids;
   acc.bids += st.myBids;
   if (st.avgDepth) {
@@ -197,6 +201,9 @@ export function finalize(acc) {
     // ③ 风味层——**只有这层的分化支撑"模型即对手"**。
     flavor: {
       bluffRate: r2(div(acc.bluffs, acc.seenBids)), // 分母＝看过骰之后报的口（F0c 口径）
+      // G7：虚报拆两笔。哪个模型是"明知还报"、哪个只是"算不准"，是两种完全不同的对手
+      knowingBluffRate: r2(div(acc.knowingBluffs, acc.seenBids)),
+      thinBluffRate: r2(div(acc.thinBluffs, acc.seenBids)),
       blindBidRate: r2(div(acc.blindBids, acc.bids)), // 骰都不看就报
       avgDepth: r2(div(acc.depthSum, acc.depthN)), // 抬价深度
       calcPerRound: r2(div(acc.calcs, acc.rounds)), // 算频（原生 tell：算不算是他自己的事）
@@ -255,7 +262,7 @@ export function routingIntegrity(rows) {
 
 // 风味分化的判据（Q51 证据闸门）：**只看风味层**。
 // 机器只能报"分没分开"，"分开得算不算一个人"由人看（红队条款：这里不下结论）。
-export const FLAVOR_AXES = ['bluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate'];
+export const FLAVOR_AXES = ['bluffRate', 'knowingBluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate'];
 
 // 顶班率 ≥20% 的行不参与分化计算——那些数里掺着沉默 bot，拿它算"模型之间差多少"是自欺。
 export const CONTAMINATED_RATE = 0.2;

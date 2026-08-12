@@ -193,6 +193,8 @@ export function createRoomCore({
         seal: sealName(s),
         rounds: st.rounds,
         bluffRate: st.bluffRate,
+        knowingBluffs: st.myKnowingBluffs, // G7：明知站不住（自见概率不足 15%）
+        thinBluffs: st.myThinBluffs, // G7：只是估悬了（15%–50%）
         challenges: st.myChallenges,
         challengeHits: st.myChallengeHits,
         timesChallenged: st.timesChallenged,
@@ -207,7 +209,8 @@ export function createRoomCore({
     const ch = channel();
     if (ch) {
       const fact = (s) =>
-        `${sealName(s)}：虚报率${Math.round(packs[s].bluffRate * 100)}%，开牌${packs[s].challenges}次中${packs[s].challengeHits}次，被开${packs[s].timesChallenged}次${packs[s].insight ? `，破绽「${packs[s].insight}」` : ''}`;
+        // G7：给主持人的也是两笔分开的账——"没站住"与"明知站不住"不是一回事
+        `${sealName(s)}：虚报率${Math.round(packs[s].bluffRate * 100)}%（明知站不住 ${packs[s].knowingBluffs} 口、只是估悬 ${packs[s].thinBluffs} 口），开牌${packs[s].challenges}次中${packs[s].challengeHits}次，被开${packs[s].timesChallenged}次${packs[s].insight ? `，破绽「${packs[s].insight}」` : ''}`;
       verdict = await personaLine(ch, {
         persona: defaultAiPersona(),
         task: '一场打完。你是桌上的主持人，写两三句「双人对比判词」——点名两位客人谁更怂、谁更虚，必须引用给你的真实数据，比出个高下，不许编。',

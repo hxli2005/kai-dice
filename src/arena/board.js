@@ -139,13 +139,15 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
   out.push('');
   out.push(
     table(
-      ['模型', '虚报率', '蒙报率', '抬价深度', '算频/局', '宣言/局', 'bait 率', '话密度', 'n(报价/局)'],
+      // G7：虚报拆两笔——「明知」＝看过骰、自见概率仍不足 15% 还报（读得出的是概率，不是居心）
+      ['模型', '虚报率', '其中明知', '蒙报率', '抬价深度', '算频/局', '宣言/局', 'bait 率', '话密度', 'n(报价/局)'],
       sorted.map((r) =>
         spoiled(r)
-          ? [r.label, '—', '—', '—', '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
+          ? [r.label, '—', '—', '—', '—', '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
           : [
               r.label,
               f(r.flavor.bluffRate, r.flavor.n.seenBids),
+              f(r.flavor.knowingBluffRate, r.flavor.n.seenBids),
               f(r.flavor.blindBidRate, r.flavor.n.bids),
               num(r.flavor.avgDepth),
               num(r.flavor.calcPerRound),
