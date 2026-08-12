@@ -1,0 +1,642 @@
+{
+ "schema": "kai.arena.verified-board.v2",
+ "scope": "在这张桌子上",
+ "set": "干净集 v2",
+ "date": "2026-08-11",
+ "sourceDoc": "clean-2026-08-12.md",
+ "batches": [
+  "2026-08-11T12-32-32",
+  "2026-08-11T16-13-08",
+  "2026-08-11T16-27-43",
+  "2026-08-11T16-49-50"
+ ],
+ "totals": {
+  "models": 7,
+  "pairs": 11,
+  "matches": 44,
+  "arms": 22
+ },
+ "arms": [
+  {
+   "model": "anthropic/claude-haiku-4.5",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    0,
+    4
+   ],
+   "cleanRecord": [
+    0,
+    3
+   ],
+   "subjectivity": {
+    "rate": 0.26,
+    "spread": 0.21,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "anthropic/claude-haiku-4.5",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    4,
+    0
+   ],
+   "cleanRecord": [
+    3,
+    0
+   ],
+   "subjectivity": {
+    "rate": 0.59,
+    "spread": 0.09,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "google/gemini-3.6-flash",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 0,
+    "spoiled": 2
+   },
+   "record": [
+    1,
+    3
+   ],
+   "cleanRecord": [
+    1,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.62,
+    "spread": 0.19,
+    "n": 4
+   }
+  },
+  {
+   "model": "google/gemini-3.6-flash",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 0,
+    "spoiled": 2
+   },
+   "record": [
+    3,
+    1
+   ],
+   "cleanRecord": [
+    1,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.6,
+    "spread": 0.13,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "openai/gpt-5.6-luna",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    3,
+    1
+   ],
+   "cleanRecord": [
+    3,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.5,
+    "spread": 0.17,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    1,
+    3
+   ],
+   "cleanRecord": [
+    1,
+    3
+   ],
+   "subjectivity": {
+    "rate": 0.33,
+    "spread": 0.12,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "openai/gpt-5.6-luna#nothink",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.42,
+    "spread": 0.22,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna#nothink",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.47,
+    "spread": 0.18,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "moonshotai/kimi-k3",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 2,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    0
+   ],
+   "subjectivity": {
+    "rate": 0.73,
+    "spread": 0.16,
+    "n": 4
+   }
+  },
+  {
+   "model": "moonshotai/kimi-k3",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 2,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    0,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.77,
+    "spread": 0.18,
+    "n": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "opponent": "mistralai/mistral-small-2603",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    4,
+    0
+   ],
+   "cleanRecord": [
+    3,
+    0
+   ],
+   "subjectivity": {
+    "rate": 0.65,
+    "spread": 0.22,
+    "n": 4
+   }
+  },
+  {
+   "model": "mistralai/mistral-small-2603",
+   "opponent": "deepseek/deepseek-v4-pro",
+   "batch": "2026-08-11T16-13-08",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    0,
+    4
+   ],
+   "cleanRecord": [
+    0,
+    3
+   ],
+   "subjectivity": {
+    "rate": 0.78,
+    "spread": 0.19,
+    "n": 4
+   }
+  },
+  {
+   "model": "google/gemini-3.6-flash",
+   "opponent": "openai/gpt-5.6-luna",
+   "batch": "2026-08-11T12-32-32",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.6,
+    "spread": 0.26,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "opponent": "google/gemini-3.6-flash",
+   "batch": "2026-08-11T12-32-32",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.26,
+    "spread": 0.15,
+    "n": 4
+   }
+  },
+  {
+   "model": "moonshotai/kimi-k3",
+   "opponent": "openai/gpt-5.6-luna",
+   "batch": "2026-08-11T12-32-32",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 0,
+    "spoiled": 1
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.81,
+    "spread": 0.35,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "opponent": "moonshotai/kimi-k3",
+   "batch": "2026-08-11T12-32-32",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 0,
+    "spoiled": 1
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    1,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.57,
+    "spread": 0.22,
+    "n": 4
+   }
+  },
+  {
+   "model": "moonshotai/kimi-k3",
+   "opponent": "openai/gpt-5.6-luna#nothink",
+   "batch": "2026-08-11T16-27-43",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    1,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.87,
+    "spread": 0.14,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna#nothink",
+   "opponent": "moonshotai/kimi-k3",
+   "batch": "2026-08-11T16-27-43",
+   "matches": 4,
+   "grades": {
+    "clean": 3,
+    "light": 1,
+    "spoiled": 0
+   },
+   "record": [
+    2,
+    2
+   ],
+   "cleanRecord": [
+    2,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.19,
+    "spread": 0.24,
+    "n": 4
+   }
+  },
+  {
+   "model": "anthropic/claude-haiku-4.5",
+   "opponent": "openai/gpt-5.6-luna",
+   "batch": "2026-08-11T16-49-50",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 2,
+    "spoiled": 0
+   },
+   "record": [
+    0,
+    4
+   ],
+   "cleanRecord": [
+    0,
+    2
+   ],
+   "subjectivity": {
+    "rate": 0.57,
+    "spread": 0.16,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "opponent": "anthropic/claude-haiku-4.5",
+   "batch": "2026-08-11T16-49-50",
+   "matches": 4,
+   "grades": {
+    "clean": 2,
+    "light": 2,
+    "spoiled": 0
+   },
+   "record": [
+    4,
+    0
+   ],
+   "cleanRecord": [
+    2,
+    0
+   ],
+   "subjectivity": {
+    "rate": 0.44,
+    "spread": 0.24,
+    "n": 4
+   }
+  },
+  {
+   "model": "mistralai/mistral-small-2603",
+   "opponent": "openai/gpt-5.6-luna",
+   "batch": "2026-08-11T16-49-50",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    1,
+    3
+   ],
+   "cleanRecord": [
+    1,
+    3
+   ],
+   "subjectivity": {
+    "rate": 0.65,
+    "spread": 0.17,
+    "n": 4
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "opponent": "mistralai/mistral-small-2603",
+   "batch": "2026-08-11T16-49-50",
+   "matches": 4,
+   "grades": {
+    "clean": 4,
+    "light": 0,
+    "spoiled": 0
+   },
+   "record": [
+    3,
+    1
+   ],
+   "cleanRecord": [
+    3,
+    1
+   ],
+   "subjectivity": {
+    "rate": 0.47,
+    "spread": 0.14,
+    "n": 4
+   }
+  }
+ ],
+ "flavor": [
+  {
+   "model": "deepseek/deepseek-v4-pro",
+   "bluffRate": 0.058,
+   "knowingBluffRate": 0,
+   "blindBidRate": 0,
+   "avgDepth": 1.875,
+   "calcPerRound": 0.388,
+   "n": {
+    "seenBids": 139,
+    "bids": 139,
+    "rounds": 152
+   }
+  },
+  {
+   "model": "anthropic/claude-haiku-4.5",
+   "bluffRate": 0.125,
+   "knowingBluffRate": 0.1,
+   "blindBidRate": 0.07,
+   "avgDepth": 1.642,
+   "calcPerRound": 0.642,
+   "n": {
+    "seenBids": 40,
+    "bids": 43,
+    "rounds": 53
+   }
+  },
+  {
+   "model": "google/gemini-3.6-flash",
+   "bluffRate": 0.053,
+   "knowingBluffRate": 0,
+   "blindBidRate": 0,
+   "avgDepth": 2.173,
+   "calcPerRound": 0.346,
+   "n": {
+    "seenBids": 57,
+    "bids": 57,
+    "rounds": 52
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna",
+   "bluffRate": 0.063,
+   "knowingBluffRate": 0,
+   "blindBidRate": 0.018,
+   "avgDepth": 1.652,
+   "calcPerRound": 0.101,
+   "n": {
+    "seenBids": 112,
+    "bids": 114,
+    "rounds": 138
+   }
+  },
+  {
+   "model": "openai/gpt-5.6-luna#nothink",
+   "bluffRate": 0.205,
+   "knowingBluffRate": 0.068,
+   "blindBidRate": 0.083,
+   "avgDepth": 1.804,
+   "calcPerRound": 0.536,
+   "n": {
+    "seenBids": 44,
+    "bids": 48,
+    "rounds": 56
+   }
+  },
+  {
+   "model": "moonshotai/kimi-k3",
+   "bluffRate": 0.132,
+   "knowingBluffRate": 0.029,
+   "blindBidRate": 0.081,
+   "avgDepth": 1.79,
+   "calcPerRound": 0.519,
+   "n": {
+    "seenBids": 68,
+    "bids": 74,
+    "rounds": 81
+   }
+  },
+  {
+   "model": "mistralai/mistral-small-2603",
+   "bluffRate": 0.182,
+   "knowingBluffRate": 0.091,
+   "blindBidRate": 0.744,
+   "avgDepth": 1.604,
+   "calcPerRound": 0.333,
+   "n": {
+    "seenBids": 11,
+    "bids": 43,
+    "rounds": 48
+   }
+  }
+ ]
+}

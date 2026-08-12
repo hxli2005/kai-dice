@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 const KEY = 'kai.arena.key';
 const LOCAL_MATCHES_KEY = 'kai.arena.local.matches.v1';
 const ARCHIVE_RUN = 'verified-replay.json';
+const VERIFIED_BOARD = 'verified-board.json';
 const DECIDED = new Set(['bid', 'challenge', 'peek', 'calc', 'declare', 'modAction']);
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
 const PIPS = {
@@ -60,7 +61,10 @@ function activateView(name, moveFocus = false) {
     tab.tabIndex = active ? 0 : -1;
     if (active && moveFocus) tab.focus({ preventScroll: true });
   }
-  if (name === 'board') renderLocalBoard();
+  if (name === 'board') {
+    loadVerifiedBoard();
+    renderLocalBoard();
+  }
   if (name === 'replay') renderReplay();
 }
 
@@ -473,6 +477,64 @@ $('stop').addEventListener('click', () => {
   $('stop').disabled = true;
 });
 
+// ---------- 本桌榜：干净集 v2（2026-08-11 素颜擂台，四批合并） ----------
+// 榜的数字由 scripts/build-arena-replay.mjs 从原始跑批重算后落进 verified-board.json，
+// 页面只负责画——不在这里抄数，也不在这里算数。
+let verifiedBoard = null;
+
+const pct = (value, n) => (value == null ? '—' : `${Math.round(value * 100)}% · n=${n}`);
+const record = ([win, lose]) => `${win}–${lose}`;
+
+function renderVerifiedBoard() {
+  const armRows = $('verifiedArms');
+  const flavorRows = $('verifiedFlavor');
+  if (!verifiedBoard) {
+    const miss = '<tr><td colspan="6">本桌榜数据没有载入（verified-board.json）。</td></tr>';
+    armRows.innerHTML = miss;
+    flavorRows.innerHTML = miss;
+    return;
+  }
+  const t = verifiedBoard.totals;
+  $('boardScope').textContent =
+    `下面是 ${verifiedBoard.date} 素颜擂台的${verifiedBoard.set}：${t.models} 个模型、${t.pairs} 组对手、${t.matches} 场，` +
+    '全席同一份提示词、镜像种子、锁定后端。口径限这张桌子——样本不足以构成通用模型排名。';
+  $('flavorScope').textContent = `${t.matches} 场行为观测`;
+
+  armRows.innerHTML = verifiedBoard.arms
+    .slice()
+    .sort((a, b) => a.model.localeCompare(b.model) || a.opponent.localeCompare(b.opponent))
+    .map((arm) => {
+      const g = arm.grades;
+      return `<tr><th scope="row" title="${esc(arm.model)}">${esc(shortModel(arm.model))}</th>`
+        + `<td data-label="对手" title="${esc(arm.opponent)}">${esc(shortModel(arm.opponent))}</td>`
+        + `<td data-label="战绩">${record(arm.record)}</td>`
+        + `<td data-label="零顶班战绩"><strong>${record(arm.cleanRecord)}</strong></td>`
+        + `<td data-label="场次(净/轻/污)">${arm.matches}（${g.clean}/${g.light}/${g.spoiled}）</td></tr>`;
+    })
+    .join('');
+
+  flavorRows.innerHTML = verifiedBoard.flavor
+    .map((row) => `<tr><th scope="row" title="${esc(row.model)}">${esc(shortModel(row.model))}</th>`
+      + `<td data-label="虚报率">${pct(row.bluffRate, row.n.seenBids)}</td>`
+      + `<td data-label="其中明知">${pct(row.knowingBluffRate, row.n.seenBids)}</td>`
+      + `<td data-label="蒙报率">${pct(row.blindBidRate, row.n.bids)}</td>`
+      + `<td data-label="抬价深度">${row.avgDepth ?? '—'} · n=${row.n.rounds}</td>`
+      + `<td data-label="算盘/局">${row.calcPerRound ?? '—'} · n=${row.n.rounds}</td></tr>`)
+    .join('');
+}
+
+async function loadVerifiedBoard() {
+  if (verifiedBoard) return;
+  try {
+    const response = await fetch(VERIFIED_BOARD);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    verifiedBoard = await response.json();
+  } catch {
+    verifiedBoard = null;
+  }
+  renderVerifiedBoard();
+}
+
 function renderLocalBoard() {
   const matches = localMatches();
   $('clearLocal').disabled = matches.length === 0;
@@ -543,7 +605,9 @@ function renderReplay() {
   replayIndex = Math.min(replayIndex, matches.length - 1);
   $('replayList').innerHTML = matches.map((match, index) => {
     const winner = match.winner ? `${shortModel(modelLabel(match, match.winner))} 胜` : `未完${match.aborted ? ` · ${match.aborted}` : ''}`;
-    return `<button class="replay-item ${index === replayIndex ? 'is-active' : ''}" type="button" data-replay-index="${index}" aria-pressed="${index === replayIndex}"><span class="replay-item__meta">#${String(index + 1).padStart(2, '0')} · seed ${esc(match.seed)} · ${esc(winner)}</span><span class="replay-item__models">${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</span></button>`;
+    // 带上来源批次：榜上的数字和这里翻到的对局出自同一批，看得见才叫同源
+    const from = match.batch ? ` · ${esc(match.batch)}` : '';
+    return `<button class="replay-item ${index === replayIndex ? 'is-active' : ''}" type="button" data-replay-index="${index}" aria-pressed="${index === replayIndex}"><span class="replay-item__meta">#${String(index + 1).padStart(2, '0')} · seed ${esc(match.seed)} · ${esc(winner)}${from}</span><span class="replay-item__models">${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</span></button>`;
   }).join('');
   for (const button of $('replayList').querySelectorAll('[data-replay-index]')) {
     button.addEventListener('click', () => {
@@ -569,7 +633,7 @@ function renderReplayPane(match) {
     return `<div class="${className}"><div class="replay-event__fact">${esc(fact)}${warning ? ' · 沉默 bot 顶班，非模型输出' : ''}</div>${!warning && log?.say ? `<div class="replay-event__say">“${esc(log.say)}”</div>` : ''}${!warning && log?.belief ? `<div class="replay-event__belief">当时留档：${esc(log.belief)}</div>` : ''}</div>`;
   }).join('');
   const winner = match.winner ? `${shortModel(modelLabel(match, match.winner))} 胜` : '比赛未完成';
-  $('replayPane').innerHTML = `<header class="replay-pane__head"><h2>${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</h2><p>seed ${esc(match.seed)} · ${esc(winner)} · ${(match.events ?? []).length} 条引擎事件</p></header>${rows || '<div class="empty-state"><strong>这场没有事件</strong><span>导入文件里没有可读取的引擎流水。</span></div>'}`;
+  $('replayPane').innerHTML = `<header class="replay-pane__head"><h2>${esc(shortModel(modelLabel(match, 'A')))} vs ${esc(shortModel(modelLabel(match, 'B')))}</h2><p>seed ${esc(match.seed)} · ${esc(winner)} · ${(match.events ?? []).length} 条引擎事件${match.batch ? ` · 来自 ${esc(match.batch)}` : ''}</p></header>${rows || '<div class="empty-state"><strong>这场没有事件</strong><span>导入文件里没有可读取的引擎流水。</span></div>'}`;
 }
 
 async function loadArchive() {

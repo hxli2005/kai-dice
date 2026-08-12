@@ -1,4 +1,4 @@
-const CACHE = 'kai-shell-v4';
+const CACHE = 'kai-shell-v5';
 const SHELL = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   './docs/arena/live.html',
   './docs/arena/live.css',
   './docs/arena/live.js',
+  './docs/arena/verified-board.json',
   './docs/arena/verified-replay.json'
 ];
 

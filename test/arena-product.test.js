@@ -19,9 +19,33 @@ test('Q93：竞技场守住 BYOK、无关联声明与本桌分母口径', () => 
   assert.match(html, /返回《开！》大厅/);
   assert.doesNotMatch(html, /href="(?:replay|review)\.html/);
 
-  const ratios = [...html.matchAll(/<td data-label="(?:胜率|开牌命中|降级)">([^<]+)<\/td>/g)].map((match) => match[1]);
-  assert.equal(ratios.length, 6);
-  assert.ok(ratios.every((value) => /n=\d+/.test(value)), ratios.join('；'));
+  // 榜的数字现在由 verified-board.json 出（不再写死在 HTML 里），分母口径改在数据上验
+  const board = JSON.parse(read('docs/arena/verified-board.json'));
+  assert.equal(board.scope, '在这张桌子上');
+  for (const row of board.flavor) {
+    assert.ok(row.n.seenBids >= 0 && row.n.bids > 0 && row.n.rounds > 0, `${row.model} 缺分母`);
+    for (const key of ['bluffRate', 'knowingBluffRate', 'blindBidRate'])
+      assert.ok(row[key] == null || (row[key] >= 0 && row[key] <= 1), `${row.model}.${key} 越界`);
+  }
+  for (const arm of board.arms) {
+    assert.equal(arm.record[0] + arm.record[1], arm.matches, `${arm.model} vs ${arm.opponent} 战绩对不上场次`);
+    assert.equal(arm.grades.clean + arm.grades.light + arm.grades.spoiled, arm.matches, '三档分级要盖住全部场次');
+    assert.equal(arm.cleanRecord[0] + arm.cleanRecord[1], arm.grades.clean, '零顶班战绩只数净场');
+  }
+});
+
+test('Q93：本桌榜就是昨晚那批干净集，榜与实录同源', () => {
+  const board = JSON.parse(read('docs/arena/verified-board.json'));
+  const archive = JSON.parse(read('docs/arena/verified-replay.json'));
+  assert.equal(board.set, '干净集 v2');
+  assert.equal(board.totals.matches, archive.matches.length, '榜上的场数＝实录里的场数');
+  assert.deepEqual(board.batches, archive.batches, '榜与实录必须出自同一批跑批');
+  assert.equal(board.totals.arms, 22);
+  assert.equal(board.totals.models, 7);
+  assert.ok(board.batches.every((b) => b.startsWith('2026-08-11')), '干净集全部来自 2026-08-11');
+  // 实录里每一场都要能说清自己来自哪一批
+  const batches = new Set(board.batches);
+  for (const match of archive.matches) assert.ok(batches.has(match.batch), `${match.seed} 没有来源批次`);
 });
 
 test('Q93：发布包只带产品竞技场与裁剪后的公开实录', () => {
@@ -30,12 +54,17 @@ test('Q93：发布包只带产品竞技场与裁剪后的公开实录', () => {
   assert.match(pkg.scripts.dist, /docs\/arena\/verified-replay\.json/);
   assert.doesNotMatch(pkg.scripts.dist, /cp -R docs/);
 
+  assert.match(pkg.scripts.dist, /docs\/arena\/verified-board\.json/);
+
   const archivePath = new URL('../docs/arena/verified-replay.json', import.meta.url);
   const archive = JSON.parse(fs.readFileSync(archivePath, 'utf8'));
-  assert.equal(archive.schema, 'kai.arena.public-replay.v1');
+  assert.equal(archive.schema, 'kai.arena.public-replay.v2');
   assert.equal(archive.scope, '在这张桌子上');
-  assert.equal(archive.matches.length, 8);
-  assert.ok(fs.statSync(archivePath).size < 300_000, '公开复盘应保持轻量');
+  assert.equal(archive.matches.length, 44);
+  // 只在点「载入实录」时才取，且这类中文 JSON 压缩后约剩四分之一；
+  // 上限守的是"别把整份原始跑批（4.6MB 起）当产品发出去"。
+  assert.ok(fs.statSync(archivePath).size < 1_200_000, '公开复盘应保持裁剪后的体积');
+  assert.ok(fs.statSync(new URL('../docs/arena/verified-board.json', import.meta.url)).size < 60_000, '本桌榜要小到可随手取');
 
   const live = read('docs/arena/live.js');
   assert.match(live, /const ARCHIVE_RUN = 'verified-replay\.json'/);

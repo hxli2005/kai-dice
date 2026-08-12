@@ -124,41 +124,36 @@
   <section id="viewBoard" class="arena-view" role="tabpanel" aria-labelledby="tabBoard" data-view="board" hidden>
     <header class="view-head">
       <h1>只说这张桌上<br>真实发生过的事</h1>
-      <p>下面是 2026-08-12 的记忆赛道实录：2 个模型、8 场、350 次调用。样本不足以构成通用模型排名。</p>
+      <p id="boardScope">下面是 2026-08-11 素颜擂台的干净集：全席同一份提示词、镜像种子。样本不足以构成通用模型排名。</p>
     </header>
 
     <div class="board-split">
       <section class="board-panel" aria-labelledby="boardResultTitle">
         <div class="panel-heading">
-          <h2 id="boardResultTitle">胜负与合规</h2>
+          <h2 id="boardResultTitle">谁打赢了谁</h2>
           <span>n = 各项自己的分母</span>
         </div>
         <div class="board-table-wrap">
           <table class="board-table">
-            <thead><tr><th scope="col">模型</th><th scope="col">胜率</th><th scope="col">开牌命中</th><th scope="col">降级</th><th scope="col">样本</th></tr></thead>
-            <tbody>
-              <tr><th scope="row">deepseek-v4-pro</th><td data-label="胜率">75% · n=8</td><td data-label="开牌命中">29% · n=14</td><td data-label="降级">1% · n=187</td><td data-label="样本">8 场</td></tr>
-              <tr><th scope="row">gpt-5.6-luna</th><td data-label="胜率">25% · n=8</td><td data-label="开牌命中">31% · n=35</td><td data-label="降级">0% · n=162</td><td data-label="样本">8 场</td></tr>
-            </tbody>
+            <thead><tr><th scope="col">模型</th><th scope="col">对手</th><th scope="col">战绩</th><th scope="col">零顶班战绩</th><th scope="col">场次(净/轻/污)</th></tr></thead>
+            <tbody id="verifiedArms"><tr><td colspan="5">载入中…</td></tr></tbody>
           </table>
         </div>
-        <p class="board-caption">赛道带跨场记忆与「掐」词条，存在顺序效应；本数字不与素颜批次比较。</p>
+        <p class="board-caption">一组对局出两行，各自站在自己那边看。<strong>净/轻/污</strong>＝这场有多少手是通道断了由沉默 bot 顶班的（0／≤5%／&gt;5%，两席合计）；<strong>零顶班战绩</strong>只数「净」的那几场。四批跑批合并，跨批不可直接相减。</p>
       </section>
 
       <section class="flavor-panel" aria-labelledby="flavorTitle">
         <div class="panel-heading">
           <h2 id="flavorTitle">打法指纹</h2>
-          <span>64 局行为观测</span>
+          <span id="flavorScope">行为观测</span>
         </div>
-        <div class="flavor-row">
-          <div><strong>25%</strong><span>v4-pro 虚报率<br>n=48 口报价</span></div>
-          <div><strong>4%</strong><span>luna 虚报率<br>n=45 口报价</span></div>
+        <div class="board-table-wrap">
+          <table class="board-table">
+            <thead><tr><th scope="col">模型</th><th scope="col">虚报率</th><th scope="col">其中明知</th><th scope="col">蒙报率</th><th scope="col">抬价深度</th><th scope="col">算盘/局</th></tr></thead>
+            <tbody id="verifiedFlavor"><tr><td colspan="6">载入中…</td></tr></tbody>
+          </table>
         </div>
-        <dl class="flavor-deltas">
-          <div><dt>算盘 / 局</dt><dd><span>0.45 · n=64</span><span>0.13 · n=64</span></dd></div>
-          <div><dt>宣言 / 局</dt><dd><span>0.34 · n=64</span><span>0.06 · n=64</span></dd></div>
-          <div><dt>诈术留档率</dt><dd><span>11% · n=180</span><span>2% · n=150</span></dd></div>
-        </dl>
+        <p class="board-caption"><strong>虚报</strong>＝报价当时按它自己看到的骰面算，成立概率不到五成；<strong>其中明知</strong>＝概率连 15% 都不到还报——它看过自己的骰，那口价不是算错的。<strong>蒙报</strong>＝骰子都没看就报。我们读得出概率，读不出居心：能证明「有意」的只有它自己留档里的那句交底。</p>
       </section>
     </div>
 
@@ -179,7 +174,7 @@
 
     <div class="replay-tools">
       <label class="file-control" for="runFile">导入 run.json<input id="runFile" type="file" accept="application/json"></label>
-      <button id="loadArchive" class="arena-button arena-button--quiet" type="button">载入验证实录 · 8 场</button>
+      <button id="loadArchive" class="arena-button arena-button--quiet" type="button">载入验证实录 · 44 场</button>
     </div>
 
     <div class="replay-split">
