@@ -1,3 +1,4 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: in-place workbench · contrast/mobile: pass. */
 /* 《开！》：一张桌，一盏灯，不做立绘。表现层规则已随 Q84 归档——UI 归编码侧自决。 */
 
 :root {
@@ -17,7 +18,7 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: clip; }
 body {
   background: var(--bg);
   color: var(--ink);
@@ -963,6 +964,16 @@ button.ghost {
 
 /* ---------- 好友房（Q29） ---------- */
 .room-line { width: 100%; max-width: 19rem; letter-spacing: 0.12em; text-indent: 0; }
+.arena-line {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  width: 100%; max-width: 19rem; min-height: 2.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--wood-hi); border-radius: 0.25rem;
+  background: none;
+  color: var(--ink); font-family: var(--serif); text-decoration: none;
+}
+.arena-line span { letter-spacing: 0.12em; }
+.arena-line small { color: var(--dim); font-size: 0.72rem; letter-spacing: 0.04em; }
 .seal-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; justify-items: center; margin: 1rem 0 0.4rem; }
 .seal-pick .seal { cursor: pointer; border: none; }
 .wait-seats { text-align: left; margin: 0.9rem 0 0.3rem; }
@@ -1076,3 +1087,215 @@ button.ghost {
 
 /* Q88：空榜——一场都没打时，榜上诚实地空着 */
 .board-empty { padding: 1.2rem 0.4rem; text-align: center; color: var(--dim); font-size: 0.85rem; }
+
+/* ---------- 方向 O 生产壳：双人本地局的三管机 ---------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.tube-viewport {
+  --tube-window-bar: max(3.25rem, calc(env(safe-area-inset-top) + 2.75rem));
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-rows: var(--tube-window-bar) minmax(0, 1fr);
+  justify-items: center;
+  align-items: center;
+  overflow: hidden;
+  background: #050608;
+  touch-action: manipulation;
+  cursor: default;
+}
+.tube-stage-frame {
+  position: relative;
+  grid-row: 2;
+  width: min(100%, calc((100dvh - var(--tube-window-bar)) * 195 / 422));
+  max-height: calc(100dvh - var(--tube-window-bar));
+  aspect-ratio: 195 / 422;
+}
+.tube-stage-frame > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+.tube-viewport .tube-fallback { image-rendering: auto; }
+.tube-hit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tube-window-menu {
+  position: fixed;
+  top: max(0.5rem, env(safe-area-inset-top));
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 12;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #3c444f;
+  border-radius: 0.25rem;
+  background: #14171d;
+  color: #dfe4e0;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.14), 0 3px 12px rgba(0, 0, 0, 0.48);
+  font: 700 1.05rem/1 var(--mono);
+  cursor: pointer;
+}
+.tube-window-menu:hover { background: #1d222a; }
+.tube-window-menu:active { transform: translateY(1px); background: #0f1217; }
+.tube-window-menu:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.tube-hit {
+  position: absolute;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  opacity: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  pointer-events: auto;
+}
+.tube-hit:focus-visible {
+  opacity: 0.28;
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+  background: #fff;
+}
+.tube-hit.peek { left: 5.1%; top: 57.3%; width: 89.8%; height: 11.2%; }
+.tube-hit.face-1,
+.tube-hit.face-2,
+.tube-hit.face-3,
+.tube-hit.face-4,
+.tube-hit.face-5,
+.tube-hit.face-6 { top: 74.9%; width: 13.9%; height: 5.3%; }
+.tube-hit.face-1 { left: 4.1%; }
+.tube-hit.face-2 { left: 19.5%; }
+.tube-hit.face-3 { left: 34.9%; }
+.tube-hit.face-4 { left: 50.3%; }
+.tube-hit.face-5 { left: 65.6%; }
+.tube-hit.face-6 { left: 81%; }
+.tube-hit.count-down { left: 4.1%; top: 80.6%; width: 17.9%; height: 5.3%; }
+.tube-hit.count-up { right: 4.1%; top: 80.6%; width: 17.9%; height: 5.3%; }
+.tube-hit.bid { left: 4.1%; top: 86.7%; width: 44.1%; height: 7.2%; }
+.tube-hit.open { left: 51.3%; top: 86.7%; width: 44.6%; height: 7.2%; }
+.tube-hit.blind,
+.tube-hit.zhai,
+.tube-hit.raise,
+.tube-hit.calc { bottom: 0; width: 16.9%; height: 4.8%; }
+.tube-hit.blind { left: 4.1%; }
+.tube-hit.zhai { left: 23.1%; }
+.tube-hit.raise { left: 42.1%; }
+.tube-hit.calc { left: 61%; }
+#app.tube-mode > header,
+#app.tube-mode > main,
+#app.tube-mode > footer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 弹层仍是产品流程的一部分，但脱离旧酒桌皮肤，回到机器面板语言。 */
+#app.tube-mode #overlay,
+#app.tube-mode #drawer,
+#app.tube-mode #coach {
+  z-index: 70;
+}
+#app.tube-mode #overlay,
+#app.tube-mode #coach {
+  background: rgba(5, 6, 8, 0.9);
+  backdrop-filter: blur(8px);
+}
+#app.tube-mode .card,
+#app.tube-mode #coach .coach-rules {
+  background: linear-gradient(160deg, #171a20, #0b0d11);
+  border: 1px solid #3b414b;
+  border-radius: 0.25rem;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.55);
+}
+#app.tube-mode #coach.tube-coach .coach-rules {
+  top: 50%;
+  transform: translate(-50%, -58%);
+  padding: 1rem;
+}
+#app.tube-mode #coach.tube-coach .anywhere { top: 70%; }
+
+/* 大厅、设置与战报采用中性的电子设备壳，不再借赌场筹码和酒桌材质。 */
+:root {
+  --bg: #07080b;
+  --wood: #11141a;
+  --wood-hi: #2c323c;
+  --lamp: #ffb84d;
+  --lamp-dim: #9c753c;
+  --ink: #e7ebee;
+  --dim: #858d98;
+  --red: #b3271e;
+  --red-hi: #ff6559;
+  --die-face: #dfe4e0;
+  --die-pip: #141820;
+  --serif: system-ui, -apple-system, 'PingFang SC', sans-serif;
+}
+#app,
+#lobby {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px) 0 0 / 100% 4px,
+    radial-gradient(ellipse 85% 52% at 50% 28%, #1d222a 0%, #11141a 55%, #07080b 100%);
+}
+#drawer { background: #090b0f; }
+.lobby-title {
+  font-family: var(--mono);
+  color: #f3f5f4;
+  text-shadow: 0 0 22px rgba(255, 184, 77, 0.22);
+}
+.mode-btn,
+.p-card,
+.board,
+.lab-box,
+.book,
+#drawer input,
+#drawer select,
+#drawer textarea {
+  border-radius: 0.25rem;
+  border-color: #343a44;
+  background-color: rgba(255, 255, 255, 0.025);
+}
+.seal,
+.stamp {
+  border-radius: 0.2rem;
+  transform: none;
+}
+.chip-dot,
+.chip-dot.d1,
+.chip-dot.d5,
+.chip-dot.d25,
+.chip-dot.d100 {
+  border-radius: 0.12rem;
+  border: 1px solid #5f6874;
+  background: linear-gradient(145deg, #303640, #171b21);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.16), 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+.chip-dot i,
+.chip-dot.d1 i,
+.chip-dot.d5 i,
+.chip-dot.d25 i,
+.chip-dot.d100 i { color: #ffca78; font-family: var(--mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -20,6 +20,7 @@ import { smokeMods } from '../mods/smoke.js';
 import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByRoundOf, reviewTracks } from './report.js';
 import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
+import { createTubeStage, toTubeView } from './tubes.js';
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
 
@@ -46,6 +47,7 @@ const backHtml = (cls = '') => `<span class="die back ${cls}"></span>`;
 
 let profile = loadProfile();
 let match, opponent, myDiceByRound, sel, busy, turnStart, idleTimer;
+let tubeStage;
 // 离桌守卫：atTable 拦新回合，matchGen 作废在途异步（旧局的 LLM 决策不许落到新局上）
 let atTable = false;
 let matchGen = 0;
@@ -207,6 +209,7 @@ function bubbleEl(seat) {
 }
 function speak(text, seat = 'B') {
   if (!text) return;
+  tubeStage?.say(text, seat);
   const b = bubbleEl(seat);
   b.classList.remove('hidden', 'silent');
   clearInterval(typeTimers[seat]);
@@ -371,6 +374,30 @@ function ensureSel(o) {
   if (!bids.length) return null;
   if (!bids.some((b) => b.count === sel?.count && b.face === sel?.face)) sel = { ...bids[0] };
   return bids;
+}
+
+function syncTubeHitLayer(view) {
+  const set = (id, enabled, label = null) => {
+    const button = $(id);
+    if (!button) return;
+    button.disabled = !enabled;
+    if (label) button.setAttribute('aria-label', label);
+  };
+  set('tubeMenuBtn', true);
+  set('tubePeekBtn', !view.busy && view.legal.peek);
+  for (let face = 1; face <= 6; face++) {
+    const button = $(`tubeFace${face}Btn`);
+    set(`tubeFace${face}Btn`, view.myTurn && view.legal.faces.includes(face));
+    button?.setAttribute('aria-pressed', String(view.selectedBid?.face === face));
+  }
+  set('tubeCountDownBtn', view.myTurn && view.legal.countDown);
+  set('tubeCountUpBtn', view.myTurn && view.legal.countUp);
+  set('tubeBidBtn', view.myTurn && view.legal.bid, view.selectedBid ? `报 ${view.selectedBid.count} 个 ${view.selectedBid.face}` : '报数');
+  set('tubeOpenBtn', view.myTurn && view.legal.open);
+  set('tubeBlindBtn', view.myTurn && view.legal.blind);
+  set('tubeZhaiBtn', view.myTurn && view.legal.zhai);
+  set('tubeRaiseBtn', view.myTurn && view.legal.raise);
+  set('tubeCalcBtn', view.myTurn && view.legal.calc);
 }
 
 // 三人对手条：DOM 每场建一次（气泡与打字机不被 render 摧毁），render 只刷数据
@@ -592,6 +619,25 @@ function render() {
     dot.className = 'brain ' + (last ? (last.silentFallback ? 'off' : 'on') : 'idle');
   }
 
+  if (tubeStage?.isActive()) {
+    const last = opponent?.logs.findLast((l) => !l.auto);
+    const connected = !chanForPersona(SEAT_PERSONA.B) ? null : last ? !last.silentFallback : null;
+    const canCalza = o.legal.some((l) => modMetaOf(o, l.type)?.ops.includes('calzaResolve'));
+    const privateCalc = o.calced?.A && o.currentBid
+      ? `${pct(obProb(o, o.currentBid))}${canCalza ? ` · 恰好 ${pct(obProbExact(o, o.currentBid))}` : ''}`
+      : '';
+    const tubeView = toTubeView(o, {
+      opponentName: NAMES.B,
+      selectedBid: sel,
+      busy,
+      privateCalc,
+      connected,
+      sandbox,
+    });
+    tubeStage.update(tubeView);
+    syncTubeHitLayer(tubeView);
+  }
+
   syncBottomBand();
   checkVerbHitboxes(); // G1 的规矩：核心动词被盖住就当场喊
 }
@@ -672,11 +718,38 @@ async function onBid() {
   driveTurn();
 }
 
+function stepTubeCount(direction) {
+  const o = ob();
+  const bids = ensureSel(o);
+  if (!bids || !sel) return;
+  const counts = [...new Set(bids.map((b) => b.count))];
+  const index = counts.indexOf(sel.count);
+  sel.count = counts[Math.max(0, Math.min(counts.length - 1, index + direction))];
+  const faces = bids.filter((b) => b.count === sel.count).map((b) => b.face);
+  if (!faces.includes(sel.face)) sel.face = faces[0];
+  render();
+}
+
+function setTubeFace(face) {
+  const o = ob();
+  const bids = ensureSel(o);
+  if (!bids || !sel) return;
+  const faces = bids.filter((b) => b.count === sel.count).map((b) => b.face);
+  if (!faces.includes(face)) return;
+  sel.face = face;
+  render();
+}
+
 // ---------- G1 立的规矩：新增交互必须过"旧动词可点性"检查 ----------
 // 教训（26 局压测）：「戳」上桌那天，算盘按钮就点不着了——新交互没抢走屏幕，
 // 抢走的是**点击**。所以这条规矩不写在文档里写成代码：核心动词的中心点必须
 // hit-test 回它自己，谁盖住了就当场在控制台喊，实机试玩时躲不掉。
 const CORE_VERBS = ['calcBtn', 'bidBtn', 'openBtn', 'blindBtn', 'zhaiBtn', 'raiseBtn', 'cntUp', 'cntDown'];
+const TUBE_CORE_VERBS = [
+  'tubeMenuBtn',
+  'tubeCalcBtn', 'tubeBidBtn', 'tubeOpenBtn', 'tubeBlindBtn',
+  'tubeZhaiBtn', 'tubeRaiseBtn', 'tubeCountUpBtn', 'tubeCountDownBtn',
+];
 // 大厅／抽屉／弹层本来就该盖住牌桌——那不是误触，是遮罩。会误报的规矩没人看，所以先让开。
 // 大厅／抽屉／弹层／新手指引本来就该盖住牌桌——那不是误触，是遮罩。
 // 会误报的规矩没人看，所以先让开。
@@ -686,7 +759,10 @@ const overlayUp = () =>
 export function hitTestVerbs() {
   if (overlayUp()) return [];
   const bad = [];
-  for (const id of CORE_VERBS) {
+  // 三管机有自己独立的透明操作层；旧牌桌按钮此时被画布覆盖是预期结构，
+  // 可点性回归应检查真正接收输入的那一层，避免把正常分层误报成遮挡。
+  const coreVerbs = tubeStage?.isActive() ? TUBE_CORE_VERBS : CORE_VERBS;
+  for (const id of coreVerbs) {
     const el = $(id);
     if (!el || el.disabled || el.offsetParent === null) continue; // 不在场/禁用的不算
     const r = el.getBoundingClientRect();
@@ -838,6 +914,7 @@ async function aiTurnFor(seat) {
   const o = match.observe(seat);
   if (o.over || o.turn !== seat) return;
   busy = true;
+  if (seat === 'B') tubeStage?.setThinking(true);
   render();
   const t0 = performance.now();
   const ai = opponents[seat];
@@ -854,6 +931,7 @@ async function aiTurnFor(seat) {
       error: e?.message ?? 'decide-crash',
     };
   }
+  if (seat === 'B') tubeStage?.setThinking(false);
   if (gen !== matchGen) return; // 已离桌/换场：在途决策作废
   if (d.observedStateId && d.observedStateId !== stateIdOf(match.observe(seat), { dialogue: dialogueFeed[seat] })) {
     markStaleLog(ai, d); // 幻影记忆防线：这手被丢弃重决，引擎没接受过——真迹保留，回灌排除
@@ -928,6 +1006,7 @@ async function aiTurnFor(seat) {
 // doShowdown 是本地局的完整流程（act→演出→反思→报告/下一局）。
 async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '', actionType = 'challenge' } = {}) {
   busy = true;
+  render(); // 先锁可访问操作层；演出中点击交给画布加速，不得重复落引擎动作
   disarmIdle();
   muteBubble();
   pickPending = null;
@@ -965,6 +1044,16 @@ async function doShowdown(by, { elapsedMs = null, timeout = false, sayText = '',
 
 async function presentShowdown(rv, re, by, sayText = '') {
   busy = true;
+  if (tubeStage?.isActive()) {
+    await tubeStage.showShowdown({
+      rv,
+      re,
+      by,
+      sayText,
+      names: Object.fromEntries(seats.map((seat) => [seat, dispName(seat)])),
+    });
+    return;
+  }
   const calza = !!rv.calza;
   const isMatch = (f) => f === rv.bid.face || (!rv.zhai && f === 1);
   sfx.slam();
@@ -1019,8 +1108,8 @@ async function presentShowdown(rv, re, by, sayText = '') {
       ? `${dispName(re.caller)}掐中——赢回一颗骰，收池`
       : `${dispName(re.caller)}掐空，掉一颗骰`
     : `${dispName(re.loser)}输了这局，掉一颗骰`;
+  sfx.verdict();
   if (calza && rv.exact) sfx.jackpot();
-  else sfx.loseDie();
   if (sayText) speak(sayText, by !== 'A' ? by : 'B'); // 只有角色自己的话才上屏
   await wsleep(600);
   const myDelta = re.transfers?.A ?? 0;
@@ -1032,6 +1121,7 @@ async function presentShowdown(rv, re, by, sayText = '') {
 function finishShowdown(re) {
   const ov = $('overlay');
   ov.classList.add('hidden');
+  tubeStage?.clearShowdown();
   sfx.shake();
   busy = false;
   sel = null; // 新局重置报价选择
@@ -1131,7 +1221,7 @@ async function showReport(end) {
   ov.classList.remove('hidden');
   const renderCard = (verdict) => {
     ov.innerHTML = `<div class="card fade-in">
-      <h2>${sandbox ? '实验桌 · 沙盒对局' : `酒桌档案 · 第 ${profile.matches + 1} 场`}</h2>
+      <h2>${sandbox ? '实验桌 · 沙盒对局' : `对局档案 · 第 ${profile.matches + 1} 场`}</h2>
       <div class="persona">${persona(stats)}</div>
       <dl>
         ${sandbox ? `<dt>词条</dt><dd>${labMods.map((m) => `「${m.name}」`).join('')}</dd>` : ''}
@@ -1394,7 +1484,7 @@ function openDrawer(section, inLobby = false) {
       <li>第 6 手报价起进深水：池自动再 ×2。倍率全部相乘。</li>
       <li><b>算盘</b>：桌面平时不显示概率。轮到你时可拨一次算盘（本局限一次）——算出来的准数只有你看得见，但"你在算"全桌都看得见。他们也守同一条规矩。</li>
       <li><b>小本子</b>：一场打完可以翻开看他当时怎么想的（说的一套、想的一套都在）。**翻本子是公开的**——他知道你研究过他，下回可能拿这个开你玩笑（不想让他知道，设置里可以关）。</li>
-      <li>白1 · 红5 · 绿25 · 黑100。不限时——但你手停多久，他们都记着。</li>
+      <li>额度片按 1／5／25／100 合并显示。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
     <h2 id="secWho">对面是谁</h2>
@@ -1654,6 +1744,8 @@ function toastFx(text) {
 }
 
 function enterRoom({ roomId, hostKey = null }) {
+  tubeStage?.setActive(false);
+  tubeStage?.setThinking(false);
   atTable = true;
   matchGen++;
   muteBubble();
@@ -2010,7 +2102,7 @@ function openWishPanel() {
     <p>想要一条这桌上没有的新规矩？用一句大白话写下来。接下来都是自动的：AI 把它翻成一张规则卡，先念给你听——你点头，桌子就自己试打两百场（看会不会卡死、会不会算错账）——全过了，这张卡就挂到下面的架子上，勾上就能开打。</p>
     <p>桌子会的动作有限，办不到的愿望会退回来，并告诉你差在哪。</p>
     <label>你的愿望（草稿只存在这台设备上）</label>
-    <textarea id="wishText" rows="3" placeholder="例：每场一次，看过骰后我可以把赌注翻倍，并亮出自己一颗骰">${localStorage.getItem('kai.wishdraft.v1') ?? ''}</textarea>
+    <textarea id="wishText" rows="3" placeholder="例：每场一次，看过骰后我可以把池倍率翻倍，并亮出自己一颗骰">${localStorage.getItem('kai.wishdraft.v1') ?? ''}</textarea>
     <div class="btnrow"><button class="primary" id="compileBtn" ${chan ? '' : 'disabled'}>许愿</button></div>
     ${chan ? '' : '<p class="test-line bad">许愿要先连上 AI：在「设置」里填暗号，或在大厅「客席」卡填自带钥匙</p>'}
     <div id="wishOut"></div>
@@ -2122,6 +2214,8 @@ async function runExam(mod, out) {
 
 // ---------- 选桌（开局前：先模式后对手；机位表数据驱动，机位只增不改代码） ----------
 function showLobby() {
+  tubeStage?.setActive(false);
+  tubeStage?.setThinking(false);
   const lb = $('lobby');
   const led = loadLedger();
   let mode = loadTable();
@@ -2214,6 +2308,7 @@ function showLobby() {
       })()}
       <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>${loadLab().on && pickedMods().length ? '开实验局' : '开局'}</button>
       <button class="mode-btn room-line" id="roomBtn">好友房 · 邀朋友同桌</button>
+      <a class="arena-line" href="docs/arena/live.html"><span>模型竞技场</span><small>双模型自战 · BYOK</small></a>
       <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
     lb.querySelectorAll('.mode-btn').forEach((el) =>
       el.addEventListener('click', () => {
@@ -2342,6 +2437,9 @@ async function newMatch() {
   sandbox = labMods.length > 0;
   const lineup = loadLineup(loadTable());
   seats = ['A', ...lineup.map((_, i) => SEAT_IDS[i])];
+  tubeStage?.clearShowdown();
+  tubeStage?.setThinking(false);
+  tubeStage?.setActive(!isTrio());
   SEAT_PERSONA = {};
   NAMES = { A: '客人' };
   const startChips = { A: ledger.you };
@@ -2432,6 +2530,24 @@ function speakOpener(ledger) {
 function showCoach() {
   if (localStorage.getItem('kai.coach.v1') || profile.matches > 0) return;
   disarmIdle();
+  if (tubeStage?.isActive()) {
+    const c = document.createElement('div');
+    c.id = 'coach';
+    c.className = 'tube-coach';
+    c.innerHTML = `<div class="coach-rules">
+      <p>触摸下管骰仓看自己的骰子；用 −／＋ 改数量，点中间换点数，再拍「报」。</p>
+      <p>觉得他吹牛，拍红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
+      <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。想要准数就拍「算」：结果只有你看见，但全桌知道你算过。</p>
+    </div><div class="anywhere">点任意处，上桌</div>`;
+    $('app').appendChild(c);
+    c.addEventListener('click', () => {
+      localStorage.setItem('kai.coach.v1', '1');
+      c.remove();
+      const o = ob();
+      if (o.turn === 'A' && !o.over && !busy) armIdle();
+    });
+    return;
+  }
   // 标注分道：sxF/exF 指定箭头在文字条与目标上的锚点位，各占横向通道不相交
   const marks = [
     [['myDice'], '① 点骰盅，偷看自己的骰子', 0.30, 0.24, 0.55, 0.5],
@@ -2495,6 +2611,42 @@ $('raiseBtn').addEventListener('click', () => onDeclare('raise'));
 $('cntDown').addEventListener('click', () => { sel.count--; render(); });
 $('cntUp').addEventListener('click', () => { sel.count++; render(); });
 $('menuBtn').addEventListener('click', () => openDrawer());
+
+tubeStage = createTubeStage($('tubeStage'), {
+  sfx,
+  menu: () => openDrawer(),
+  peek: onPeek,
+  count: stepTubeCount,
+  face: setTubeFace,
+  bid: onBid,
+  open: () => doShowdown('A'),
+  calc: onCalc,
+  declare: onDeclare,
+  poke: doPoke,
+  mod: (type) => {
+    const meta = modMetaOf(ob(), type);
+    if (meta) onModButton(meta);
+  },
+});
+
+for (const button of document.querySelectorAll('.tube-hit'))
+  button.addEventListener('pointerdown', (event) => event.stopPropagation());
+for (const [id, action] of [
+  ['tubeMenuBtn', () => openDrawer()],
+  ['tubePeekBtn', onPeek],
+  ['tubeCountDownBtn', () => stepTubeCount(-1)],
+  ...Array.from({ length: 6 }, (_, i) => [`tubeFace${i + 1}Btn`, () => setTubeFace(i + 1)]),
+  ['tubeCountUpBtn', () => stepTubeCount(1)],
+  ['tubeBidBtn', onBid],
+  ['tubeOpenBtn', () => doShowdown('A')],
+  ['tubeBlindBtn', () => onDeclare('blind')],
+  ['tubeZhaiBtn', () => onDeclare('zhai')],
+  ['tubeRaiseBtn', () => onDeclare('raise')],
+  ['tubeCalcBtn', onCalc],
+]) $(id).addEventListener('click', action);
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:')
+  navigator.serviceWorker.register('./sw.js').catch((error) => console.info('[离线外壳] 注册失败：', error.message));
 
 // 启动：好友房邀请链接直入（#room=xxx），否则进大厅
 promoteHostedOnce(); // 托管席升主位的一次性迁移（老设备的机位选择）

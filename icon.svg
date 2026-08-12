@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#101216"/>
+  <rect x="76" y="68" width="360" height="112" rx="28" fill="#020b06" stroke="#37d987" stroke-width="10"/>
+  <rect x="76" y="200" width="360" height="112" rx="28" fill="#07090c" stroke="#c8dbe6" stroke-width="10"/>
+  <rect x="76" y="332" width="360" height="112" rx="28" fill="#100a02" stroke="#ffb84d" stroke-width="10"/>
+  <path d="M112 126c38-50 66 50 104 0s66 50 104 0 52 32 76 0" fill="none" stroke="#c8ffdf" stroke-width="10"/>
+  <path d="M150 255h212" stroke="#fff" stroke-width="14"/>
+  <text x="256" y="420" text-anchor="middle" font-family="system-ui,sans-serif" font-size="66" font-weight="800" fill="#ffedc9">开！</text>
+</svg>

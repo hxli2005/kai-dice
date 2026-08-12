@@ -1,0 +1,18 @@
+{
+  "name": "开！",
+  "short_name": "开！",
+  "description": "一个记得你打法的 AI 对手。",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050608",
+  "theme_color": "#050608",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
