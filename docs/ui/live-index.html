@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>《开！》活体样机总览</title>
+<style>
+:root{--bg:#0e0f11;--panel:#17191d;--line:#26292d;--txt:#e8e6e0;--dim:#8a8d93}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,'PingFang SC',system-ui,sans-serif;padding:48px 24px;line-height:1.7}
+.wrap{max-width:680px;margin:0 auto}
+h1{font-size:24px;font-weight:800;letter-spacing:.04em}
+p.sub{color:var(--dim);font-size:13px;margin-top:8px}
+a.card{display:block;margin-top:18px;padding:18px 20px;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--txt);text-decoration:none;transition:border-color .15s}
+a.card:hover{border-color:#4a4f56}
+a.card b{font-size:17px}
+a.card u{text-decoration:none;color:var(--dim);font-size:12.5px;display:block;margin-top:4px}
+a.card i{font-style:normal;font-size:11px;color:#6a6f76;display:block;margin-top:6px;font-family:ui-monospace,Menlo,monospace}
+.note{margin-top:26px;font-size:12px;color:var(--dim);border-left:2px solid var(--line);padding-left:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>《开！》活体样机总览</h1>
+  <p class="sub">同一副骨架（公平对弈五条：镜像对称／中轴归裁判／两种声部／公开动作对等响／红只给开），四个材质世界。
+  全部可交互：按「开」走 A 线（你开它，你输）；按「报 5个5」走 B 线（引信进深水，它反手开你，你赢）。点一下屏幕解锁声音。</p>
+
+  <a class="card" href="direction-e-live.html"><b>E · 素桌</b><u>不穿皮肤的基准版——暖炭底、聚光呼吸、朱砂开。其余三台都长在它身上。</u><i>WebGL 光场 · 粒子 · 3D 骰 · 合成音</i></a>
+  <a class="card" href="direction-f-ink.html"><b>F · 墨</b><u>浓墨与朱印：报价是写出来的，开牌劈一道墨痕，判定盖一方洇边大印。</u><i>SVG 湍流置换（洇边）· 墨滴溅痕 · 白纸冲击帧 · 太鼓底噪</i></a>
+  <a class="card" href="direction-g-gaze.html"><b>G · 瞳</b><u>它不再是名牌，是屏幕上半那只看你的眼睛——瞳孔跟手指、思考收竖缝、判定时充血。</u><i>程序化虹膜（片元着色器）· 眨眼 · 瞳孔追指 · 低频嗡鸣</i></a>
+  <a class="card" href="direction-h-forge.html"><b>H · 烙</b><u>熔炉：池是坩埚的光，引信真在烧，判定白热落下、冷却成暗红、青烟散去。</u><i>热浪扭曲 · 常燃火星 · 烙印冷却 · 铁砧锵音</i></a>
+
+  <p class="sub" style="margin-top:34px"><b>第二批 · 界面结构也换掉</b>（E–H 共用镜像纵排；以下三台连布局都不同）：</p>
+  <a class="card" href="direction-i-table.html"><b>I · 圆桌</b><u>俯视 3D 实体桌：它的骰扣在盅下坐对面，池是桌心一堆真代币（结算滑向赢家），「成立」章带透视拍在桌面上。</u><i>CSS 3D 透视场景 · 揭盅飞盖 · 桌面盖章 · 镜头推拉</i></a>
+  <a class="card" href="direction-j-stream.html"><b>J · 长流</b><u>对局是一条对话流：它的报价与台词是左气泡、你的动作是右气泡、引擎事实居中盖章、开牌是插进流里的摊牌卡——历史即界面，打多少局都在。</u><i>消息弹入弹簧 · 打字指示 · 钉顶裁判栏 · 流内摊牌卡</i></a>
+  <a class="card" href="direction-k-dial.html"><b>K · 罗盘</b><u>整个界面是一台圆形仪器：阶梯是 240° 刻度弧（深水红弧），报数=棘轮进档，开牌=表盘急旋、指针逐个点清、验封环画绿。</u><i>SVG 弧规 · 指针弹簧 · 骰子环盘 · 验封环</i></a>
+
+  <p class="sub" style="margin-top:34px"><b>第三批 · 全画布重来</b>（用户否前七台＋落盘工艺规范 CRAFT.md 后从零起：零 DOM 控件，一整块低分辨率 canvas 最近邻放大，连字都是像素）：</p>
+  <a class="card" href="direction-l-pixel.html"><b>L · 数据面</b><u>赛博数据流×像素：透视网格地面、字符雨、它是一颗会充血的数据核、它的骰是逐块解密的加密块；预备拍→白闪 glitch 撕裂→hit-stop→点清爬音→判定重锤，8-bit 合成音全程变调。工艺规范 v1 逐条实装（注释带 §号）。</u><i>195×422 像素帧缓冲 · 全 canvas 渲染 · 画出来的像素按钮（会顶手）· glitch 行位移 · hit-stop 时钟冻结</i></a>
+  <a class="card" href="direction-o-tubes.html" style="border-color:#3fae6a"><b>O · 三管机 ✅ 定稿（2026-08-12，施工交接单见 HANDOFF-O.md）</b><u>推倒重造版：铁律「光的世界单色荧光，物的世界才有红」。三只同尺寸显像管垂直对称（绿磷=它/白磷=裁判/琥珀磷=你），每管带荧光余辉拖尾；「它」=一道示波心跳（说话起纹、思考变密、开牌拉直线、下局复活）；判定=反白视频条+机壳红LED（无印章）；阶梯=实体LED灯条；追注=两枚注沿电路走线爬进池、到账才+1；枕形玻璃口+未点亮暗带+弯缘折射光。</u><i>三余辉缓冲 · 单色磷光纪律 · 示波心跳 · 反白判定 · 走线数据包</i></a>
+  <a class="card" href="direction-n-console.html"><b>N · 机柜 ★</b><u>M 的分块版：一块机壳面板、七个独立模块窗——它窗（虚空+数据兽+加密块仓）/通信带/裁判窗/阶梯条/池计数器（带深水 LED 实体灯）/手牌托盘/操作键区（凸起实体键）。开机逐块点亮，每窗独立扫描线相位与偶发闪烁；结算后仪表窗断电熄灭。</u><i>模块凹槽窗 · 逐块通电 · 跨模块数据流 · 外层 CRT 玻璃同 M</i></a>
+  <a class="card" href="direction-m-phosphor.html"><b>M · 辉光 ★</b><u>L 的惊艳版：同一块像素帧缓冲，从一枚 CRT 玻璃着色器里射出来——桶形畸变、色差、泛光、荧光栅、开机通电；「它」升格为会旋转的线框数据兽，开牌当场炸成碎片；网格上跑能量脉冲，判定白热落下冷却成红。经 21-agent 对抗审查修毕 13 项（含 fp16 P0）。</u><i>双级渲染（2D→WebGL 后处理）· 程序化数据兽 · 上下文丢失自愈 · 120Hz 帧率归一 · 畸变补偿命中区</i></a>
+
+  <p class="note">静态稿存档：三方向旧稿 directions.html（A/B/C，已否）· 素桌静态 v2 direction-e.html。
+  数据全部与 screens.js 同源。合规自查：无轮盘/老虎机/扑克花色/赌场字样（§5.5）；「AI 生成」标识常驻（§3）。</p>
+</div>
+</body>
+</html>

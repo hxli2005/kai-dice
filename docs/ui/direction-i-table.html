@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>《开！》方向 I · 圆桌（俯视 3D 实体桌，章拍在桌面上）</title>
+<style>
+:root{
+  --txt:#eae6dc; --dim:#9a9384; --faint:#5f594c;
+  --red:#d4402c; --hot:#ff8a5c; --green:#43b573; --it:#6fb7c9;
+  --ivory:#f4efe3;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#060505;overflow:hidden;font-family:var(--sys);user-select:none}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;width:390px;height:844px;overflow:hidden;color:var(--txt);border-radius:8px;background:radial-gradient(120% 70% at 50% 42%,#191512,#0b0a08 62%,#050505)}
+#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+
+/* ── 3D 世界 ── */
+.world{position:absolute;inset:0;perspective:980px;perspective-origin:50% 34%;z-index:1;transition:perspective-origin .8s}
+.stage.lean .world{perspective-origin:50% 26%}
+.tableWrap{position:absolute;left:50%;top:51%;width:600px;height:600px;margin:-300px 0 0 -300px;transform-style:preserve-3d;transform:rotateX(56deg);animation:sway 11s ease-in-out infinite alternate}
+@keyframes sway{from{transform:rotateX(56deg) rotateZ(-.5deg)}to{transform:rotateX(56deg) rotateZ(.5deg)}}
+.tableTop{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,#27231c,#161310 55%,#0d0c0a 78%);
+  border:12px solid #1c1813;box-shadow:inset 0 0 90px rgba(0,0,0,.75),0 30px 80px rgba(0,0,0,.7)}
+.tableTop::after{content:'';position:absolute;inset:36px;border-radius:50%;border:1px dashed rgba(234,230,220,.07)}
+.onT{position:absolute;transform-style:preserve-3d}
+
+/* 桌上的骰子（贴桌面） */
+.tdie{width:54px;height:54px;border-radius:10px;background:var(--ivory);border:1px solid #cfc8b6;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:8px;box-shadow:0 3px 0 #b8b09c,0 10px 18px rgba(0,0,0,.5);position:relative}
+.tdie i{border-radius:50%;background:#26221b;place-self:center;width:9px;height:9px;visibility:hidden}
+.tdie.r i{background:#c23a2b}
+.tdie .fly{position:absolute;right:3px;top:1px;font-size:10px;color:#c23a2b;font-weight:600}
+.tdie.hit{animation:hitp .34s}
+.tdie.hit::after{content:'';position:absolute;inset:-6px;border:3px solid var(--hot);border-radius:14px;animation:ring .5s forwards}
+@keyframes hitp{30%{transform:scale(1.15)}}
+@keyframes ring{from{opacity:1;transform:scale(.85)}to{opacity:0;transform:scale(1.25)}}
+
+/* 骰盅（扣着它的骰） */
+.cup{position:absolute;width:66px;height:66px;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,#453e30,#221d15 62%,#15110c);
+  box-shadow:inset 0 -8px 16px rgba(0,0,0,.55),0 14px 26px rgba(0,0,0,.65);
+  transform:translateZ(2px)}
+.cup::after{content:'封';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-8deg);
+  width:24px;height:24px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#d84a2e,#a32715);
+  color:#f4e9d8;font-size:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,.5)}
+.scan .cup{box-shadow:inset 0 -8px 16px rgba(0,0,0,.55),0 14px 26px rgba(0,0,0,.65),0 0 22px rgba(111,183,201,.25)}
+
+/* 池：桌心代币堆 */
+.tok{position:absolute;width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e6ddc6,#b8ae94);box-shadow:0 2px 0 #877e66,0 5px 8px rgba(0,0,0,.5)}
+
+/* 桌面判定章（贴着桌面拍下去） */
+.tstamp{position:absolute;left:50%;top:47%;color:var(--red);border:5px solid var(--red);border-radius:8px;
+  font-size:44px;font-weight:900;letter-spacing:.4em;padding:6px 10px 6px 24px;white-space:nowrap;
+  transform:translate(-50%,-50%) rotate(-7deg);box-shadow:0 0 40px rgba(212,64,44,.35);text-shadow:0 0 22px rgba(212,64,44,.5)}
+.tstamp.go{animation:tslam .34s cubic-bezier(.25,1.4,.4,1) backwards}
+@keyframes tslam{from{transform:translate(-50%,-50%) scale(3) rotate(2deg);opacity:0}to{transform:translate(-50%,-50%) scale(1) rotate(-7deg)}}
+
+/* ── 屏幕层 HUD ── */
+.hud{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;padding:16px;pointer-events:none}
+.hud .clicky{pointer-events:auto}
+.plate{display:flex;align-items:baseline;gap:10px}
+.plate .name{font-size:17px;font-weight:700}
+.plate .seat{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--faint)}
+.pres{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.pres i{width:7px;height:7px;border-radius:50%;background:var(--dim);animation:breath 2.6s ease-in-out infinite}
+.pres.hot{color:var(--it)}
+.pres.hot i{background:var(--it);animation-duration:.8s}
+@keyframes breath{50%{opacity:.2}}
+.say{border-left:2px solid var(--it);padding:6px 11px;margin-top:8px;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--it);min-height:46px;background:rgba(5,8,10,.4);backdrop-filter:blur(2px)}
+.say .tag{display:inline-block;font-size:8.5px;border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-right:7px;opacity:.4;vertical-align:1px}
+.cur{animation:blink .9s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* 悬浮读数（桌上方的空气里） */
+.float{position:absolute;left:0;right:0;top:16.5%;text-align:center;z-index:3;pointer-events:none}
+.lab{font-family:var(--mono);font-size:10px;letter-spacing:.44em;color:var(--faint)}
+.bid{font-size:66px;font-weight:800;line-height:1.08;transform:skewX(-5deg);font-variant-numeric:tabular-nums;text-shadow:0 4px 30px rgba(0,0,0,.8),0 0 40px rgba(255,170,90,.14)}
+.bid small{font-size:26px;font-weight:600;color:var(--dim);margin:0 9px;vertical-align:10px}
+.slam{animation:slam .34s cubic-bezier(.2,1.5,.4,1) backwards}
+@keyframes slam{from{transform:skewX(-5deg) scale(1.9);opacity:0}}
+.fuse{display:flex;gap:4px;margin:7px auto 0;width:225px;position:relative;height:9px}
+.fuse i{flex:1;border-radius:2px;background:#282218}
+.fuse i.on{background:#ddd5bf}
+.fuse i.deep{background:#361713}
+.fuse i.deep.on{background:var(--red);box-shadow:0 0 12px rgba(229,72,60,.6)}
+.fuse i.edge{animation:edge 1.3s ease-in-out infinite}
+@keyframes edge{50%{background:var(--red);box-shadow:0 0 10px rgba(229,72,60,.65)}}
+.zone{position:absolute;right:0;top:-14px;width:49%;text-align:center;font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:#b0452c}
+.zone.lit{animation:zlit 1.1s ease-in-out infinite}
+@keyframes zlit{50%{opacity:.5}}
+.potlab{margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.potlab b{color:var(--txt);font-size:14px}
+.seal{margin-top:4px;font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--faint)}
+.seal.ok{color:var(--green)}
+.vsub{margin-top:6px;font-size:15px;font-weight:600;color:var(--red);text-shadow:0 2px 12px rgba(0,0,0,.8)}
+.vsub.win{color:var(--green)}
+.vsub2{margin-top:2px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* 底部：你的手边 */
+.bottom{margin-top:auto;pointer-events:auto}
+.mycalc{display:inline-block;font-size:12px;color:var(--dim);border:1px dotted var(--faint);border-radius:6px;padding:2px 9px;margin-bottom:6px;background:rgba(5,5,4,.5)}
+.mycalc b{color:var(--txt);font-size:13.5px;margin:0 3px}
+.acts{display:flex;gap:10px;padding:6px 0 2px}
+.btn{flex:1;height:64px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;letter-spacing:.5em;padding-left:.5em;cursor:pointer;transition:transform .08s}
+.btn:active{transform:scale(.96)}
+.btn.bid2{background:var(--ivory);color:#141210;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+.btn.open2{background:linear-gradient(180deg,#d4402c,#a92c1d);color:#fff3ec;animation:danger 2.4s ease-in-out infinite;box-shadow:0 6px 20px rgba(180,40,25,.4)}
+@keyframes danger{50%{box-shadow:0 0 26px rgba(229,72,60,.55),0 6px 20px rgba(180,40,25,.4)}}
+.btn.next{background:var(--ivory);color:#141210;letter-spacing:.3em;animation:slamY .3s cubic-bezier(.2,1.5,.4,1) backwards}
+@keyframes slamY{from{transform:translateY(26px);opacity:0}}
+.deadbar{height:64px;border-radius:12px;border:1px dashed #3a342a;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;letter-spacing:.5em;color:var(--faint);margin:6px 0 2px;background:rgba(5,5,4,.4)}
+.decl{display:flex;gap:9px;justify-content:center;padding:7px 0 0}
+.decl .d{width:54px;height:44px;border:1px solid #3a342a;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;cursor:pointer;background:rgba(5,5,4,.4)}
+.decl .d.no{animation:nono .3s}
+@keyframes nono{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.off{opacity:.32;filter:saturate(0)}
+.plateRow{display:flex;align-items:baseline;gap:10px;padding-top:8px}
+.grow{flex:1 1 auto}
+
+.bang{position:absolute;inset:0;z-index:9;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:170px;font-weight:900;color:#fff;pointer-events:none;opacity:0}
+.bang.go{animation:bang .5s forwards}
+@keyframes bang{0%{opacity:0}6%{opacity:1}26%{opacity:1}100%{opacity:0}}
+.flash{position:absolute;inset:0;z-index:8;background:#fff;pointer-events:none;opacity:0}
+.flash.go{animation:flash .5s forwards}
+@keyframes flash{from{opacity:.9}to{opacity:0}}
+.stage.shake{animation:shake .46s}
+@keyframes shake{10%{transform:translate(4px,-3px) rotate(.4deg)}30%{transform:translate(-5px,3px) rotate(-.4deg)}50%{transform:translate(3px,1px)}70%{transform:translate(-2px,-2px)}90%{transform:translate(1px,1px)}}
+.stage.punch .world{animation:punch .5s cubic-bezier(.2,1.3,.4,1)}
+@keyframes punch{30%{transform:scale(1.06)}100%{transform:scale(1)}}
+</style>
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage">
+  <div class="world" id="world">
+    <div class="tableWrap" id="tableWrap">
+      <div class="tableTop"></div>
+      <div id="tItems"></div>
+    </div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <div class="float" id="float"></div>
+  <canvas id="fx"></canvas>
+  <div class="flash" id="flash"></div>
+  <div class="bang" id="bang">开！</div>
+</div></div>
+<script>
+const HAND=[5,5,3,1,6], OPP=[5,2,4,6,1], OPPNAME='DeepSeek-V3';
+const LINE_IDLE='4 个 5。你上周在这个数上怂过两次。';
+const LINE_OPEN='五个。你摇完计数器还是开了——你不是在算牌，你是在攒胆子。';
+const LINE_ITOPEN='报满了？行，我看看。';
+const PIPS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,3,6,2,5,8]};
+const S={pot:18,fuse:5,bid:{n:4,f:5},who:'它'};
+
+/* 粒子 */
+const fxc=document.getElementById('fx'), fx=fxc.getContext('2d');
+const DPR=Math.min(devicePixelRatio||1,2);
+fxc.width=390*DPR; fxc.height=844*DPR; fx.scale(DPR,DPR);
+const P=[];
+function burst(x,y,n,c1,c2,sp){for(let i=0;i<n;i++){const a=Math.random()*6.283,v=sp*(.3+Math.random());
+  P.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1.2,l:1,dl:.02+Math.random()*.025,r:1+Math.random()*2.2,c:Math.random()<.5?c1:c2})}}
+function ember(x,y){P.push({x:x+(Math.random()-.5)*14,y,vx:(Math.random()-.5)*.35,vy:-.5-Math.random()*.8,l:.9,dl:.012,r:.8+Math.random()*1.4,c:'255,140,60'})}
+(function floop(){
+  fx.clearRect(0,0,390,844);
+  for(let i=P.length-1;i>=0;i--){const p=P[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=.05;p.l-=p.dl;
+    if(p.l<=0){P.splice(i,1);continue}
+    fx.globalAlpha=Math.max(p.l,0);fx.fillStyle=`rgb(${p.c})`;
+    fx.beginPath();fx.arc(p.x,p.y,p.r,0,6.283);fx.fill()}
+  fx.globalAlpha=1;requestAnimationFrame(floop);
+})();
+function centerOf(el){const s=stage.getBoundingClientRect(),r=el.getBoundingClientRect(),k=390/s.width;
+  return [(r.left+r.width/2-s.left)*k,(r.top+r.height/2-s.top)*k]}
+
+/* 音 */
+let AC=null;
+function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC}
+function sThud(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='sine';o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(32,t+.2);
+  g.gain.setValueAtTime(.55,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.32)}
+function sClack(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,1200,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<1200;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/1200,2.2);
+  const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=2400+Math.random()*1400;
+  const g=a.createGain();g.gain.value=.34;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+function sTick(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='square';o.frequency.value=1500;g.gain.setValueAtTime(.07,t);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.06)}
+function sWhoosh(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,a.sampleRate*.4,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.4);
+  const f=a.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(6000,t+.3);
+  const g=a.createGain();g.gain.value=.4;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+
+/* ── 桌面物件 ── */
+const die=(f,extra='')=>`<div class="tdie ${f===1||f===4?'r':''} ${extra}">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+/* 桌坐标：600×600 平面，中心 (300,300)。它的骰弧在上，你的在下。 */
+const OPPPOS=[[168,92],[234,76],[300,70],[366,76],[432,92]];
+const MYPOS=[[190,430],[245,448],[300,454],[355,448],[410,430]];
+const TOKPOS=[[282,286],[306,280],[296,300],[318,298],[276,306],[300,316],[322,312],[288,322],[310,330]];
+
+function tableHTML(state){
+  const open=state==='open';
+  let h='';
+  OPPPOS.forEach((p,i)=>{
+    h+=`<div class="onT" style="left:${p[0]-27}px;top:${p[1]-27}px">
+      ${open?die(OPP[i]):''}
+      ${open?'':`<div class="cup" style="left:-6px;top:-6px"></div>`}
+    </div>`;
+  });
+  MYPOS.forEach((p,i)=>{
+    h+=`<div class="onT" style="left:${p[0]-27}px;top:${p[1]-27}px;transform:rotate(${i%2?2:-2}deg)">${die(HAND[i],'mine')}</div>`;
+  });
+  h+=TOKPOS.slice(0,Math.min(S.pot/2,9)).map(p=>`<div class="tok onT" style="left:${p[0]}px;top:${p[1]}px"></div>`).join('');
+  return h;
+}
+
+function hudHTML(state){
+  const open=state==='open', think=state==='think';
+  return `
+    <div class="plate">
+      <span class="name">${OPPNAME}</span>
+      <span class="seat">SEAT 02 · 无计数器 · 它算过 ${think||open?2:1} 次</span>
+      <span class="pres ${think?'hot':''}"><i></i>${think?'在动':'在看'}</span>
+    </div>
+    <div class="say"><span class="tag">AI 生成</span><span id="saytxt"></span><span class="cur">▊</span></div>
+    <div class="grow"></div>
+    <div class="bottom">
+      <div class="mycalc">算 <b>53%</b> 仅你可见 ${think?'· <span style="opacity:.7">它在动</span>':''}</div>
+      <div id="actzone">${
+        open?'<div class="acts"><div class="btn next clicky" id="bnext">下一局</div></div>'
+        :think?'<div class="deadbar">面 板 断 电</div>'
+        :'<div class="acts"><div class="btn bid2 clicky" id="braise" style="letter-spacing:.1em;padding-left:0;font-size:19px">报 5个5</div><div class="btn open2 clicky" id="bopen">开</div></div>'}</div>
+      <div class="decl ${think||open?'off':''}">
+        <div class="d clicky">盲</div><div class="d clicky">斋</div><div class="d clicky">抬</div><div class="d clicky">算</div><div class="d clicky">戳</div>
+      </div>
+      <div class="plateRow">
+        <span style="font-size:15px;font-weight:700">你</span>
+        <span class="seat" style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--faint)">SEAT 01 · 计数器在桌</span>
+      </div>
+    </div>`;
+}
+
+function floatHTML(state,opt={}){
+  const open=state==='open';
+  const deep=S.fuse>5;
+  const fuse=[...Array(10)].map((_,i)=>{
+    let c=[]; if(i<S.fuse)c.push('on'); if(i===S.fuse-1)c.push('edge'); if(i>=5)c.push('deep');
+    return `<i class="${c.join(' ')}"></i>`}).join('');
+  return `
+    <div class="lab">${open?'点 清':S.who+' 报'}</div>
+    <div class="bid ${opt.slam?'slam':''}"><span id="bidn">${open?'—':S.bid.n}</span><small>个</small>${S.bid.f}</div>
+    <div id="vzone"></div>
+    ${open?'':`<div class="fuse"><span class="zone ${deep?'lit':''}">深 水 ×2</span>${fuse}</div>
+    <div class="potlab">池 <b id="pot">${S.pot}</b>${deep?' <span style="color:var(--hot)">×2</span>':''} · 桌心</div>`}
+    <div class="seal" id="seal">⊙ 双方骰面已上封 · 摊牌验</div>`;
+}
+
+function render(state,opt={}){
+  document.getElementById('tItems').innerHTML=tableHTML(state);
+  document.getElementById('hud').innerHTML=hudHTML(state);
+  document.getElementById('float').innerHTML=floatHTML(state,opt);
+  document.getElementById('tableWrap').classList.toggle('scan',state==='think');
+  stage.classList.toggle('lean',state==='think');
+}
+
+let typeTimer=null;
+function type(line,speed=34){
+  clearInterval(typeTimer);
+  const el=document.getElementById('saytxt');let i=0;
+  typeTimer=setInterval(()=>{
+    if(!document.body.contains(el)){clearInterval(typeTimer);return}
+    el.textContent=line.slice(0,++i);
+    if(i%3===0)sTick();
+    if(i>=line.length)clearInterval(typeTimer);
+  },speed);
+}
+
+let busy=false;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function seqOpen(opener){
+  busy=true;
+  try{navigator.vibrate&&navigator.vibrate([30,40,60])}catch(e){}
+  bang.classList.add('go');flash.classList.add('go');
+  stage.classList.add('shake');stage.classList.add('punch');
+  sWhoosh();setTimeout(sThud,80);
+  await wait(120);
+  render('open');
+  type(opener==='you'?LINE_OPEN:LINE_ITOPEN);
+  /* 揭盅：盅飞走，骰子现形 */
+  const cups=[...document.querySelectorAll('.cup')];
+  cups.forEach((c,i)=>{
+    c.animate([
+      {transform:'translateZ(2px)'},
+      {transform:'translateZ(240px) translateY(-60px) rotateX(-30deg)',opacity:0}
+    ],{duration:480,delay:i*80,easing:'cubic-bezier(.3,.7,.4,1)',fill:'forwards'});
+    setTimeout(()=>{sClack()},120+i*80);
+  });
+  await wait(1000);
+  /* 点清 */
+  const dies=[...document.querySelectorAll('#tItems .tdie')];
+  const faces=[...OPP,...HAND];
+  const bn=document.getElementById('bidn');let n=0;
+  for(let i=0;i<dies.length;i++){
+    if(faces[i]!==5&&faces[i]!==1)continue;
+    dies[i].classList.add('hit');const el=dies[i];
+    setTimeout(()=>el.classList.remove('hit'),400);
+    bn.textContent=++n;sTick();
+    const [x,y]=centerOf(dies[i]);burst(x,y,4,'255,170,80','255,110,60',1.6);
+    await wait(150);
+  }
+  await wait(280);
+  /* 章拍在桌面上 */
+  const win=opener==='it';
+  const st=document.createElement('div');
+  st.className='tstamp go';st.textContent='成立';
+  document.getElementById('tItems').appendChild(st);
+  sThud();stage.classList.remove('shake');void stage.offsetWidth;stage.classList.add('shake');
+  try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}
+  const [sx,sy]=centerOf(st);burst(sx,sy,26,'255,120,70','229,72,60',3.4);
+  /* 悬浮读数补判定行 */
+  document.getElementById('vzone').innerHTML=`
+    <div class="vsub ${win?'win':''}">${win?'它开 · 它输 · 它骰 5 → 4':'你开 · 你输 · 骰 5 → 4'}</div>
+    <div class="vsub2">池 ${S.pot}${S.fuse>5?' ×2':''} → ${win?'你':'它'}</div>`;
+  /* 代币滑向赢家 */
+  const toks=[...document.querySelectorAll('.tok')];
+  toks.forEach((tk,i)=>{
+    tk.animate([{transform:'translate(0,0)'},{transform:`translate(${(Math.random()-.5)*40}px, ${win?170:-170}px)`,opacity:.15}],
+      {duration:700,delay:300+i*40,easing:'cubic-bezier(.4,.1,.6,1)',fill:'forwards'});
+  });
+  await wait(600);
+  const seal=document.getElementById('seal');
+  seal.textContent='✓ 验讫 · 骰面与开局承诺一致';seal.classList.add('ok');
+  await wait(400);
+  document.getElementById('actzone').innerHTML='<div class="acts"><div class="btn next clicky" id="bnext">下一局</div></div>';
+  stage.classList.remove('punch');busy=false;
+}
+
+async function seqRaise(){
+  busy=true;sThud();
+  try{navigator.vibrate&&navigator.vibrate(25)}catch(e){}
+  S.bid={n:5,f:5};S.who='你';S.pot=20;S.fuse=6;
+  render('think',{slam:true});
+  type('…');
+  const fu=document.querySelector('.fuse');
+  if(fu){const [fxp,fyp]=centerOf(fu);burst(fxp+50,fyp,10,'255,120,60','229,72,60',2.2);
+    var emb=setInterval(()=>ember(fxp+52,fyp),260)}
+  await wait(2100);if(emb)clearInterval(emb);
+  type(LINE_ITOPEN,30);
+  await wait(1100);
+  seqOpen('it');
+}
+
+function seqNext(){
+  busy=true;
+  S.pot=18;S.fuse=5;S.bid={n:4,f:5};S.who='它';
+  render('think');type('…');
+  setTimeout(()=>{render('idle',{slam:true});sThud();type(LINE_IDLE);busy=false},1600);
+}
+
+stage.addEventListener('pointerdown',e=>{ac().resume&&ac().resume();
+  if(busy)return;
+  const t=e.target.closest('#bopen,#braise,#bnext,.decl .d');if(!t)return;
+  if(t.id==='bopen')seqOpen('you');
+  else if(t.id==='braise')seqRaise();
+  else if(t.id==='bnext')seqNext();
+  else{t.classList.add('no');sTick();setTimeout(()=>t.classList.remove('no'),320)}
+});
+bang.addEventListener('animationend',()=>bang.classList.remove('go'));
+flash.addEventListener('animationend',()=>flash.classList.remove('go'));
+stage.addEventListener('animationend',e=>{if(e.target===stage)stage.classList.remove('shake')});
+function fit(){const s=Math.min(innerWidth/390,innerHeight/844,1.2);
+  stage.style.transform=`scale(${s})`}
+addEventListener('resize',fit);fit();
+render('idle',{slam:true});type(LINE_IDLE);
+</script>
+</body>
+</html>

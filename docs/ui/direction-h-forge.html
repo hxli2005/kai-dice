@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>《开！》方向 H · 烙（判定不是印上去的，是烙上去的）</title>
+<style>
+:root{
+  --txt:#eae6df; --dim:#9c948a; --faint:#5f5952;
+  --red:#d4402c; --hot:#ff8a3c; --emb:#ffcf9a; --green:#43b573; --it:#6fb7c9;
+  --ivory:#f2eee6;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#060505;overflow:hidden;font-family:var(--sys);user-select:none}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;width:390px;height:844px;overflow:hidden;color:var(--txt);border-radius:8px}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#fx{pointer-events:none;z-index:5}
+.ui{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;padding:16px}
+
+.plate{display:flex;align-items:baseline;gap:10px}
+.plate .name{font-size:17px;font-weight:700;letter-spacing:.03em}
+.plate .seat{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--faint)}
+.pres{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.pres i{width:7px;height:7px;border-radius:50%;background:var(--dim);animation:breath 2.6s ease-in-out infinite}
+.pres.hot{color:var(--it)}
+.pres.hot i{background:var(--it);animation-duration:.8s}
+@keyframes breath{50%{opacity:.2}}
+
+.dice{display:flex;gap:9px;justify-content:center;padding:9px 0 4px;perspective:700px}
+.die{width:52px;height:52px;border-radius:9px;background:var(--ivory);border:1px solid #d2cdc2;position:relative;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:8px;box-shadow:0 4px 12px rgba(0,0,0,.55)}
+.die i{border-radius:50%;background:#24211c;place-self:center;width:9px;height:9px;visibility:hidden}
+.die.r i{background:#c23a2b}
+.die .fly{position:absolute;right:3px;top:1px;font-size:9px;color:#c23a2b;font-weight:600}
+.mine .die:nth-child(2n){transform:rotate(1.8deg)}
+.mine .die:nth-child(2n+1){transform:rotate(-1.6deg)}
+.die.hit{animation:hitp .34s}
+.die.hit::after{content:'';position:absolute;inset:-5px;border:2px solid var(--hot);border-radius:12px;animation:ring .5s forwards}
+@keyframes hitp{30%{transform:scale(1.14)}}
+@keyframes ring{from{opacity:1;transform:scale(.85)}to{opacity:0;transform:scale(1.25)}}
+
+/* 封骰：铸铁锭＋铆钉＋烙印「封」 */
+.cover{width:52px;height:52px;border-radius:7px;position:relative;
+  background:linear-gradient(160deg,#26221e,#141110 55%,#1b1815);
+  border:1px solid #322c26;box-shadow:0 4px 12px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,200,140,.06)}
+.cover u{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:13px;color:#4a4038;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,.04)}
+.cover::before,.cover::after{content:'';position:absolute;width:4px;height:4px;border-radius:50%;background:#3b332c;box-shadow:0 1px 1px rgba(0,0,0,.6)}
+.cover::before{left:5px;top:5px}
+.cover::after{right:5px;bottom:5px}
+.scan .cover{box-shadow:0 4px 12px rgba(0,0,0,.6),inset 0 0 16px rgba(255,138,60,.12)}
+.scan .cover u{color:#7a5a40;text-shadow:0 0 10px rgba(255,138,60,.5)}
+
+.c3{width:52px;height:52px;position:relative;transform-style:preserve-3d}
+.c3 .f{position:absolute;inset:0;border-radius:9px;background:var(--ivory);border:1px solid #d2cdc2;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:8px;backface-visibility:hidden}
+.c3 .f i{border-radius:50%;background:#24211c;place-self:center;width:9px;height:9px;visibility:hidden}
+.c3 .f.r i{background:#c23a2b}
+.c3 .f .fly{position:absolute;right:3px;top:1px;font-size:9px;color:#c23a2b;font-weight:600}
+
+.tell{font-family:var(--mono);font-size:11px;color:var(--dim);padding:3px 2px}
+
+.say{border-left:2px solid var(--it);padding:7px 11px;margin:6px 0 2px;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:var(--it);min-height:52px}
+.say .tag{display:inline-block;font-size:8.5px;border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-right:7px;opacity:.4;vertical-align:1px}
+.cur{animation:blink .9s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* 中轴：坩埚口 */
+.spine{margin:8px -16px;padding:15px 24px 13px;text-align:center;position:relative;background:rgba(20,15,11,.55);border-top:1px solid rgba(255,170,90,.10);border-bottom:1px solid rgba(255,170,90,.10)}
+.spine.beat{animation:heart 2.2s ease-in-out infinite}
+@keyframes heart{50%{transform:scale(1.005)}}
+.lab{font-family:var(--mono);font-size:10px;letter-spacing:.44em;color:var(--faint)}
+.bid{font-size:98px;font-weight:800;line-height:1.1;transform:skewX(-5deg);font-variant-numeric:tabular-nums;text-shadow:0 0 44px rgba(255,150,60,.30)}
+.bid small{font-size:34px;font-weight:600;color:var(--dim);margin:0 12px;vertical-align:13px}
+.slam{animation:slam .34s cubic-bezier(.2,1.5,.4,1) backwards}
+@keyframes slam{from{transform:skewX(-5deg) scale(1.9);opacity:0}}
+.fuse{display:flex;gap:4px;margin:8px 0 0;position:relative;height:12px}
+.fuse i{flex:1;border-radius:2px;background:#292018}
+.fuse i.on{background:#f4c896;box-shadow:0 0 8px rgba(255,170,90,.35)}
+.fuse i.deep{background:#391410}
+.fuse i.deep.on{background:var(--red);box-shadow:0 0 12px rgba(229,72,60,.6)}
+.fuse i.edge{animation:edge 1.2s ease-in-out infinite}
+@keyframes edge{50%{background:#ff8a3c;box-shadow:0 0 14px rgba(255,138,60,.8)}}
+.zone{position:absolute;right:0;top:-16px;width:49%;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:#c05a2c}
+.zone.lit{animation:zlit 1.1s ease-in-out infinite;text-shadow:0 0 12px rgba(255,138,60,.9)}
+@keyframes zlit{50%{opacity:.5}}
+.potrow{margin-top:14px;font-size:14px;color:var(--dim);display:flex;justify-content:center;align-items:baseline;gap:8px}
+.potrow b{font-size:33px;font-weight:700;color:var(--emb);font-variant-numeric:tabular-nums;text-shadow:0 0 26px rgba(255,150,60,.55)}
+.potrow .x2{color:var(--hot);font-weight:700;font-size:18px;margin-left:4px;animation:slam .3s backwards}
+.seal{margin-top:8px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--faint)}
+.seal.ok{color:var(--green)}
+
+/* 判定：烙铁——白热落下，冷却成暗红 */
+.verdict{margin:9px 0 3px;opacity:0;position:relative}
+.verdict.show{opacity:1}
+.word{display:inline-block;border:4px solid #fff;color:#fff;font-size:31px;font-weight:800;letter-spacing:.5em;padding:5px 9px 5px 21px;border-radius:6px;transform:rotate(-5deg)}
+.show .word{animation:stamp .3s cubic-bezier(.25,1.4,.4,1) backwards,sear 2.6s .35s forwards}
+@keyframes stamp{from{transform:scale(2.9) rotate(4deg);opacity:0}to{transform:scale(1) rotate(-5deg)}}
+@keyframes sear{
+  0%{color:#fff;border-color:#fff;text-shadow:0 0 52px rgba(255,220,160,1),0 0 14px #fff;box-shadow:0 0 60px rgba(255,180,100,.75)}
+  35%{color:#ffb066;border-color:#ffb066;text-shadow:0 0 34px rgba(255,150,70,.8);box-shadow:0 0 34px rgba(255,140,60,.4)}
+  100%{color:var(--red);border-color:var(--red);text-shadow:0 0 20px rgba(212,64,44,.4);box-shadow:0 0 18px rgba(212,64,44,.22)}}
+.vsub{margin-top:11px;font-size:16px;font-weight:600;color:var(--red)}
+.vsub.win{color:var(--green)}
+.vsub2{margin-top:2px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+.mycalc{align-self:flex-start;font-size:12.5px;color:var(--dim);border:1px dotted var(--faint);border-radius:6px;padding:3px 10px;margin:2px 0}
+.mycalc b{color:var(--txt);font-size:14px;margin:0 3px}
+.acts{display:flex;gap:10px;padding:8px 0 2px}
+.btn{flex:1;height:66px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;letter-spacing:.5em;padding-left:.5em;cursor:pointer;transition:transform .08s}
+.btn:active{transform:scale(.96)}
+.btn.bid2{background:var(--ivory);color:#141210;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+.btn.open2{background:linear-gradient(180deg,#e0512f,#a92c1d);color:#fff3ec;border:none;animation:danger 2.2s ease-in-out infinite;box-shadow:0 6px 20px rgba(190,50,25,.4);position:relative;overflow:hidden}
+.btn.open2::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,220,170,.28) 50%,transparent 65%);transform:translateX(-100%);animation:heatline 2.8s linear infinite}
+@keyframes heatline{60%,100%{transform:translateX(100%)}}
+@keyframes danger{50%{box-shadow:0 0 30px rgba(255,110,60,.6),0 6px 20px rgba(190,50,25,.4)}}
+.btn.next{background:var(--ivory);color:#141210;letter-spacing:.3em;animation:slamY .3s cubic-bezier(.2,1.5,.4,1) backwards}
+@keyframes slamY{from{transform:translateY(26px);opacity:0}}
+.deadbar{height:66px;border-radius:12px;border:1px dashed #3a322a;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;letter-spacing:.5em;color:var(--faint);margin:8px 0 2px}
+.decl{display:flex;gap:9px;justify-content:center;padding:7px 0 0}
+.decl .d{width:54px;height:46px;border:1px solid #3a322a;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;cursor:pointer}
+.decl .d.no{animation:nono .3s}
+@keyframes nono{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.off{opacity:.32;filter:saturate(0)}
+.dimmed{opacity:.55}
+.grow{flex:1 1 auto}
+
+.bang{position:absolute;inset:0;z-index:8;background:#170c05;display:flex;align-items:center;justify-content:center;font-size:180px;font-weight:900;color:#fff;pointer-events:none;opacity:0;letter-spacing:-.04em;text-shadow:0 0 90px rgba(255,170,80,1),0 0 30px rgba(255,220,170,.9)}
+.bang.go{animation:bang .5s forwards}
+@keyframes bang{0%{opacity:0}6%{opacity:1}26%{opacity:1}100%{opacity:0}}
+.flash{position:absolute;inset:0;z-index:7;background:#ffe9d2;pointer-events:none;opacity:0}
+.flash.go{animation:flash .5s forwards}
+@keyframes flash{from{opacity:.9}to{opacity:0}}
+.stage.shake{animation:shake .46s}
+@keyframes shake{10%{transform:translate(4px,-3px) rotate(.4deg)}30%{transform:translate(-5px,3px) rotate(-.4deg)}50%{transform:translate(3px,1px)}70%{transform:translate(-2px,-2px)}90%{transform:translate(1px,1px)}}
+</style>
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage">
+  <canvas id="gl"></canvas>
+  <div class="ui" id="ui"></div>
+  <canvas id="fx"></canvas>
+  <div class="flash" id="flash"></div>
+  <div class="bang" id="bang">开！</div>
+</div></div>
+<script>
+const HAND=[5,5,3,1,6], OPP=[5,2,4,6,1], OPPNAME='DeepSeek-V3';
+const LINE_IDLE='4 个 5。你上周在这个数上怂过两次。';
+const LINE_OPEN='五个。你摇完计数器还是开了——你不是在算牌，你是在攒胆子。';
+const LINE_ITOPEN='报满了？行，我看看。';
+const PIPS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,3,6,2,5,8]};
+const S={pot:18,fuse:5,bid:{n:4,f:5},who:'它'};
+
+/* ══ 熔炉光场：坩埚辉光＋热浪扭曲＋微火星 ══ */
+const glc=document.getElementById('gl'), gl=glc.getContext('webgl');
+let HEAT=0,heatT=.12;
+(function(){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  glc.width=390*dpr; glc.height=844*dpr;
+  const vs='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+  const fs=`precision mediump float;uniform float t,heat;uniform vec2 res;
+  float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+  void main(){
+    vec2 uv=gl_FragCoord.xy/res;
+    /* 铸铁底纹 */
+    float iron=noise(uv*vec2(9.,40.))*.5+noise(uv*vec2(40.,9.))*.5;
+    vec3 col=vec3(.030,.026,.023)+iron*.012;
+    /* 坩埚辉光（热浪扭曲采样） */
+    float wob=noise(vec2(uv.x*7.,uv.y*10.-t*1.4))-.5;
+    vec2 c=vec2(.5,.545);
+    vec2 q=vec2(uv.x+wob*.04*(heat+.25),(uv.y-c.y)*1.6+c.y);
+    float d=distance(q,c);
+    float fl=.88+.09*sin(t*2.9)+.05*sin(t*13.7)*heat;
+    float pool=smoothstep(.62,.04,d)*fl;
+    vec3 ember=mix(vec3(1.,.62,.26),vec3(1.,.36,.16),heat);
+    col+=ember*pool*(.085+.30*heat);
+    /* 熔面微火星 */
+    float sp=step(.9975,hash(floor(uv*res/2.)+floor(t*9.)));
+    col+=vec3(1.,.7,.3)*sp*pool*(.25+heat*.8);
+    float v=smoothstep(1.08,.32,distance(uv,vec2(.5,.5)));
+    col*=mix(.66,1.,v);
+    col+=(hash(uv*res+mod(t*60.,997.))-.5)*.045;
+    gl_FragColor=vec4(col,1.);
+  }`;
+  function sh(ty,s){const o=gl.createShader(ty);gl.shaderSource(o,s);gl.compileShader(o);
+    if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(o));return o}
+  const pr=gl.createProgram();
+  gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(pr);gl.useProgram(pr);
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+  const lp=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,2,gl.FLOAT,false,0,0);
+  const ut=gl.getUniformLocation(pr,'t'),uh=gl.getUniformLocation(pr,'heat'),ur=gl.getUniformLocation(pr,'res');
+  gl.uniform2f(ur,glc.width,glc.height);gl.viewport(0,0,glc.width,glc.height);
+  (function loop(ts){HEAT+=(heatT-HEAT)*.04;
+    gl.uniform1f(ut,ts/1000);gl.uniform1f(uh,HEAT);
+    gl.drawArrays(gl.TRIANGLES,0,3);requestAnimationFrame(loop)})(0);
+})();
+
+/* ══ 粒子：火星＋青烟 ══ */
+const fxc=document.getElementById('fx'), fx=fxc.getContext('2d');
+const DPR=Math.min(devicePixelRatio||1,2);
+fxc.width=390*DPR; fxc.height=844*DPR; fx.scale(DPR,DPR);
+const P=[];
+function spark(x,y,n,sp){for(let i=0;i<n;i++){const a=Math.random()*6.283,v=sp*(.3+Math.random());
+  P.push({t:'s',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1.6,l:1,dl:.018+Math.random()*.03,r:.7+Math.random()*1.8,
+    c:Math.random()<.5?'255,190,90':'255,120,40'})}}
+function smoke(x,y,n){for(let i=0;i<n;i++){
+  P.push({t:'m',x:x+(Math.random()-.5)*24,y,vx:(Math.random()-.5)*.3,vy:-.5-Math.random()*.5,l:1,dl:.007,r:4+Math.random()*5,c:'150,142,132'})}}
+function tipSpark(x,y){P.push({t:'s',x:x+(Math.random()-.5)*8,y,vx:(Math.random()-.5)*.8,vy:-1-Math.random()*1.2,l:.9,dl:.02,r:.6+Math.random()*1.2,c:'255,170,70'})}
+(function floop(){
+  fx.clearRect(0,0,390,844);
+  for(let i=P.length-1;i>=0;i--){const p=P[i];
+    p.x+=p.vx;p.y+=p.vy;p.l-=p.dl;
+    if(p.t==='s'){p.vy+=.06}else{p.r+=.07;p.vy-=.002}
+    if(p.l<=0){P.splice(i,1);continue}
+    if(p.t==='m'){fx.globalAlpha=Math.max(p.l,0)*.16}else{fx.globalAlpha=Math.max(p.l,0)}
+    fx.fillStyle=`rgb(${p.c})`;
+    fx.beginPath();fx.arc(p.x,p.y,p.r,0,6.283);fx.fill()}
+  fx.globalAlpha=1;requestAnimationFrame(floop);
+})();
+function center(el){const s=stage.getBoundingClientRect(),r=el.getBoundingClientRect(),k=390/s.width;
+  return [(r.left+r.width/2-s.left)*k,(r.top+r.height/2-s.top)*k]}
+/* 引信口常燃 */
+setInterval(()=>{const fu=document.getElementById('fuse');
+  if(!fu||fu.style.display==='none')return;
+  const r=fu.getBoundingClientRect(),s=stage.getBoundingClientRect(),k=390/s.width;
+  const segW=(r.width*k)/10;
+  const x=(r.left-s.left)*k+segW*(S.fuse-.3), y=(r.top-s.top)*k+6;
+  tipSpark(x,y); if(S.fuse>5)tipSpark(x,y);
+},240);
+
+/* ══ 锻造音 ══ */
+let AC=null;
+function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC}
+function sThud(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='sine';o.frequency.setValueAtTime(100,t);o.frequency.exponentialRampToValueAtTime(30,t+.2);
+  g.gain.setValueAtTime(.6,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.32)}
+function sClang(){const a=ac(),t=a.currentTime;
+  [720,1081,1794].forEach((f,i)=>{const o=a.createOscillator(),g=a.createGain();
+    o.type='triangle';o.frequency.value=f*(1+Math.random()*.01);
+    g.gain.setValueAtTime(.16/(i+1),t);g.gain.exponentialRampToValueAtTime(.001,t+.5-.1*i);
+    o.connect(g).connect(a.destination);o.start(t);o.stop(t+.5)});
+  const n=a.createBufferSource(),buf=a.createBuffer(1,900,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<900;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/900,2.5);
+  const g2=a.createGain();g2.gain.value=.3;n.buffer=buf;n.connect(g2).connect(a.destination);n.start(t)}
+function sSizzle(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,a.sampleRate*1.1,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){const e=Math.pow(1-i/d.length,1.8);d[i]=(Math.random()*2-1)*e*(Math.random()<.06?1:.25)}
+  const f=a.createBiquadFilter();f.type='highpass';f.frequency.value=1800;
+  const g=a.createGain();g.gain.value=.34;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+function sClack(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,1200,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<1200;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/1200,2.2);
+  const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=2400+Math.random()*1400;
+  const g=a.createGain();g.gain.value=.33;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+function sTick(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='square';o.frequency.value=1500;g.gain.setValueAtTime(.07,t);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.06)}
+function sWhoosh(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,a.sampleRate*.4,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.4);
+  const f=a.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(6000,t+.3);
+  const g=a.createGain();g.gain.value=.42;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+
+const die=f=>`<div class="die ${f===1||f===4?'r':''}">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+const face=(f,cls)=>`<div class="f ${f===1||f===4?'r':''}" style="transform:${cls==='ft'?'rotateY(0deg)':cls==='bk'?'rotateY(180deg)':cls==='rt'?'rotateY(90deg)':cls==='lf'?'rotateY(-90deg)':cls==='tp'?'rotateX(90deg)':'rotateX(-90deg)'} translateZ(26px)">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+const cube=f=>{const alt=[(f%6)+1,((f+1)%6)+1,((f+2)%6)+1,7-f,((f+3)%6)+1];
+  return `<div class="c3"><div class="cube" style="position:absolute;inset:0;transform-style:preserve-3d">
+  ${face(f,'ft')}${face(alt[3],'bk')}${face(alt[0],'rt')}${face(alt[1],'lf')}${face(alt[2],'tp')}${face(alt[4],'bt')}</div></div>`};
+const fuseHTML=()=>[...Array(10)].map((_,i)=>{
+  let c=[]; if(i<S.fuse)c.push('on'); if(i===S.fuse-1)c.push('edge'); if(i>=5)c.push('deep');
+  return `<i class="${c.join(' ')}"></i>`}).join('');
+
+function render(state,opt={}){
+  const open=state==='open', think=state==='think';
+  const deep=S.fuse>5;
+  ui.innerHTML=`
+    <div class="plate">
+      <span class="name">${OPPNAME}</span>
+      <span class="seat">SEAT 02 · 无计数器</span>
+      <span class="pres ${think?'hot':''}"><i></i>${think?'在动':'在看'}</span>
+    </div>
+    <div class="dice ${think?'scan':''}" id="oppdice">
+      ${open?OPP.map(cube).join(''):'<div class="cover"><u>封</u></div>'.repeat(5)}
+    </div>
+    <div class="tell">它算过 ${think||open?2:1} 次</div>
+    <div class="say"><span class="tag">AI 生成</span><span id="saytxt"></span><span class="cur">▊</span></div>
+    <div class="grow"></div>
+
+    <div class="spine ${think?'beat':''}">
+      <div class="lab">${open?'点 清':S.who+' 报'}</div>
+      <div class="bid ${opt.slam?'slam':''}"><span id="bidn">${open?'—':S.bid.n}</span><small>个</small>${S.bid.f}</div>
+      <div class="verdict" id="verdict"></div>
+      <div class="fuse" id="fuse" ${open?'style="display:none"':''}><span class="zone ${deep?'lit':''}">深 水 ×2</span>${fuseHTML()}</div>
+      <div class="potrow" ${open?'style="display:none"':''}>池<b id="pot">${S.pot}</b>${deep?'<span class="x2">×2</span>':''}</div>
+      <div class="seal" id="seal">⊙ 双方骰面已上封 · 摊牌验</div>
+    </div>
+
+    <div class="grow"></div>
+    <div class="mycalc ${think?'dimmed':''}">算 <b>53%</b> 仅你可见</div>
+    <div class="dice mine ${think?'dimmed':''}" id="mydice">${HAND.map(die).join('')}</div>
+    <div id="actzone">${
+      open?'':think?'<div class="deadbar">它 在 动</div>'
+      :'<div class="acts"><div class="btn bid2" id="braise" style="letter-spacing:.1em;padding-left:0;font-size:19px">报 5个5</div><div class="btn open2" id="bopen">开</div></div>'}</div>
+    <div class="decl ${think||open?'off':''}">
+      <div class="d">盲</div><div class="d">斋</div><div class="d">抬</div><div class="d">算</div><div class="d">戳</div>
+    </div>
+    <div class="plate" style="padding-top:8px">
+      <span class="name" style="font-size:15px">你</span>
+      <span class="seat">SEAT 01 · 计数器在桌</span>
+    </div>`;
+}
+
+let typeTimer=null;
+function type(line,speed=34){
+  clearInterval(typeTimer);
+  const el=document.getElementById('saytxt');let i=0;
+  typeTimer=setInterval(()=>{
+    if(!document.body.contains(el)){clearInterval(typeTimer);return}
+    el.textContent=line.slice(0,++i);
+    if(i%3===0)sTick();
+    if(i>=line.length)clearInterval(typeTimer);
+  },speed);
+}
+
+let busy=false;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function seqOpen(opener){
+  busy=true;heatT=1;
+  try{navigator.vibrate&&navigator.vibrate([30,40,60])}catch(e){}
+  bang.classList.add('go');flash.classList.add('go');stage.classList.add('shake');
+  sWhoosh();setTimeout(sThud,80);
+  await wait(120);
+  render('open');
+  type(opener==='you'?LINE_OPEN:LINE_ITOPEN);
+  const cubes=[...ui.querySelectorAll('.cube')];
+  cubes.forEach((c,i)=>{
+    c.animate([
+      {transform:`translateY(-260px) rotateX(${540+Math.random()*180|0}deg) rotateY(${360+Math.random()*180|0}deg)`,opacity:0},
+      {transform:`translateY(0) rotateX(720deg) rotateY(720deg)`,opacity:1}
+    ],{duration:620,delay:i*95,easing:'cubic-bezier(.2,1.2,.4,1)',fill:'both'});
+    setTimeout(()=>{sClack();const [x,y]=center(c);spark(x,y+18,5,2)},620+i*95);
+  });
+  await wait(1150);
+  const hits=[];
+  ui.querySelectorAll('#oppdice .c3').forEach((c,i)=>{if(OPP[i]===5||OPP[i]===1)hits.push(c)});
+  ui.querySelectorAll('#mydice .die').forEach((d,i)=>{if(HAND[i]===5||HAND[i]===1)hits.push(d)});
+  const bn=document.getElementById('bidn');let n=0;
+  for(const el of hits){
+    el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),400);
+    bn.textContent=++n;sTick();
+    const [x,y]=center(el);spark(x,y,4,1.6);
+    await wait(150);
+  }
+  await wait(300);
+  /* 烙 */
+  const v=document.getElementById('verdict');
+  const win=opener==='it';
+  v.innerHTML=`<span class="word">成立</span>
+    <div class="vsub ${win?'win':''}">${win?'它开 · 它输 · 它骰 5 → 4':'你开 · 你输 · 骰 5 → 4'}</div>
+    <div class="vsub2">池 ${S.pot}${S.fuse>5?' ×2':''} → ${win?'你':'它'}</div>`;
+  v.classList.add('show');sClang();sSizzle();
+  stage.classList.remove('shake');void stage.offsetWidth;stage.classList.add('shake');
+  try{navigator.vibrate&&navigator.vibrate([60,30,90])}catch(e){}
+  const [wx,wy]=center(v.querySelector('.word'));
+  spark(wx,wy,34,4);
+  setTimeout(()=>smoke(wx,wy-8,7),260);
+  setTimeout(()=>smoke(wx,wy-14,5),900);
+  await wait(500);
+  const seal=document.getElementById('seal');
+  seal.textContent='✓ 验讫 · 骰面与开局承诺一致';seal.classList.add('ok');
+  await wait(400);
+  document.getElementById('actzone').innerHTML='<div class="acts"><div class="btn next" id="bnext">下一局</div></div>';
+  heatT=.3;busy=false;
+}
+
+async function seqRaise(){
+  busy=true;sThud();
+  try{navigator.vibrate&&navigator.vibrate(25)}catch(e){}
+  S.bid={n:5,f:5};S.who='你';S.pot=20;S.fuse=6;heatT=.6;
+  render('think',{slam:true});
+  type('…');
+  const pot=document.getElementById('pot');
+  pot.animate([{transform:'scale(1.5)'},{transform:'scale(1)'}],{duration:300,easing:'cubic-bezier(.2,1.4,.4,1)'});
+  const fu=document.getElementById('fuse');const [fxp,fyp]=center(fu);
+  spark(fxp+60,fyp,14,2.6);
+  await wait(2100);
+  type(LINE_ITOPEN,30);
+  await wait(1100);
+  seqOpen('it');
+}
+
+function seqNext(){
+  busy=true;heatT=.12;
+  S.pot=18;S.fuse=5;S.bid={n:4,f:5};S.who='它';
+  render('think');type('…');
+  setTimeout(()=>{render('idle',{slam:true});sThud();type(LINE_IDLE);busy=false},1600);
+}
+
+stage.addEventListener('pointerdown',e=>{ac().resume&&ac().resume();
+  if(busy)return;
+  const t=e.target.closest('#bopen,#braise,#bnext,.decl .d');if(!t)return;
+  if(t.id==='bopen')seqOpen('you');
+  else if(t.id==='braise')seqRaise();
+  else if(t.id==='bnext')seqNext();
+  else{t.classList.add('no');sTick();setTimeout(()=>t.classList.remove('no'),320)}
+});
+bang.addEventListener('animationend',()=>bang.classList.remove('go'));
+flash.addEventListener('animationend',()=>flash.classList.remove('go'));
+stage.addEventListener('animationend',e=>{if(e.target===stage)stage.classList.remove('shake')});
+function fit(){const s=Math.min(innerWidth/390,innerHeight/844,1.2);
+  stage.style.transform=`scale(${s})`}
+addEventListener('resize',fit);fit();
+render('idle',{slam:true});type(LINE_IDLE);
+</script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>《开！》方向 E · 素桌 v2（公平对弈 → 镜像对弈台）</title>
+<style>
+:root{
+  --page:#0e0f11; --bg:#111214; --panel:#17191d; --line:#26292d; --line2:#33373c;
+  --txt:#eceae4; --dim:#8a8d93; --faint:#595d63;
+  --red:#e5483c; --green:#3fae6a; --it:#74b8c8;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--page);color:#d9d4c6;font-family:var(--sys);padding:40px 32px 120px;line-height:1.6}
+.wrap{max-width:1500px;margin:0 auto}
+h1{font-size:26px;font-weight:800;letter-spacing:.04em;color:#e8e6e0}
+.sub{color:var(--dim);font-size:13px;margin-top:8px;max-width:880px}
+.sub b{color:#e8e6e0}
+.laws{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 24px}
+.laws div{border-left:2px solid var(--line2);padding-left:12px}
+.laws h4{font-size:11px;letter-spacing:.16em;color:var(--dim);font-weight:600;margin-bottom:5px}
+.laws p{font-size:13px;color:#b9bcc1}
+.strip{display:flex;gap:20px;flex-wrap:wrap;margin-top:34px}
+.cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--dim);margin-bottom:8px}
+.frame{width:390px;height:844px;border-radius:14px;overflow:hidden;border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.5)}
+
+/* ══ 屏 ══ */
+.scr{width:390px;height:844px;background:var(--bg);color:var(--txt);display:flex;flex-direction:column;padding:14px 16px;position:relative;overflow:hidden;font-family:var(--sys)}
+.scr::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 46%,transparent 55%,rgba(0,0,0,.42))}
+.scr.shake{animation:shake .42s .1s}
+@keyframes shake{10%{transform:translate(3px,-2px)}30%{transform:translate(-4px,2px)}50%{transform:translate(2px,1px)}70%{transform:translate(-2px,-1px)}}
+
+/* 名牌 */
+.plate{display:flex;align-items:baseline;gap:10px}
+.plate .name{font-size:17px;font-weight:700;letter-spacing:.03em}
+.plate .seat{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--faint)}
+.pres{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.pres i{width:7px;height:7px;border-radius:50%;background:var(--dim);animation:breath 2.6s ease-in-out infinite}
+.pres.hot{color:var(--it)}
+.pres.hot i{background:var(--it);animation:breath .8s ease-in-out infinite}
+@keyframes breath{50%{opacity:.25}}
+
+/* 骰 */
+.dice{display:flex;gap:9px;justify-content:center;padding:8px 0 4px}
+.die{width:52px;height:52px;border-radius:10px;background:#f5f3ee;border:1px solid #d9d5cc;position:relative;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:8px}
+.die i{border-radius:50%;background:#26231e;place-self:center;width:9px;height:9px;visibility:hidden}
+.die.r i{background:#c23a2b}
+.die .fly{position:absolute;right:3px;top:1px;font-size:9px;color:#c23a2b;font-weight:600}
+.dice.mine .die:nth-child(2n){transform:rotate(1.8deg)}
+.dice.mine .die:nth-child(2n+1){transform:rotate(-1.6deg)}
+.die.cover{background:#1d2024;border-color:var(--line2);overflow:hidden}
+.die.cover b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.1em;font-weight:400}
+.scan .die.cover::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(116,184,200,.14) 50%,transparent 70%);transform:translateX(-100%);animation:scan 2.1s linear infinite}
+@keyframes scan{to{transform:translateX(100%)}}
+.reveal .die{animation:flip .5s backwards}
+.reveal .die:nth-child(2){animation-delay:.08s}.reveal .die:nth-child(3){animation-delay:.16s}
+.reveal .die:nth-child(4){animation-delay:.24s}.reveal .die:nth-child(5){animation-delay:.32s}
+@keyframes flip{from{transform:rotateX(92deg);opacity:0}}
+
+.tell{font-family:var(--mono);font-size:11px;color:var(--dim);padding:2px 2px}
+
+/* 它的台词 */
+.say{border-left:2px solid var(--it);padding:7px 11px;margin:6px 0 2px;font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--it);min-height:46px;animation:sayin .35s backwards}
+.say .tag{display:inline-block;font-size:8.5px;border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-right:7px;opacity:.45;vertical-align:1px}
+@keyframes sayin{from{opacity:0;transform:translateX(-8px)}}
+.cur{animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* 中轴：裁判层 */
+.spine{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel);margin:8px -16px;padding:14px 22px 12px;text-align:center;position:relative}
+.spine .lab{font-family:var(--mono);font-size:10px;letter-spacing:.42em;color:var(--faint)}
+.bid{font-size:92px;font-weight:800;letter-spacing:.01em;line-height:1.12;animation:slam .34s cubic-bezier(.2,1.5,.4,1) backwards}
+.bid small{font-size:34px;font-weight:600;color:var(--dim);margin:0 12px;vertical-align:14px}
+@keyframes slam{from{transform:scale(1.9);opacity:0}}
+.fuse{display:flex;gap:4px;margin:6px 0 0;position:relative;height:12px}
+.fuse i{flex:1;border-radius:2px;background:var(--line)}
+.fuse i.on{background:#dfddd6}
+.fuse i.edge{animation:edge 1.4s ease-in-out infinite}
+@keyframes edge{50%{background:var(--red);box-shadow:0 0 10px rgba(229,72,60,.55)}}
+.fuse i.deep{background:#2e191b}
+.fuse .zone{position:absolute;right:0;top:-15px;width:49%;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:#a04038}
+.potrow{margin-top:14px;font-size:14px;color:var(--dim);display:flex;justify-content:center;align-items:baseline;gap:8px}
+.potrow b{font-size:32px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+.seal{margin-top:8px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--faint)}
+.seal.ok{color:var(--green);animation:fadein .5s .55s backwards}
+@keyframes fadein{from{opacity:0}}
+
+/* 判定 */
+.verdict{margin:10px 0 4px}
+.verdict .word{display:inline-block;border:3px solid var(--red);color:var(--red);font-size:30px;font-weight:800;letter-spacing:.5em;padding:4px 10px 4px 20px;border-radius:6px;transform:rotate(-5deg);animation:stamp .36s cubic-bezier(.25,1.4,.4,1) .12s backwards;box-shadow:0 0 26px rgba(229,72,60,.22)}
+@keyframes stamp{from{transform:scale(2.6) rotate(3deg);opacity:0}to{transform:scale(1) rotate(-5deg)}}
+.verdict .sub{margin-top:10px;font-size:16px;font-weight:600;color:var(--red)}
+.verdict .sub2{margin-top:2px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.flash{position:absolute;inset:0;background:#fff;pointer-events:none;animation:flash .5s forwards;z-index:9}
+@keyframes flash{from{opacity:.85}to{opacity:0}}
+
+/* 你的领地 */
+.mycalc{align-self:flex-start;font-size:12.5px;color:var(--dim);border:1px dotted var(--faint);border-radius:6px;padding:3px 10px;margin:2px 0}
+.mycalc b{color:var(--txt);font-size:14px;margin:0 3px}
+.acts{display:flex;gap:10px;padding:8px 0 2px}
+.btn{flex:1;height:66px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;letter-spacing:.5em;padding-left:.5em}
+.btn.bid2{background:var(--txt);color:#141517}
+.btn.open2{background:none;border:2px solid var(--red);color:var(--red);animation:danger 2.6s ease-in-out infinite}
+@keyframes danger{50%{box-shadow:0 0 18px rgba(229,72,60,.35);border-color:#ff6a5e}}
+.btn.next{background:var(--txt);color:#141517;letter-spacing:.3em;animation:slam .3s .5s cubic-bezier(.2,1.5,.4,1) backwards}
+.deadbar{height:66px;border-radius:12px;border:1px dashed var(--line2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;letter-spacing:.5em;color:var(--faint);margin:8px 0 2px}
+.decl{display:flex;gap:9px;justify-content:center;padding:6px 0 0}
+.decl .d{width:54px;height:46px;border:1px solid var(--line2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:600}
+.off{opacity:.32;filter:saturate(0)}
+.dimmed{opacity:.6}
+.grow{flex:1 1 auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>方向 E · 素桌 v2 —— 从「公平对弈」推导，不穿皮肤</h1>
+  <p class="sub">结构五条不变：<b>镜像对称</b>（两半区同构，座位差异明牌）／<b>中轴归裁判</b>／<b>两种声部</b>（引擎事实 vs 它的话）／<b>公开动作对等响</b>／<b>红色只给开</b>。
+  v2 按用户反馈修三刀：<b>砍小字</b>（页脚、元数据行、占位芯片、副标签全删）；<b>加 juice</b>（报价砸落、开牌白闪＋震屏＋盖章、逐颗翻骰、思考态断电＋扫描）；<b>造紧张感</b>（阶梯改深水引信、池加重、「开」常驻危险脉冲、它的「在看」呼吸灯）。</p>
+  <div class="strip" id="out"></div>
+</div>
+<script>
+/* 数据与 docs/ui/screens.js 同源（禁止各编各的） */
+const HAND=[5,5,3,1,6], OPP=[5,2,4,6,1], BID={n:4,f:5}, OPPNAME='DeepSeek-V3';
+const LINE_IDLE='4 个 5。你上周在这个数上怂过两次。';
+const LINE_THINK='你摇完计数器隔了一下才停手——';
+const LINE_OPEN='五个。你摇完计数器还是开了——你不是在算牌，你是在攒胆子。';
+const PIPS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,3,6,2,5,8]};
+const die=f=>`<div class="die ${f===1||f===4?'r':''}">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+const hand=a=>a.map(die).join('');
+
+function E(state){
+  const open=state==='open', think=state==='think';
+  const say=open?LINE_OPEN:think?LINE_THINK+'<span class="cur">▊</span>':LINE_IDLE;
+  const fuse=[...Array(10)].map((_,i)=>`<i class="${i<4?'on':i===4?'on edge':'deep'}"></i>`).join('');
+  return `<div class="scr ${open?'shake':''}">
+    ${open?'<div class="flash"></div>':''}
+    <div class="plate">
+      <span class="name">${OPPNAME}</span>
+      <span class="seat">SEAT 02 · 无计数器</span>
+      <span class="pres ${think?'hot':''}"><i></i>${think?'在动':'在看'}</span>
+    </div>
+    <div class="dice ${think?'scan':''} ${open?'reveal':''}">
+      ${open?hand(OPP):'<div class="die cover"><b>封</b></div>'.repeat(5)}
+    </div>
+    <div class="tell">它算过 ${think||open?2:1} 次</div>
+    <div class="say"><span class="tag">AI 生成</span>${say}</div>
+    <div class="grow"></div>
+
+    <div class="spine">
+      <div class="lab">${open?'点 清':'它 报'}</div>
+      <div class="bid">${open?5:BID.n}<small>个</small>${BID.f}</div>
+      ${open?`<div class="verdict">
+        <span class="word">成立</span>
+        <div class="sub">你开 · 你输 · 骰 5 → 4</div>
+        <div class="sub2">池 18 → 它</div>
+      </div>`:`
+      <div class="fuse"><span class="zone">深 水 ×2</span>${fuse}</div>
+      <div class="potrow">池<b>18</b></div>`}
+      <div class="seal ${open?'ok':''}">${open?'✓ 验讫 · 骰面与开局承诺一致':'⊙ 双方骰面已上封 · 摊牌验'}</div>
+    </div>
+
+    <div class="grow"></div>
+    <div class="mycalc ${think?'dimmed':''}">算 <b>53%</b> 仅你可见</div>
+    <div class="dice mine ${think?'dimmed':''}">${hand(HAND)}</div>
+    ${open?'<div class="acts"><div class="btn next">下一局</div></div>'
+      :think?'<div class="deadbar">它 在 动</div>'
+      :'<div class="acts"><div class="btn bid2">报</div><div class="btn open2">开</div></div>'}
+    <div class="decl ${think||open?'off':''}">
+      <div class="d">盲</div><div class="d">斋</div><div class="d">抬</div><div class="d">算</div><div class="d">戳</div>
+    </div>
+    <div class="plate" style="padding-top:8px">
+      <span class="name" style="font-size:15px">你</span>
+      <span class="seat">SEAT 01 · 计数器在桌</span>
+    </div>
+  </div>`;
+}
+
+const qs=new URLSearchParams(location.search);
+if(qs.get('solo')){
+  document.body.style.cssText='margin:0;padding:0;background:#111214';
+  document.body.innerHTML=E(qs.get('solo'));
+}else{
+  document.getElementById('out').innerHTML=[['idle','正常'],['think','AI 思考'],['open','开牌瞬间']]
+    .map(([s,l])=>`<div><div class="cap">E v2 · 手机 · ${l}</div><div class="frame">${E(s)}</div></div>`).join('');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>《开！》方向 M · 辉光（像素帧缓冲 × CRT 玻璃 × 数据兽）</title>
+<style>
+/* 工艺 §1.1 */
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100dvh;overflow:hidden;overscroll-behavior:none;background:#000}
+body{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block}
+</style>
+</head>
+<body>
+<div class="viewport"><canvas id="game"></canvas></div>
+<script>
+/* ══════════ 《开！》方向 M · 辉光 ══════════
+   两级渲染：195×422 像素帧缓冲（2D）→ WebGL CRT 玻璃（桶形畸变+色差+泛光+
+   荧光栅+滚动带+电源开机）。数据与 screens.js 同源；工艺规范 CRAFT.md 注 §号。 */
+const W=195,H=422,SS=4;                       /* SS：玻璃层背板倍率 */
+const glc=document.getElementById('game');
+glc.width=W*SS;glc.height=H*SS;
+const off=document.createElement('canvas');off.width=W;off.height=H;
+const ctx=off.getContext('2d');
+function fit(){const s=Math.max(1,Math.floor(Math.min(innerWidth/W,innerHeight/H)));
+  glc.style.width=W*s+'px';glc.style.height=H*s+'px'}
+addEventListener('resize',fit);fit();
+
+/* ── 数据（同源） ── */
+const HAND=[5,5,3,1,6],OPP=[5,2,4,6,1],OPPNAME='DeepSeek-V3';
+const LINE_IDLE='4个5。你上周在这个数上怂过两次。';
+const LINE_OPEN='五个。你摇完计数器还是开了——你在攒胆子。';
+const LINE_ITOPEN='报满了？行，我看看。';
+const PIPS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,3,6,2,5,8]};
+const GLY='0123456789ABCDEF◢◣▲▌░▒▓ｱｶｻﾀﾅﾊﾏﾔ';
+
+const C={it:'#54e0f8',itHot:'#d8fbff',itDim:'#17505e',txt:'#eceadf',dim:'#7e8798',faint:'#454d5a',
+  you:'#ffc45e',youHot:'#fff3d8',red:'#ff3b30',redHot:'#ffd9d4',green:'#3ddc84',
+  die:'#d8d3c2',dieHi:'#efece0',dieLo:'#a29c8a',pip:'#1a1e26',pipR:'#c53522'};
+
+/* ── 时钟/补间/调度 [§3/§7] ── */
+let now=0,timeScale=1,FR=1,last=performance.now();
+const tweens=[],later=[];
+function tw(o){o.t0=now+(o.delay||0);o.dur=o.dur*(0.9+Math.random()*0.2);tweens.push(o)}   /* §3.8 */
+function at(ms,fn){later.push({t:now+ms,fn})}
+const easeOver=p=>1+2.2*Math.pow(p-1,3)+1.2*Math.pow(p-1,2), easeOut=p=>1-Math.pow(1-p,3);
+function stepClock(dt){now+=dt*timeScale;
+  for(let i=later.length-1;i>=0;i--)if(now>=later[i].t){const f=later[i].fn;later.splice(i,1);f()}
+  for(let i=tweens.length-1;i>=0;i--){const t=tweens[i];if(now<t.t0)continue;
+    const p=Math.min(1,(now-t.t0)/t.dur);t.apply((t.ease||easeOut)(p));
+    if(p>=1){tweens.splice(i,1);t.done&&t.done()}}}
+
+/* ── 状态 ── */
+const S={pot:18,fuse:5,bid:{n:4,f:5},who:'它',phase:'boot'};
+const V={bidScale:1,bidText:null,potShow:18,potPop:0,power:0,logoA:1,mid:1,actIn:1,
+  say:{full:'',n:0,timer:0},camZ:1,shX:0,shY:0,flash:0,glitch:0,
+  blocks:OPP.map(f=>({state:'enc',face:f,gly:'A',cyc:0,flip:0})),
+  dice:HAND.map(()=>({hit:0})),verdict:null,seal:'⊙ 双方骰面已上封 · 摊牌验',sealC:C.faint,
+  press:null,deny:null,parX:0,parY:0,ripples:[],parts:[],packs:[],rain:[],rain2:[],pulses:[]};
+for(let i=0;i<10;i++)V.rain.push({x:6+Math.random()*(W-12)|0,y:Math.random()*300,sp:.2+Math.random()*.4,g:GLY[Math.random()*GLY.length|0]});
+for(let i=0;i<7;i++)V.rain2.push({x:6+Math.random()*(W-12)|0,y:Math.random()*300,sp:.5+Math.random()*.7,g:GLY[Math.random()*GLY.length|0]});
+
+/* ── 数据兽：线框八面体＋轨道字符 ── */
+const ENT={rot:0,pulse:0,rate:1,rage:0,shatter:0,
+  vx:[[0,-1,0],[0,1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]],
+  ed:[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[4,3],[3,5],[5,2]],
+  burst:ENT_BURST()};
+function ENT_BURST(){return [...Array(6)].map(()=>{const a=Math.random()*6.283,b=Math.random()*3.14;
+  return [Math.cos(a)*Math.sin(b),Math.cos(b),Math.sin(a)*Math.sin(b)]})}
+
+/* ── 音 [§6] ── */
+let AC=null,HUMG=null;
+function ac(){if(!AC){AC=new (window.AudioContext||window.webkitAudioContext)();
+  const o=AC.createOscillator();HUMG=AC.createGain();o.type='triangle';o.frequency.value=52;
+  HUMG.gain.value=.012;o.connect(HUMG).connect(AC.destination);o.start()}return AC}
+const dtn=()=>1+(Math.random()-.5)*.1;
+function blip(f,dur=.06,type='square',vol=.1){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type=type;o.frequency.value=f*dtn();g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(g).connect(a.destination);o.start(t);o.stop(t+dur+.02)}
+function sweep(f0,f1,dur,vol=.12){const a=ac();if(a.state!=='running')return;   /* §6.1 不积压 */
+  const k=dtn();f0*=k;f1*=k;                                                     /* §6.3 变调 */
+  const t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='square';o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur+.05);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+dur+.08)}
+function sDrop(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();  /* 判定低频 [§6.2] */
+  if(HUMG)HUMG.gain.setValueAtTime(.001,t),HUMG.gain.linearRampToValueAtTime(.012,t+.8);
+  o.type='sine';o.frequency.setValueAtTime(74*dtn(),t);o.frequency.exponentialRampToValueAtTime(21,t+.42);
+  g.gain.setValueAtTime(.75,t);g.gain.exponentialRampToValueAtTime(.001,t+.55);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.6);
+  const n=a.createBufferSource(),b=a.createBuffer(1,a.sampleRate*.25,a.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+  const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=320;
+  const g2=a.createGain();g2.gain.value=.4;n.buffer=b;n.connect(f).connect(g2).connect(a.destination);n.start(t)}
+function sClack(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),b=a.createBuffer(1,900,a.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<900;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/900,2.4);
+  const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=2200+Math.random()*900;
+  const g=a.createGain();g.gain.value=.3;n.buffer=b;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+const sTick=i=>blip(720+i*110+S.fuse*55,.05,'square',.09);
+const sDeny=()=>blip(150,.09,'sawtooth',.12);
+const sType=()=>{if(AC&&AC.state==='running')blip(1500,.02,'square',.03)};      /* §6.1 不积压 */
+
+/* ── 输入 [§4] ── */
+const BTN={};
+function press(id){V.press={id,t:now};blip(430,.05,'square',.08);try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
+function scrEl(){return off.parentNode?off:glc}
+function toGame(e){const r=scrEl().getBoundingClientRect();
+  let nx=((e.clientX-r.left)/r.width)*2-1,ny=((e.clientY-r.top)/r.height)*2-1;
+  if(!off.parentNode){const k=1+.052*(nx*nx+ny*ny);nx*=k;ny*=k}      /* 补偿玻璃桶形畸变 */
+  return [(nx*.5+.5)*W,(ny*.5+.5)*H]}
+document.addEventListener('pointerdown',e=>{
+  ac().resume&&ac().resume();
+  const [x,y]=toGame(e);
+  if(S.phase==='boot'){V.power=1;bootDone();return}                 /* §3.6 可跳过 */
+  if(S.phase==='seq'){timeScale=3.2;return}                          /* §3.6 可加速 */
+  let hit=null;
+  for(const id in BTN){const b=BTN[id];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){hit=id;break}}
+  /* 防重入：命中即锁 phase，90ms 预备窗内二次点击落入快进分支 */
+  if(hit==='open'&&S.phase==='idle'){press('open');S.phase='seq';at(90,()=>seqOpen('you'))}
+  else if(hit==='raise'&&S.phase==='idle'){press('raise');S.phase='seq';at(90,()=>seqRaise())}
+  else if(hit==='next'&&S.phase==='settle'){press('next');S.phase='seq';at(90,()=>seqNext())}
+  else if(hit&&hit.startsWith('decl')){V.deny={id:hit,t:now,msg:'样机未接线'};sDeny();
+    try{navigator.vibrate&&navigator.vibrate(24)}catch(e){}}         /* §4.2 */
+  else V.ripples.push({x,y,t:now});                                  /* §4.4 */
+});
+document.addEventListener('pointermove',e=>{const r=scrEl().getBoundingClientRect();
+  V.parX=((e.clientX-r.left)/r.width-.5)*2;V.parY=((e.clientY-r.top)/r.height-.5)*2});
+document.addEventListener('pointerup',()=>{V.press=null});
+
+function say(line){V.say={full:line,n:0,timer:0}}
+function burst(x,y,n,cols,sp){for(let i=0;i<n;i++){const a=Math.random()*6.283,v=sp*(.3+Math.random());
+  V.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-.8,l:1,dl:.018+Math.random()*.02,s:1+(Math.random()<.3?1:0),c:cols[Math.random()*cols.length|0]})}}
+function shake(m){tw({dur:360,apply:p=>{const k=m*(1-p);
+  V.shX=Math.round((Math.random()-.5)*k);V.shY=Math.round((Math.random()-.5)*k)},done:()=>{V.shX=0;V.shY=0}})}
+function hitStop(){const prev=timeScale>0?timeScale:1;timeScale=0;   /* §3.3 保存用户快进 */
+  setTimeout(()=>{if(timeScale===0)timeScale=prev},85)}
+
+/* ── 序列 [§3] ── */
+function seqOpen(opener){
+  S.phase='seq';ENT.rage=1;ENT.rate=3.4;
+  at(240,()=>{                                                        /* §3.2 预备拍 */
+    try{navigator.vibrate&&navigator.vibrate([30,40,60])}catch(e){}
+    V.flash=1;V.glitch=1;shake(7);sDrop();sweep(2400,180,.3,.15);    /* hit-stop 只留给判定拍 [§3.3 一局一次] */
+    tw({dur:340,apply:p=>{V.flash=1-p}});
+    tw({dur:620,apply:p=>{V.glitch=(1-p)*.8}});
+    tw({dur:260,apply:p=>{ENT.shatter=p}});                           /* 数据兽炸开 */
+    V.bidText='—';V.verdict=null;
+    say(opener==='you'?LINE_OPEN:LINE_ITOPEN);
+    V.blocks.forEach((b,i)=>{                                         /* §3.4 逐块解密 */
+      at(240+i*160,()=>{b.state='dec';b.flip=0;
+        tw({dur:420,apply:p=>{b.flip=p},done:()=>{b.state='die';sClack();
+          burst(blockX(i)+11,BLK_Y+11,6,[C.it,C.itHot,'#9adfef'],1.7)}})})});
+    const hits=[];
+    OPP.forEach((f,i)=>{if(f===5||f===1)hits.push(['b',i])});
+    HAND.forEach((f,i)=>{if(f===5||f===1)hits.push(['d',i])});
+    let n=0;
+    hits.forEach((h,k)=>{
+      at(1280+k*150,()=>{n++;V.bidText=''+n;sTick(n);
+        if(h[0]==='b'){V.blocks[h[1]].hit=now;burst(blockX(h[1])+11,BLK_Y+11,4,[C.you,C.youHot],1.5)}
+        else{V.dice[h[1]].hit=now;burst(dieX(h[1])+15,DIE_Y+15,4,[C.you,C.youHot],1.5)}})});
+    const win=opener==='it';
+    at(1280+hits.length*150+120,()=>{tw({dur:170,apply:p=>{V.mid=1-p}})});  /* §5.1 引信/池先退场 */
+    at(1280+hits.length*150+250,()=>{
+      V.verdict={win,scale:2.6,rot:-.06,hot:1,a:1,
+        sub:win?'它开·它输·它骰 5→4':'你开·你输·骰 5→4',
+        sub2:`池 ${S.pot}${S.fuse>5?'×2':''} → ${win?'你':'它'}`};
+      tw({dur:300,ease:easeOver,apply:p=>{V.verdict.scale=2.6-1.6*p}});
+      tw({dur:1400,apply:p=>{if(V.verdict)V.verdict.hot=1-p}});        /* 烙印冷却 */
+      sDrop();shake(5);hitStop();
+      try{navigator.vibrate&&navigator.vibrate(70)}catch(e){}
+      burst(W/2,206,30,[C.red,C.redHot,C.you],2.8);
+      for(let i=0;i<6;i++){const px=W/2-12+Math.random()*24;
+        V.packs.push({x:px,y:224,tx:px+(Math.random()-.5)*30,ty:win?390:96,t:now+i*60,c:C.you})}
+      tw({dur:600,delay:250,apply:p=>{V.potShow=S.pot*(1-p)}});
+    });
+    at(1280+hits.length*150+700,()=>{V.seal='✓ 验讫 · 骰面与开局承诺一致';V.sealC=C.green;blip(1040,.09,'triangle',.09)});
+    at(1280+hits.length*150+950,()=>{S.phase='settle';timeScale=1;
+      V.actIn=0;tw({dur:240,ease:easeOver,apply:p=>{V.actIn=p}});
+      ENT.rage=win?0:.4;ENT.rate=1;tw({dur:600,apply:p=>{ENT.shatter=1-p}})});
+  });
+}
+function seqRaise(){
+  S.phase='seq';
+  for(let i=0;i<5;i++)V.packs.push({x:52,y:344,tx:W/2+(Math.random()-.5)*20,ty:158,t:now+i*50,c:C.you});
+  blip(560,.07,'square',.1);
+  at(320,()=>{
+    S.bid={n:5,f:5};S.who='你';S.pot=20;S.fuse=6;
+    V.bidText=null;V.potPop=1;tw({dur:280,apply:p=>{V.potPop=1-p}});
+    tw({dur:420,apply:p=>{V.potShow=18+2*p}});                       /* §5.2 池 18→20 滚动物化 */
+    V.bidScale=.4;tw({dur:300,ease:easeOver,apply:p=>{V.bidScale=.4+.6*p}});
+    burst(W/2+66,FUSE_Y+3,12,[C.red,'#ff8a5c'],2);sDrop();
+    ENT.rate=2.6;say('…');S.phase='think';
+    tw({dur:700,apply:p=>{V.camZ=1+.02*p}});                          /* §2.7 */
+  });
+  at(2400,()=>{say(LINE_ITOPEN)});
+  at(3500,()=>{tw({dur:300,apply:p=>{V.camZ=1.02-.02*p}});seqOpen('it')});
+}
+function seqNext(){
+  S.phase='seq';
+  S.pot=18;S.fuse=5;S.bid={n:4,f:5};S.who='它';
+  tw({dur:150,apply:p=>{if(V.verdict)V.verdict.a=1-p},done:()=>{V.verdict=null;   /* §5.1 判定退场再回填 */
+    V.seal='⊙ 双方骰面已上封 · 摊牌验';V.sealC=C.faint;
+    tw({dur:260,apply:p=>{V.mid=p}})}});
+  V.blocks.forEach((b,i)=>{at(120+i*70,()=>{b.state='dec';sClack();               /* §5.1 反向翻面重上封 */
+    tw({dur:300,apply:p=>{b.flip=1-p},done:()=>{b.state='enc';b.flip=0}})})});
+  tw({dur:500,delay:300,apply:p=>{V.potShow=18*p},done:()=>{V.potShow=18}});
+  ENT.rate=2;say('…');
+  at(1300,()=>{V.bidText=null;V.bidScale=0;tw({dur:320,ease:easeOver,apply:p=>{V.bidScale=p}});
+    V.actIn=0;tw({dur:240,ease:easeOver,apply:p=>{V.actIn=p}});
+    sDrop();say(LINE_IDLE);ENT.rate=1;ENT.rage=0;S.phase='idle'});
+}
+function bootDone(){if(S.phase!=='boot')return;S.phase='idle';
+  V.bidScale=0;tw({dur:320,ease:easeOver,apply:p=>{V.bidScale=p}});
+  V.actIn=0;tw({dur:240,ease:easeOver,apply:p=>{V.actIn=p}});
+  sweep(180,880,.25,.1);say(LINE_IDLE)}
+
+/* ── 2D 帧缓冲绘制 ── */
+const HOR=88,BLK_Y=102,DIE_Y=268,FUSE_Y=198;
+const blockX=i=>27+i*30,dieX=i=>10+i*36;
+const R=Math.round;
+let AMUL=1;                                       /* 分区透明度乘子（§5.1 渐进出退场用） */
+function tx(s,x,y,size,color,{bold=false,mono=false,align='left',alpha=1}={}){
+  ctx.globalAlpha=alpha*AMUL;ctx.fillStyle=color;
+  ctx.font=`${bold?'bold ':''}${size}px ${mono?'Menlo,monospace':'"PingFang SC",sans-serif'}`;
+  ctx.textAlign=align;ctx.textBaseline='top';ctx.fillText(s,R(x),R(y));ctx.globalAlpha=AMUL}
+function txGlow(s,x,y,size,hot,tint,o={}){                            /* 色差回声＋热核（泛光吃这口） */
+  tx(s,x-1,y,size,tint,{...o,alpha:.5});tx(s,x+1,y,size,'#ff5f88',{...o,alpha:.28});
+  tx(s,x,y,size,hot,o)}
+
+function drawDie(x,y,s,f,hit){
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(R(x)+1,R(y+s),s-2,2);   /* §2.4 接触影 */
+  ctx.fillStyle=C.dieLo;ctx.fillRect(R(x),R(y+1),s,s-1);
+  ctx.fillStyle=C.die;ctx.fillRect(R(x),R(y),s,s-2);
+  ctx.fillStyle=C.dieHi;ctx.fillRect(R(x),R(y),s,1);
+  ctx.clearRect(R(x),R(y),1,1);ctx.clearRect(R(x+s-1),R(y),1,1);
+  ctx.clearRect(R(x),R(y+s-1),1,1);ctx.clearRect(R(x+s-1),R(y+s-1),1,1);
+  for(let k=0;k<s-2;k+=2)ctx.fillStyle='rgba(0,0,0,.10)',ctx.fillRect(R(x+1+k),R(y+s-4),1,1); /* 抖动暗部 */
+  const u=s/7.5;ctx.fillStyle=(f===1||f===4)?C.pipR:C.pip;
+  const pp=Math.max(2,R(u*1.35));
+  for(const i of PIPS[f])ctx.fillRect(R(x+u*1.6+(i%3)*u*2.05),R(y+u*1.35+(i/3|0)*u*2.05),pp,pp);
+  if(f===1)tx('飞',x+s-8,y+1,6,C.pipR);
+  if(hit&&now-hit<400){const a=1-easeOut((now-hit)/400);
+    ctx.globalAlpha=a;ctx.strokeStyle=C.you;ctx.strokeRect(R(x)-2.5,R(y)-2.5,s+5,s+5);
+    ctx.globalAlpha=a*.5;ctx.fillStyle=C.youHot;ctx.fillRect(R(x),R(y),s,s);ctx.globalAlpha=1}}
+
+function drawBlock(b,i){
+  const x=blockX(i),y=BLK_Y,s=22;
+  if(b.state==='die'||(b.state==='dec'&&b.flip>.75)){drawDie(x,y,s,b.face,b.hit);return}
+  const dec=b.state==='dec';
+  ctx.fillStyle='#0a1420';ctx.fillRect(R(x),R(y),s,s);
+  ctx.strokeStyle=dec?C.it:C.itDim;ctx.strokeRect(R(x)+.5,R(y)+.5,s-1,s-1);
+  if((now/(dec?55:150)|0)!==b.cyc){b.cyc=now/(dec?55:150)|0;b.gly=GLY[Math.random()*GLY.length|0]}
+  tx(b.gly,x+s/2,y+6,11,dec?C.itHot:C.itDim,{mono:true,align:'center',alpha:dec?1:.8});
+  ctx.fillStyle=C.red;ctx.fillRect(R(x+s-5),R(y+2),3,3);
+  if(S.phase==='think'){const sw=(now/9|0)%(s*2)-s;
+    ctx.globalAlpha=.3;ctx.fillStyle=C.it;ctx.fillRect(R(x+Math.max(0,Math.min(s-2,sw))),R(y),2,s);ctx.globalAlpha=1}}
+
+function drawEntity(){
+  const e=ENT;e.rot+=.014*e.rate*FR;e.pulse+=.03*e.rate*FR;
+  const cx=W/2+R(V.parX*4),cy=58+Math.sin(e.pulse*.7)*2,sc=13+Math.sin(e.pulse)*1.5;
+  const cr=Math.cos(e.rot),sr=Math.sin(e.rot),ct=Math.cos(.5),st=Math.sin(.5);
+  const P2=e.vx.map((v,i)=>{
+    let X=v[0]*cr+v[2]*sr, Z=-v[0]*sr+v[2]*cr, Y=v[1];
+    let Y2=Y*ct-Z*st, Z2=Y*st+Z*ct;
+    const k=1/(1+Z2*.22), sh=e.shatter;
+    return [cx+(X*sc*k)+e.burst[i][0]*sh*26, cy+(Y2*sc*k)+e.burst[i][1]*sh*26, k]});
+  const col=e.rage>0?`rgba(255,${96-40*e.rage|0},70,`:`rgba(84,224,248,`;
+  ctx.lineWidth=1;
+  const ea=(1-e.shatter*.75);
+  for(const [a,b] of e.ed){ctx.strokeStyle=col+(.34*ea*(P2[a][2]+P2[b][2])*.5+.1)+')';
+    ctx.beginPath();ctx.moveTo(R(P2[a][0])+.5,R(P2[a][1])+.5);ctx.lineTo(R(P2[b][0])+.5,R(P2[b][1])+.5);ctx.stroke()}
+  P2.forEach(p=>{ctx.fillStyle=col+(.85*ea)+')';ctx.fillRect(R(p[0])-1,R(p[1])-1,2,2)});
+  ctx.fillStyle=e.rage>0?C.redHot:C.itHot;ctx.fillRect(R(cx)-1,R(cy)-1,3,3);       /* 热核（喂泛光） */
+  for(let i=0;i<5;i++){const a=e.rot*.7+i*1.2566;                                   /* 轨道字符环 */
+    const ox=cx+Math.cos(a)*22,oy=cy+Math.sin(a)*8-2;
+    if(Math.sin(a)<0)tx(GLY[(i*7+(now/400|0))%GLY.length],ox,oy,6,col+'.5)',{mono:true,align:'center'})}
+  if(S.phase==='think')for(let i=0;i<3;i++){const p=((now/280+i/3)%1);
+    tx(GLY[(now/80+i*5|0)%GLY.length],cx-26-p*38,cy-14+i*8,6,C.it,{mono:true,alpha:.8*(1-p)})}
+}
+
+function bevel(b,label,fill,txtC,fs=13,hot){
+  const pr=V.press&&V.press.id===b.id&&now-V.press.t<160?1:0;
+  const dn=V.deny&&V.deny.id===b.id&&now-V.deny.t<300?R(Math.sin((now-V.deny.t)/18)*2):0;
+  const x=b.x+dn,y=b.y+pr;
+  ctx.fillStyle='#000';ctx.fillRect(R(x)+1,R(y)+2,b.w,b.h);
+  ctx.fillStyle=fill;ctx.fillRect(R(x),R(y),b.w,b.h-1+pr);
+  ctx.globalAlpha=.4;ctx.fillStyle='#fff';ctx.fillRect(R(x),R(y),b.w,1);ctx.globalAlpha=1;
+  ctx.globalAlpha=.3;ctx.fillStyle='#000';ctx.fillRect(R(x),R(y+b.h-2+pr),b.w,1);ctx.globalAlpha=1;
+  (hot?txGlow:tx)(label,x+b.w/2,y+(b.h-fs)/2-1,fs,hot||txtC,txtC,{bold:true,align:'center'})}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#05070d';ctx.fillRect(0,0,W,H);
+
+  if(S.phase==='boot'){                                                /* 开机帧 */
+    const j=(now/80|0)%3-1;
+    txGlow('开！',W/2+j,H/2-30,30,'#fff',C.it,{bold:true,align:'center'});
+    tx('数 据 面 · 正 在 通 电',W/2,H/2+10,7,C.dim,{mono:true,align:'center'});
+    tx('触 摸 跳 过',W/2,H/2+26,6,C.faint,{mono:true,align:'center'});
+    return}
+
+  const px2=R(V.parX*2),px5=R(V.parX*4);
+  ctx.save();ctx.translate(V.shX,V.shY);
+  ctx.translate(W/2,190);ctx.scale(V.camZ,V.camZ);ctx.translate(-W/2,-190);
+
+  /* 背景字符雨（两层视差 §2.6） */
+  for(const r of V.rain){r.y+=r.sp*FR;if(r.y>320){r.y=36;r.x=6+Math.random()*(W-12)|0}
+    tx(r.g,r.x+px2,r.y,6,C.it,{mono:true,alpha:.10})}
+  /* 地平线辉光 */
+  const hg=ctx.createLinearGradient(0,HOR-14,0,HOR+8);
+  hg.addColorStop(0,'rgba(84,224,248,0)');hg.addColorStop(.85,'rgba(84,224,248,.16)');hg.addColorStop(1,'rgba(84,224,248,0)');
+  ctx.fillStyle=hg;ctx.fillRect(0,HOR-14,W,22);
+  /* 地面网格 [§2.2 近亮远暗] */
+  const vpx=W/2+px5;
+  for(let i=0;i<9;i++){const y=HOR+i*i*3.2;if(y>334)break;
+    ctx.globalAlpha=.10+i*.06;ctx.strokeStyle=i>5?'#1e5566':'#123240';
+    ctx.beginPath();ctx.moveTo(0,R(y)+.5);ctx.lineTo(W,R(y)+.5);ctx.stroke()}
+  for(let k=-4;k<=4;k++){ctx.globalAlpha=.16;ctx.strokeStyle='#123240';
+    ctx.beginPath();ctx.moveTo(vpx+k*8,HOR);ctx.lineTo(W/2+k*46,334);ctx.stroke()}
+  ctx.globalAlpha=1;
+  /* 网格能量脉冲 */
+  if(Math.random()<.02*FR)V.pulses.push({k:(Math.random()*9|0)-4,p:0,sp:.006+Math.random()*.006});
+  for(let i=V.pulses.length-1;i>=0;i--){const u=V.pulses[i];u.p+=u.sp*FR;
+    if(u.p>=1){V.pulses.splice(i,1);continue}
+    const x0=W/2+u.k*46,y0=334,x1=vpx+u.k*8,y1=HOR;
+    const x=x0+(x1-x0)*u.p,y=y0+(y1-y0)*u.p;
+    ctx.fillStyle=C.itHot;ctx.globalAlpha=.8*(1-u.p*.6);ctx.fillRect(R(x)-1,R(y)-1,2,2);
+    ctx.fillStyle=C.it;ctx.globalAlpha=.3;ctx.fillRect(R(x0+(x1-x0)*(u.p-.05)),R(y0+(y1-y0)*(u.p-.05)),1,1);ctx.globalAlpha=1}
+  /* 中层字符雨 */
+  for(const r of V.rain2){r.y+=r.sp*FR;if(r.y>318){r.y=44;r.x=6+Math.random()*(W-12)|0}
+    tx(r.g,r.x+px5,r.y,7,C.it,{mono:true,alpha:.20});
+    tx(r.g,r.x+px5,r.y-7,6,C.it,{mono:true,alpha:.08})}
+
+  drawEntity();
+  V.blocks.forEach(drawBlock);
+  V.dice.forEach((d,i)=>{const gl2=Math.sin(now/900+i*1.7)*.8;
+    drawDie(dieX(i),DIE_Y+R(gl2),30,HAND[i],d.hit)});
+
+  for(let i=V.parts.length-1;i>=0;i--){const p=V.parts[i];
+    p.x+=p.vx*FR;p.y+=p.vy*FR;p.vy+=.045*FR;p.l-=p.dl*FR;
+    if(p.l<=0){V.parts.splice(i,1);continue}
+    ctx.globalAlpha=Math.max(0,p.l);ctx.fillStyle=p.c;ctx.fillRect(R(p.x),R(p.y),p.s,p.s)}
+  ctx.globalAlpha=1;
+  for(let i=V.packs.length-1;i>=0;i--){const k=V.packs[i];if(now<k.t)continue;
+    const p=Math.min(1,(now-k.t)/420);
+    const x=k.x+(k.tx-k.x)*easeOut(p),y=k.y+(k.ty-k.y)*easeOut(p);
+    ctx.fillStyle=k.c;ctx.fillRect(R(x),R(y),3,3);
+    ctx.globalAlpha=.4;ctx.fillRect(R(x-(k.tx-k.x)*.06),R(y-(k.ty-k.y)*.06),2,2);ctx.globalAlpha=1;
+    if(p>=1){V.packs.splice(i,1);blip(980,.04,'square',.05)}}
+  ctx.restore();
+
+  /* ═ HUD [§2.1 平面] ═ */
+  tx(OPPNAME,8,7,10,C.txt,{bold:true});
+  tx('SEAT02·无计数器·算过'+(S.phase==='idle'?1:2)+'次',8,19,6,C.faint,{mono:true});
+  const think=S.phase==='think';
+  const pa=.4+.6*Math.abs(Math.sin(now/(think?300:1300)));
+  ctx.fillStyle=think?C.it:C.dim;ctx.globalAlpha=pa;ctx.fillRect(W-34,9,3,3);ctx.globalAlpha=1;
+  tx(think?'在动':'在看',W-28,7,7,think?C.it:C.dim,{mono:true});
+
+  const sy=V.say;
+  if(sy.full&&sy.n<sy.full.length){sy.timer+=FR;if(sy.timer>2.2){sy.timer=0;sy.n++;if(sy.n%3===0)sType()}}
+  ctx.fillStyle=C.it;ctx.fillRect(8,32,1,18);
+  ctx.strokeStyle=C.itDim;ctx.strokeRect(12.5,32.5,26,9);
+  tx('AI生成',15,34,6,C.it,{mono:true,alpha:.8});
+  tx(sy.full.slice(0,sy.n)+((now/450|0)%2?'▌':' '),44,33,8,C.it,{mono:true});
+
+  tx(S.phase==='seq'||V.verdict?'· 点 清 ·':'· '+S.who+' 报 ·',W/2,126,7,C.faint,{mono:true,align:'center'});
+  ctx.save();ctx.translate(W/2,158);ctx.scale(V.bidScale||1,V.bidScale||1);
+  if(V.bidText!==null){txGlow(V.bidText,0,-16,34,'#fff',C.it,{bold:true,align:'center'});
+    tx('个5',28,4,11,C.dim,{bold:true})}
+  else{txGlow(''+S.bid.n,-26,-16,34,'#fff',C.it,{bold:true,align:'center'});
+    tx('个',0,-2,12,C.dim,{bold:true,align:'center'});
+    txGlow(''+S.bid.f,26,-16,34,'#fff',C.it,{bold:true,align:'center'})}
+  ctx.restore();
+
+  if(V.mid>.02){AMUL=V.mid;ctx.globalAlpha=AMUL;                      /* §5.1 引信/池/私注渐进出退场 */
+    const deep=S.fuse>5;
+    for(let i=0;i<10;i++){const x=9+i*18.6,on=i<S.fuse,dp=i>=5;
+      ctx.fillStyle=dp?(on?C.red:'#26100f'):(on?'#d8dee2':'#151b24');
+      if(i===S.fuse-1&&(now/380|0)%2)ctx.fillStyle=C.red;
+      ctx.fillRect(R(x),FUSE_Y,15,5)}
+    if(V.mid>.5&&(now/160|0)%3===0){const tipx=9+(S.fuse-1)*18.6+13;
+      V.parts.push({x:tipx,y:FUSE_Y+2,vx:(Math.random()-.5)*.4,vy:-.5-Math.random()*.5,l:.8,dl:.03,s:1,c:deep?C.red:C.you})}
+    tx('深水×2',W-9,FUSE_Y-9,6,deep?C.red:'#5c2a24',{mono:true,align:'right',alpha:deep?(.6+.4*Math.sin(now/200)):1});
+    const pp=1+V.potPop*.5;
+    ctx.save();ctx.translate(W/2,218);ctx.scale(pp,pp);
+    tx('池',-18,0,8,C.dim,{align:'center'});
+    txGlow(''+R(V.potShow),4,-3,14,C.youHot,C.you,{bold:true,align:'center'});
+    if(deep)tx('×2',26,-1,9,C.red,{bold:true,align:'center'});
+    ctx.restore();
+    tx(V.seal,W/2,236,6,V.sealC,{mono:true,align:'center'});
+    ctx.strokeStyle=C.faint;ctx.setLineDash([2,2]);ctx.strokeRect(8.5,DIE_Y-19.5,92,13);ctx.setLineDash([]);
+    tx('算 53% 仅你可见',13,DIE_Y-17,7,C.dim,{mono:true});
+    AMUL=1;ctx.globalAlpha=1;
+  }
+  if(V.verdict){const v=V.verdict;AMUL=v.a==null?1:v.a;ctx.globalAlpha=AMUL;
+    ctx.save();ctx.translate(W/2,206);ctx.rotate(v.rot);ctx.scale(v.scale,v.scale);
+    const wc=v.hot>.5?`rgb(255,${120+135*v.hot|0},${110+145*v.hot|0})`:C.red;      /* 白热→冷却 */
+    ctx.strokeStyle=wc;ctx.lineWidth=2;ctx.strokeRect(-34,-11,68,22);
+    tx('成 立',0,-8,15,wc,{bold:true,align:'center'});ctx.restore();
+    tx(v.sub,W/2,226,9,v.win?C.green:C.red,{bold:true,align:'center'});
+    tx(v.sub2,W/2,240,7,C.dim,{mono:true,align:'center'});
+    tx(V.seal,W/2,254,6,V.sealC,{mono:true,align:'center'});
+    AMUL=1;ctx.globalAlpha=1;
+  }
+
+  for(const k in BTN)delete BTN[k];
+  const by=326,ady=R((1-V.actIn)*8);                                  /* 动作行入场：升起+淡入 */
+  if(S.phase==='idle'){AMUL=Math.min(1,.15+V.actIn);ctx.globalAlpha=AMUL;
+    BTN.raise={id:'raise',x:8,y:by,w:86,h:32};bevel({...BTN.raise,y:by+ady},'报 5个5','#dfe4e0','#10141c',12);
+    BTN.open={id:'open',x:100,y:by,w:87,h:32};
+    const dpl=.5+.5*Math.sin(now/700);ctx.globalAlpha=.3*dpl*AMUL;
+    ctx.fillStyle=C.red;ctx.fillRect(97,by-3+ady,93,38);ctx.globalAlpha=AMUL;
+    bevel({...BTN.open,y:by+ady},'开','#c9251b',C.redHot,15,'#fff');
+    AMUL=1;ctx.globalAlpha=1;
+  }else if(S.phase==='settle'){AMUL=Math.min(1,.15+V.actIn);ctx.globalAlpha=AMUL;
+    BTN.next={id:'next',x:8,y:by,w:179,h:32};bevel({...BTN.next,y:by+ady},'下一局','#dfe4e0','#10141c',12);
+    AMUL=1;ctx.globalAlpha=1;
+  }else{
+    ctx.strokeStyle=C.faint;ctx.setLineDash([3,3]);ctx.strokeRect(8.5,by+.5,178,31);ctx.setLineDash([]);
+    tx(S.phase==='think'?'面板断电 · 它在动':'…',W/2,by+11,8,C.faint,{mono:true,align:'center'})}
+  ['盲','斋','抬','算','戳'].forEach((c,i)=>{
+    const b={id:'decl'+i,x:8+i*37,y:by+40,w:33,h:22};BTN[b.id]=b;
+    ctx.globalAlpha=S.phase!=='idle'?.35:1;bevel(b,c,'#12181f',S.phase!=='idle'?C.faint:C.txt,11);ctx.globalAlpha=1});
+  if(V.deny&&now-V.deny.t<900)tx(V.deny.msg,W/2,by+68,6,C.dim,{mono:true,align:'center',
+    alpha:1-Math.max(0,(now-V.deny.t-550)/350)});
+  tx('你',8,H-14,9,C.txt,{bold:true});
+  tx('SEAT01·计数器在桌',24,H-12,6,C.faint,{mono:true});
+
+  for(let i=V.ripples.length-1;i>=0;i--){const rp=V.ripples[i];const p=(now-rp.t)/350;
+    if(p>=1){V.ripples.splice(i,1);continue}
+    const pe=easeOut(p);                                              /* §3.5 非线性 */
+    ctx.globalAlpha=.4*(1-pe);ctx.strokeStyle=C.it;ctx.strokeRect(R(rp.x-pe*8),R(rp.y-pe*8),R(pe*16),R(pe*16));ctx.globalAlpha=1}
+
+  if(V.flash>0){ctx.globalAlpha=Math.min(1,V.flash);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}
+}
+
+/* ── CRT 玻璃 [两级渲染的第二级] ── */
+const VS='attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0.,1.);}';
+const FS=`#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 v;
+uniform sampler2D tex;uniform float t,power,glitch,look;uniform vec2 res;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+void main(){
+  vec2 vb=(v-.5)*1.045+.5;                            /* 法兰内缩：屏外留出边框 */
+  vb.y=(vb.y-.5)/max(power,.001)+.5;                  /* 开机纵向展开 */
+  vec2 c=vb*2.-1.;
+  c*=1.+.030*dot(c,c);                                /* 微凸曲率：玻璃鼓面，不再明显弯折 */
+  vec2 uv=c*.5+.5;
+  vec2 db=max(max(-uv,uv-1.),vec2(0.));
+  float edge=1.-smoothstep(.0,.010,max(db.x,db.y));   /* 屏区软边 */
+  uv=clamp(uv,0.,1.);
+  uv.x+=(hash(vec2(floor(uv.y*48.),floor(t*24.)))-.5)*glitch*.09;   /* 撕裂 */
+  vec2 st=vec2(uv.x,1.-uv.y);
+  vec2 tp=1./res;
+  vec2 sn=(floor(st*res)+.5)*tp;                      /* 像素锁定采样 */
+  vec2 dir=st-.5;
+  float ca=.0016+glitch*.006;                         /* 色差 */
+  vec3 col;
+  col.r=texture2D(tex,sn+dir*ca).r;
+  col.g=texture2D(tex,sn).g;
+  col.b=texture2D(tex,sn-dir*ca).b;
+  vec3 bl=vec3(0.);                                   /* 泛光 */
+  bl+=texture2D(tex,st+vec2( 1.6,0.)*tp).rgb;
+  bl+=texture2D(tex,st+vec2(-1.6,0.)*tp).rgb;
+  bl+=texture2D(tex,st+vec2(0., 1.6)*tp).rgb;
+  bl+=texture2D(tex,st+vec2(0.,-1.6)*tp).rgb;
+  bl+=texture2D(tex,st+vec2( 2.6, 2.6)*tp).rgb;
+  bl+=texture2D(tex,st+vec2(-2.6, 2.6)*tp).rgb;
+  bl+=texture2D(tex,st+vec2( 2.6,-2.6)*tp).rgb;
+  bl+=texture2D(tex,st+vec2(-2.6,-2.6)*tp).rgb;
+  bl/=8.;
+  col+=max(bl-.46,0.)*1.2;
+  col*=.89+.11*sin(st.y*res.y*3.14159);               /* 扫描行 */
+  col*=.93+.07*sin(gl_FragCoord.x*2.094);             /* 荧光栅 */
+  col*=1.+.02*sin(uv.y*7.-t*1.3);                     /* 滚动带 */
+  float vg=1.-smoothstep(.42,1.35,length(c));
+  col*=mix(.68,1.14,vg);
+  col*=1.10;
+  col+=vec3(1.)*(1.-smoothstep(.0,.05,abs(uv.y-.5)))*(1.-power)*1.4;  /* 开机白线 */
+  col+=(hash(st*res+mod(t*60.,971.))-.5)*.03;
+  /* 法兰边框＋屏光外溢：曲率有了宿主，弯才读成玻璃 */
+  vec3 bez=vec3(.050,.053,.061)*(1.08-.38*v.y);
+  bez+=col*.10;
+  col=mix(bez,col,edge);
+  /* 玻璃面眩光：宽高光带随手指视差游走 */
+  float gla=exp(-pow(v.x*.78+v.y*.45-.60-look*.10,2.)*70.);
+  col+=vec3(.85,.92,1.)*gla*(.030+.05*(1.-edge));
+  gl_FragColor=vec4(col,1.);
+}`;
+let GLP=null,GLOK=false;
+function buildGL(){
+  const g=glc.getContext('webgl',{antialias:false});
+  if(!g)return null;
+  function sh(ty,src){const o=g.createShader(ty);g.shaderSource(o,src);g.compileShader(o);
+    if(!g.getShaderParameter(o,g.COMPILE_STATUS))console.error(g.getShaderInfoLog(o));return o}
+  const prog=g.createProgram();
+  g.attachShader(prog,sh(g.VERTEX_SHADER,VS));g.attachShader(prog,sh(g.FRAGMENT_SHADER,FS));
+  g.linkProgram(prog);g.useProgram(prog);
+  const buf=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,buf);
+  g.bufferData(g.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),g.STATIC_DRAW);
+  const locP=g.getAttribLocation(prog,'p');
+  g.enableVertexAttribArray(locP);g.vertexAttribPointer(locP,2,g.FLOAT,false,0,0);
+  const tex=g.createTexture();
+  g.bindTexture(g.TEXTURE_2D,tex);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
+  g.uniform2f(g.getUniformLocation(prog,'res'),W,H);
+  g.viewport(0,0,glc.width,glc.height);
+  return {g,uT:g.getUniformLocation(prog,'t'),uPow:g.getUniformLocation(prog,'power'),
+    uGl:g.getUniformLocation(prog,'glitch'),uLook:g.getUniformLocation(prog,'look')}
+}
+GLP=buildGL();
+if(GLP){GLOK=true;
+  glc.addEventListener('webglcontextlost',e=>{e.preventDefault();GLOK=false});
+  glc.addEventListener('webglcontextrestored',()=>{GLP=buildGL();GLOK=!!GLP});
+}else{/* WebGL 不可用：裸帧缓冲直出（没有玻璃，但游戏照玩） */
+  glc.style.display='none';off.style.imageRendering='pixelated';
+  document.querySelector('.viewport').appendChild(off);
+  const f2=()=>{const s=Math.max(1,Math.floor(Math.min(innerWidth/W,innerHeight/H)));
+    off.style.width=W*s+'px';off.style.height=H*s+'px'};
+  addEventListener('resize',f2);f2();
+}
+function present(){if(!GLOK||!GLP)return;const g=GLP.g;
+  g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,off);
+  g.uniform1f(GLP.uT,(now/1000)%120);g.uniform1f(GLP.uPow,V.power);g.uniform1f(GLP.uGl,V.glitch);
+  g.uniform1f(GLP.uLook,V.parX||0);
+  g.drawArrays(g.TRIANGLES,0,3)}
+
+/* ── 主循环 ── */
+function loop(ts){const dt=Math.min(50,ts-last);last=ts;
+  FR=(dt*timeScale)/16.7;                                            /* 视觉积分帧率归一（120Hz 不再两倍速） */
+  stepClock(dt);
+  if(S.phase!=='seq'&&timeScale>1)timeScale=1;
+  draw();present();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+
+/* 开机 [事件被上演 §3] */
+tw({dur:650,apply:p=>{V.power=p}});
+at(1150,()=>bootDone());
+</script>
+</body>
+</html>

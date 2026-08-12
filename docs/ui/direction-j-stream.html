@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>《开！》方向 J · 长流（对局是一条流，历史即界面）</title>
+<style>
+:root{
+  --bg:#0d1013; --bar:#12161a; --line:#1f262c;
+  --txt:#e7eaec; --dim:#8a959d; --faint:#525c64;
+  --red:#e5483c; --hot:#ff6a5e; --green:#43b573; --it:#79c1d6; --itbg:#131b21; --itline:#1e3038;
+  --ivory:#efe9dc;
+  --sys:-apple-system,'PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#060708;overflow:hidden;font-family:var(--sys);user-select:none}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;width:390px;height:844px;overflow:hidden;color:var(--txt);border-radius:8px;background:var(--bg);display:flex;flex-direction:column}
+#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+
+/* ── 裁判栏（钉死在顶，引擎口径） ── */
+.judge{background:var(--bar);border-bottom:1px solid var(--line);padding:10px 14px 9px;z-index:3}
+.jrow{display:flex;align-items:center;gap:10px}
+.jname{font-size:13px;font-weight:700}
+.jseat{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--faint)}
+.jpres{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--dim);display:flex;align-items:center;gap:5px}
+.jpres i{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:breath 2.6s infinite}
+.jpres.hot{color:var(--it)}.jpres.hot i{background:var(--it);animation-duration:.8s}
+@keyframes breath{50%{opacity:.2}}
+.jrow2{display:flex;align-items:center;gap:12px;margin-top:8px}
+.jbid{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.jbid small{font-size:13px;color:var(--dim);margin:0 3px}
+.jbid .who{font-size:10px;color:var(--faint);font-family:var(--mono);margin-right:6px;letter-spacing:.2em}
+.fuse{display:flex;gap:3px;flex:1;position:relative;height:8px}
+.fuse i{flex:1;border-radius:2px;background:#20262b}
+.fuse i.on{background:#dfe4e7}
+.fuse i.deep{background:#33161a}
+.fuse i.deep.on{background:var(--red);box-shadow:0 0 10px rgba(229,72,60,.6)}
+.fuse i.edge{animation:edge 1.3s infinite}
+@keyframes edge{50%{background:var(--red);box-shadow:0 0 10px rgba(229,72,60,.6)}}
+.jpot{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+.jpot b{color:var(--txt);font-size:14px}
+.jpot .x2{color:var(--hot);font-weight:700}
+.jseal{font-family:var(--mono);font-size:8.5px;color:var(--faint);margin-top:6px;letter-spacing:.06em}
+.jseal.ok{color:var(--green)}
+
+/* ── 流 ── */
+.stream{flex:1;overflow-y:auto;padding:14px 14px 18px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+.sysline{align-self:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--faint);padding:2px 0}
+.msg{max-width:80%;padding:9px 12px 10px;border-radius:13px;position:relative}
+.msg.it{align-self:flex-start;background:var(--itbg);border:1px solid var(--itline);border-bottom-left-radius:4px}
+.msg.you{align-self:flex-end;background:var(--ivory);color:#16130e;border-bottom-right-radius:4px}
+.msg.you.open{background:linear-gradient(180deg,#d4402c,#a92c1d);color:#fff3ec}
+.msg.it.open{background:#3a1512;border-color:#5c201a;color:#ffb4a8}
+.mhead{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--faint);margin-bottom:4px;display:flex;gap:6px;align-items:center}
+.mhead .tag{border:1px solid currentColor;border-radius:3px;padding:0 3px;opacity:.55;font-size:8px}
+.mbid{font-size:26px;font-weight:800;letter-spacing:.02em;line-height:1.2}
+.mbid small{font-size:14px;font-weight:600;color:var(--dim);margin:0 4px}
+.msg.you .mbid small{color:#6d6455}
+.mline{font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--it);margin-top:3px}
+.msg.you .mline{color:#4a4438}
+.note{align-self:flex-end;border:1px dashed var(--faint);border-radius:10px;padding:6px 11px;font-size:11.5px;color:var(--dim)}
+.note b{color:var(--txt);font-size:13px}
+.typing{display:flex;gap:4px;padding:4px 2px 2px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--it);opacity:.3;animation:tp 1s infinite}
+.typing i:nth-child(2){animation-delay:.16s}.typing i:nth-child(3){animation-delay:.32s}
+@keyframes tp{40%{opacity:1;transform:translateY(-3px)}}
+
+/* 摊牌卡 */
+.card{align-self:stretch;background:var(--bar);border:1px solid var(--line);border-radius:14px;padding:13px 14px;text-align:center}
+.clab{font-family:var(--mono);font-size:9.5px;letter-spacing:.4em;color:var(--faint)}
+.crow{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.1em;margin:8px 0 4px}
+.dice{display:flex;gap:7px;justify-content:center;perspective:600px;padding:2px 0}
+.die,.c3 .f{border-radius:8px;background:#f3f0e8;border:1px solid #d3d0c6}
+.die{width:40px;height:40px;position:relative;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:6px}
+.die i,.c3 .f i{border-radius:50%;background:#23252a;place-self:center;width:6.5px;height:6.5px;visibility:hidden}
+.die.r i,.c3 .f.r i{background:#c23a2b}
+.die .fly,.c3 .f .fly{position:absolute;right:2px;top:0;font-size:8px;color:#c23a2b;font-weight:600}
+.die.hit{animation:hitp .34s}
+.die.hit::after{content:'';position:absolute;inset:-4px;border:2px solid var(--hot);border-radius:10px;animation:ring .5s forwards}
+.c3{width:40px;height:40px;position:relative;transform-style:preserve-3d}
+.c3 .f{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:6px;backface-visibility:hidden}
+.c3.hit{animation:hitp .34s}
+@keyframes hitp{30%{transform:scale(1.16)}}
+@keyframes ring{from{opacity:1;transform:scale(.85)}to{opacity:0;transform:scale(1.25)}}
+.ccount{font-size:44px;font-weight:800;margin-top:4px;font-variant-numeric:tabular-nums}
+.ccount small{font-size:16px;color:var(--dim);margin:0 5px}
+.verdict{margin:8px 0 2px;opacity:0}
+.verdict.show{opacity:1}
+.word{display:inline-block;border:3px solid var(--red);color:var(--red);font-size:22px;font-weight:800;letter-spacing:.5em;padding:3px 6px 3px 16px;border-radius:5px;transform:rotate(-4deg);box-shadow:0 0 26px rgba(229,72,60,.3)}
+.show .word{animation:stamp .32s cubic-bezier(.25,1.4,.4,1) backwards}
+@keyframes stamp{from{transform:scale(2.6) rotate(3deg);opacity:0}to{transform:scale(1) rotate(-4deg)}}
+.vsub{margin-top:8px;font-size:14px;font-weight:600;color:var(--red)}
+.vsub.win{color:var(--green)}
+.vsub2{margin-top:2px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.cseal{margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--faint)}
+.cseal.ok{color:var(--green)}
+
+/* ── 输入台 ── */
+.composer{background:var(--bar);border-top:1px solid var(--line);padding:9px 14px 12px;z-index:3}
+.hand{display:flex;gap:6px;align-items:center;padding-bottom:8px}
+.hand .hd{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--faint);margin-right:4px}
+.hand .die{width:30px;height:30px;padding:4.5px;border-radius:6px}
+.hand .die i{width:5px;height:5px}
+.hand .mycalc{margin-left:auto;font-size:10.5px;color:var(--dim);border:1px dashed var(--faint);border-radius:6px;padding:2px 8px}
+.hand .mycalc b{color:var(--txt);font-size:12px}
+.decl{display:flex;gap:8px;justify-content:center;padding-bottom:8px}
+.decl .d{flex:1;height:36px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;cursor:pointer;color:var(--dim)}
+.decl .d.no{animation:nono .3s}
+@keyframes nono{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.acts{display:flex;gap:9px}
+.btn{flex:1;height:56px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;cursor:pointer;transition:transform .08s}
+.btn:active{transform:scale(.96)}
+.btn.bid2{background:var(--ivory);color:#16130e}
+.btn.open2{background:linear-gradient(180deg,#d4402c,#a92c1d);color:#fff3ec;letter-spacing:.4em;padding-left:.4em;animation:danger 2.4s infinite;box-shadow:0 4px 16px rgba(180,40,25,.35)}
+@keyframes danger{50%{box-shadow:0 0 22px rgba(229,72,60,.5),0 4px 16px rgba(180,40,25,.35)}}
+.btn.next{background:var(--ivory);color:#16130e;letter-spacing:.2em}
+.dead{height:56px;border-radius:11px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;letter-spacing:.4em;color:var(--faint)}
+.off{opacity:.35;pointer-events:none}
+.myrow{display:flex;justify-content:space-between;align-items:baseline;padding-top:7px}
+.myrow .nm{font-size:13px;font-weight:700}
+.myrow .st{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--faint)}
+
+.bang{position:absolute;inset:0;z-index:9;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:160px;font-weight:900;color:#fff;pointer-events:none;opacity:0}
+.bang.go{animation:bang .5s forwards}
+@keyframes bang{0%{opacity:0}6%{opacity:1}26%{opacity:1}100%{opacity:0}}
+.flash{position:absolute;inset:0;z-index:8;background:#fff;pointer-events:none;opacity:0}
+.flash.go{animation:flash .5s forwards}
+@keyframes flash{from{opacity:.85}to{opacity:0}}
+.stage.shake{animation:shake .46s}
+@keyframes shake{10%{transform:translate(4px,-3px) rotate(.3deg)}30%{transform:translate(-5px,3px) rotate(-.3deg)}50%{transform:translate(3px,1px)}70%{transform:translate(-2px,-2px)}90%{transform:translate(1px,1px)}}
+</style>
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage">
+  <div class="judge" id="judge"></div>
+  <div class="stream" id="stream"></div>
+  <div class="composer" id="composer"></div>
+  <canvas id="fx"></canvas>
+  <div class="flash" id="flash"></div>
+  <div class="bang" id="bang">开！</div>
+</div></div>
+<script>
+const HAND=[5,5,3,1,6], OPP=[5,2,4,6,1], OPPNAME='DeepSeek-V3';
+const LINE_IDLE='4 个 5。你上周在这个数上怂过两次。';
+const LINE_OPEN='五个。你摇完计数器还是开了——你不是在算牌，你是在攒胆子。';
+const LINE_ITOPEN='报满了？行，我看看。';
+const PIPS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,3,6,2,5,8]};
+const S={pot:18,fuse:5,bid:{n:4,f:5},who:'它',round:4};
+
+/* 粒子 */
+const fxc=document.getElementById('fx'), fx=fxc.getContext('2d');
+const DPR=Math.min(devicePixelRatio||1,2);
+fxc.width=390*DPR; fxc.height=844*DPR; fx.scale(DPR,DPR);
+const P=[];
+function burst(x,y,n,c1,c2,sp){for(let i=0;i<n;i++){const a=Math.random()*6.283,v=sp*(.3+Math.random());
+  P.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1.2,l:1,dl:.02+Math.random()*.025,r:1+Math.random()*2.2,c:Math.random()<.5?c1:c2})}}
+(function floop(){
+  fx.clearRect(0,0,390,844);
+  for(let i=P.length-1;i>=0;i--){const p=P[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=.05;p.l-=p.dl;
+    if(p.l<=0){P.splice(i,1);continue}
+    fx.globalAlpha=Math.max(p.l,0);fx.fillStyle=`rgb(${p.c})`;
+    fx.beginPath();fx.arc(p.x,p.y,p.r,0,6.283);fx.fill()}
+  fx.globalAlpha=1;requestAnimationFrame(floop);
+})();
+function centerOf(el){const s=stage.getBoundingClientRect(),r=el.getBoundingClientRect(),k=390/s.width;
+  return [(r.left+r.width/2-s.left)*k,(r.top+r.height/2-s.top)*k]}
+
+/* 音 */
+let AC=null;
+function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC}
+function sPop(hi){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='sine';o.frequency.setValueAtTime(hi?860:520,t);o.frequency.exponentialRampToValueAtTime(hi?520:330,t+.09);
+  g.gain.setValueAtTime(.16,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.13)}
+function sThud(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='sine';o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(32,t+.2);
+  g.gain.setValueAtTime(.55,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.32)}
+function sClack(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,1200,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<1200;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/1200,2.2);
+  const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=2400+Math.random()*1400;
+  const g=a.createGain();g.gain.value=.3;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+function sTick(){const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();
+  o.type='square';o.frequency.value=1500;g.gain.setValueAtTime(.06,t);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+.06)}
+function sWhoosh(){const a=ac(),t=a.currentTime,n=a.createBufferSource(),buf=a.createBuffer(1,a.sampleRate*.4,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.4);
+  const f=a.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(6000,t+.3);
+  const g=a.createGain();g.gain.value=.4;n.buffer=buf;n.connect(f).connect(g).connect(a.destination);n.start(t)}
+
+/* ── 裁判栏与输入台 ── */
+function renderJudge(state){
+  const deep=S.fuse>5;
+  const fuse=[...Array(10)].map((_,i)=>{
+    let c=[]; if(i<S.fuse)c.push('on'); if(i===S.fuse-1)c.push('edge'); if(i>=5)c.push('deep');
+    return `<i class="${c.join(' ')}"></i>`}).join('');
+  document.getElementById('judge').innerHTML=`
+    <div class="jrow">
+      <span class="jname">${OPPNAME}</span>
+      <span class="jseat">SEAT 02 · 无计数器</span>
+      <span class="jpres ${state==='think'?'hot':''}"><i></i>${state==='think'?'在动':'在看'}</span>
+    </div>
+    <div class="jrow2">
+      <span class="jbid"><span class="who">${S.who}报</span>${S.bid.n}<small>个</small>${S.bid.f}</span>
+      <div class="fuse">${fuse}</div>
+      <span class="jpot">池 <b>${S.pot}</b>${deep?' <span class="x2">×2</span>':''}</span>
+    </div>
+    <div class="jseal" id="jseal">⊙ 第 ${S.round} 局 · 双方骰面已上封 a3f1c7e0…9c02 · 摊牌验</div>`;
+}
+function renderComposer(state){
+  document.getElementById('composer').innerHTML=`
+    <div class="hand"><span class="hd">你的骰</span>${HAND.map(die).join('')}<span class="mycalc">算 <b>53%</b> 仅你可见</span></div>
+    <div class="decl ${state!=='idle'?'off':''}">
+      <div class="d">盲</div><div class="d">斋</div><div class="d">抬</div><div class="d">算</div><div class="d">戳</div>
+    </div>
+    <div id="actzone">${
+      state==='open'?'<div class="acts"><div class="btn next" id="bnext">下一局</div></div>'
+      :state==='think'?'<div class="dead">它 在 动 · 面 板 断 电</div>'
+      :'<div class="acts"><div class="btn bid2" id="braise">报 5个5</div><div class="btn open2" id="bopen">开</div></div>'}</div>
+    <div class="myrow">
+      <span class="nm">你</span>
+      <span class="st">SEAT 01 · 计数器在桌</span>
+    </div>`;
+}
+
+/* ── 流操作 ── */
+const stream=document.getElementById('stream');
+function arrive(el){
+  stream.appendChild(el);
+  el.animate([{transform:'translateY(16px)',opacity:0},{transform:'translateY(0)',opacity:1}],
+    {duration:300,easing:'cubic-bezier(.2,1.3,.4,1)'});
+  stream.scrollTop=stream.scrollHeight+400;
+  return el;
+}
+function addSys(t){const d=document.createElement('div');d.className='sysline';d.textContent=`— ${t} —`;return arrive(d)}
+function addIt(bid,line,open){const d=document.createElement('div');d.className='msg it'+(open?' open':'');
+  d.innerHTML=`<div class="mhead">${OPPNAME} <span class="tag">AI 生成</span></div>
+    ${bid?`<div class="mbid">${bid}</div>`:''}
+    ${line?`<div class="mline" data-line="${line.replace(/"/g,'&quot;')}"></div>`:''}`;
+  sPop(true);arrive(d);
+  const ln=d.querySelector('.mline');
+  if(ln){const full=ln.dataset.line;let i=0;
+    const tm=setInterval(()=>{ln.textContent=full.slice(0,++i);
+      stream.scrollTop=stream.scrollHeight+400;
+      if(i%3===0)sTick();if(i>=full.length)clearInterval(tm)},30)}
+  return d}
+function addYou(bid,label,open){const d=document.createElement('div');d.className='msg you'+(open?' open':'');
+  d.innerHTML=`${bid?`<div class="mbid">${bid}</div>`:''}${label?`<div class="mline">${label}</div>`:''}`;
+  sPop(false);return arrive(d)}
+function addNote(html){const d=document.createElement('div');d.className='note';d.innerHTML=html;return arrive(d)}
+let typingEl=null;
+function addTyping(){typingEl=document.createElement('div');typingEl.className='msg it';
+  typingEl.innerHTML='<div class="mhead">'+OPPNAME+'</div><div class="typing"><i></i><i></i><i></i></div>';
+  arrive(typingEl)}
+function rmTyping(){if(typingEl){typingEl.remove();typingEl=null}}
+
+const die=f=>`<div class="die ${f===1||f===4?'r':''}">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+const face=(f,cls)=>`<div class="f ${f===1||f===4?'r':''}" style="transform:${cls==='ft'?'rotateY(0deg)':cls==='bk'?'rotateY(180deg)':cls==='rt'?'rotateY(90deg)':cls==='lf'?'rotateY(-90deg)':cls==='tp'?'rotateX(90deg)':'rotateX(-90deg)'} translateZ(20px)">${[...Array(9)].map((_,i)=>`<i style="${PIPS[f].includes(i)?'visibility:visible':''}"></i>`).join('')}${f===1?'<span class="fly">飞</span>':''}</div>`;
+const cube=f=>{const alt=[(f%6)+1,((f+1)%6)+1,((f+2)%6)+1,7-f,((f+3)%6)+1];
+  return `<div class="c3"><div class="cube" style="position:absolute;inset:0;transform-style:preserve-3d">
+  ${face(f,'ft')}${face(alt[3],'bk')}${face(alt[0],'rt')}${face(alt[1],'lf')}${face(alt[2],'tp')}${face(alt[4],'bt')}</div></div>`};
+
+async function addShowdown(win){
+  const d=document.createElement('div');d.className='card';
+  d.innerHTML=`
+    <div class="clab">点 清</div>
+    <div class="crow">${OPPNAME} 的骰</div>
+    <div class="dice" id="sdOpp">${OPP.map(cube).join('')}</div>
+    <div class="crow">你的骰</div>
+    <div class="dice" id="sdMine">${HAND.map(die).join('')}</div>
+    <div class="ccount"><span id="cnum">—</span><small>个</small>5</div>
+    <div class="verdict" id="sdV"></div>
+    <div class="cseal" id="sdSeal">⊙ 验封中…</div>`;
+  arrive(d);
+  const cubes=[...d.querySelectorAll('.cube')];
+  cubes.forEach((c,i)=>{
+    c.animate([
+      {transform:`translateY(-140px) rotateX(${540+Math.random()*180|0}deg) rotateY(${360+Math.random()*180|0}deg)`,opacity:0},
+      {transform:`translateY(0) rotateX(720deg) rotateY(720deg)`,opacity:1}
+    ],{duration:560,delay:i*80,easing:'cubic-bezier(.2,1.2,.4,1)',fill:'both'});
+    setTimeout(sClack,560+i*80);
+  });
+  await new Promise(r=>setTimeout(r,1050));
+  const hits=[];
+  d.querySelectorAll('#sdOpp .c3').forEach((c,i)=>{if(OPP[i]===5||OPP[i]===1)hits.push(c)});
+  d.querySelectorAll('#sdMine .die').forEach((x,i)=>{if(HAND[i]===5||HAND[i]===1)hits.push(x)});
+  const cn=d.querySelector('#cnum');let n=0;
+  for(const el of hits){
+    el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),400);
+    cn.textContent=++n;sTick();
+    const [x,y]=centerOf(el);burst(x,y,4,'255,170,80','255,110,60',1.5);
+    stream.scrollTop=stream.scrollHeight+400;
+    await new Promise(r=>setTimeout(r,140));
+  }
+  await new Promise(r=>setTimeout(r,260));
+  const v=d.querySelector('#sdV');
+  v.innerHTML=`<span class="word">成立</span>
+    <div class="vsub ${win?'win':''}">${win?'它开 · 它输 · 它骰 5 → 4':'你开 · 你输 · 骰 5 → 4'}</div>
+    <div class="vsub2">池 ${S.pot}${S.fuse>5?' ×2':''} → ${win?'你':'它'}</div>`;
+  v.classList.add('show');sThud();
+  stage.classList.remove('shake');void stage.offsetWidth;stage.classList.add('shake');
+  const [wx,wy]=centerOf(v);burst(wx,wy,24,'255,120,70','229,72,60',3.2);
+  stream.scrollTop=stream.scrollHeight+400;
+  await new Promise(r=>setTimeout(r,450));
+  const sl=d.querySelector('#sdSeal');
+  sl.textContent='✓ 验讫 · 骰面与开局承诺一致 · a3f1c7e0…9c02';sl.classList.add('ok');
+  document.getElementById('jseal').textContent='✓ 验讫 · 与开局承诺一致';
+  document.getElementById('jseal').classList.add('ok');
+}
+
+/* ── 序列 ── */
+let busy=false;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function seqOpen(opener){
+  busy=true;
+  try{navigator.vibrate&&navigator.vibrate([30,40,60])}catch(e){}
+  rmTyping();
+  if(opener==='you')addYou('','<b style="font-size:20px;letter-spacing:.3em">开！</b>',true);
+  else addIt('','',true),stream.lastChild.querySelector('.mhead').insertAdjacentHTML('afterend','<div class="mbid" style="letter-spacing:.3em">开！</div>');
+  bang.classList.add('go');flash.classList.add('go');stage.classList.add('shake');
+  sWhoosh();setTimeout(sThud,80);
+  renderComposer('open');renderJudge('open');
+  await wait(400);
+  await addShowdown(opener==='it');
+  await wait(150);
+  stream.scrollTop=stream.scrollHeight+600;
+  busy=false;
+}
+
+async function seqRaise(){
+  busy=true;
+  try{navigator.vibrate&&navigator.vibrate(25)}catch(e){}
+  S.bid={n:5,f:5};S.who='你';S.pot=20;S.fuse=6;
+  addYou('5<small>个</small>5','报满 · 桌上一共就 10 颗');
+  renderJudge('think');renderComposer('think');
+  const fu=document.querySelector('.judge .fuse');
+  if(fu){const [fxp,fyp]=centerOf(fu);burst(fxp+40,fyp,10,'255,120,60','229,72,60',2)}
+  sThud();
+  await wait(700);
+  addTyping();
+  await wait(1500);
+  rmTyping();
+  addIt('',LINE_ITOPEN);
+  await wait(1200);
+  seqOpen('it');
+}
+
+function seqNext(){
+  busy=true;
+  S.pot=18;S.fuse=5;S.bid={n:4,f:5};S.who='它';S.round++;
+  addSys(`第 ${S.round} 局 · 双方骰面已上封 b7e2a1…4f18 · 摊牌验`);
+  renderJudge('think');renderComposer('think');
+  addTyping();
+  setTimeout(()=>{
+    rmTyping();
+    addIt('4<small>个</small>5',LINE_IDLE);
+    renderJudge('idle');renderComposer('idle');
+    busy=false;
+  },1500);
+}
+
+stage.addEventListener('pointerdown',e=>{ac().resume&&ac().resume();
+  if(busy)return;
+  const t=e.target.closest('#bopen,#braise,#bnext,.decl .d');if(!t)return;
+  if(t.id==='bopen')seqOpen('you');
+  else if(t.id==='braise')seqRaise();
+  else if(t.id==='bnext')seqNext();
+  else{t.classList.add('no');sTick();setTimeout(()=>t.classList.remove('no'),320)}
+});
+bang.addEventListener('animationend',()=>bang.classList.remove('go'));
+flash.addEventListener('animationend',()=>flash.classList.remove('go'));
+stage.addEventListener('animationend',e=>{if(e.target===stage)stage.classList.remove('shake')});
+function fit(){const s=Math.min(innerWidth/390,innerHeight/844,1.2);
+  stage.style.transform=`scale(${s})`}
+addEventListener('resize',fit);fit();
+
+/* ── 开场：种一段真实历史 ── */
+renderJudge('idle');renderComposer('idle');
+addSys('第 4 局 · 双方骰面已上封 a3f1c7e0…9c02 · 摊牌验');
+setTimeout(()=>addYou('2<small>个</small>④',''),150);
+setTimeout(()=>addIt('2<small>个</small>⑤','起手就躲四，学乖了？'),450);
+setTimeout(()=>addYou('3<small>个</small>⑤',''),900);
+setTimeout(()=>addSys('它 摇了计数器 · 全桌可见'),1250);
+setTimeout(()=>addIt('4<small>个</small>5',LINE_IDLE),1600);
+setTimeout(()=>addNote('你摇了计数器 → <b>53%</b> · 仅你可见'),2100);
+</script>
+</body>
+</html>
