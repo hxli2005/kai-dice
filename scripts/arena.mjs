@@ -268,7 +268,7 @@ if (bestOf) {
     while (true) {
       const i = nextJob++;
       if (i >= jobs.length || budget.runExceeded()) return;
-      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech, openBook, mods });
+      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech, openBook, mods, onGame: dumpLive });
       out[i] = s;
       console.log(
         `[系列赛] ${s.seats.A} ${s.wins.A}–${s.wins.B} ${s.seats.B}（${s.games.length} 场）→ ` +

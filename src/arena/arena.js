@@ -285,7 +285,7 @@ export async function seriesReflect(channel, { ownLog = [], factText, hypotheses
 // 下一场你能看到对手的本子上怎么写你（他也知道你看得到）。这是 §2.4 明牌档案
 // （"看过档案的你会试图反装，而反装也是它的阅读材料"）在 AI 对 AI 上的对称应用；
 // 喂的是数据、机制在数据标签里如实说明，Q86 合规。--no-openbook 为对照臂。
-export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true, openBook = true, mods = [] } = {}) {
+export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true, openBook = true, mods = [], onGame = null } = {}) {
   const need = (bestOf >> 1) + 1;
   const ids = ['A', 'B'];
   const wins = { A: 0, B: 0 };
@@ -309,6 +309,7 @@ export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget
     }
     const r = await playMatch({ seed: seed0 + g, seats, fetchFn, budget, relaySpeech, memory, mods });
     games.push(r);
+    onGame?.(r); // 逐场回调（CLI 增量落盘）——bo5 一跑一两个小时，中途得能翻牌
     if (r.winner) wins[r.winner] += 1;
     if (r.aborted) break;
     if (!(games.length < bestOf && wins.A < need && wins.B < need)) break; // 没有下一场就不必反思
