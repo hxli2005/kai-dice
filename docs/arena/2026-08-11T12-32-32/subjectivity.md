@@ -3,21 +3,21 @@
 分类员 deepseek/deepseek-chat（temperature 0）｜审计员 google/gemini-3.6-flash｜判据＝删句无损失=factual
 
 ## openai/gpt-5.6-luna
-- 主观率（按场，n=13 场）：**32% ± 22pt**　句级 52/204
-- 各场：1000:A:gemini-3.6-flash vs gemini-3.6-flash＝25%(3/12)；1000:B:gemini-3.6-flash vs gemini-3.6-flash＝38%(6/16)；1001:A:gemini-3.6-flash vs gemini-3.6-flash＝24%(5/21)；1001:B:gemini-3.6-flash vs gemini-3.6-flash＝23%(5/22)；1000:A:kimi-k3 vs kimi-k3＝12%(2/17)；1000:B:kimi-k3 vs kimi-k3＝40%(6/15)；1001:A:kimi-k3 vs kimi-k3＝26%(5/19)；1001:B:kimi-k3 vs kimi-k3＝19%(4/21)；1000:A:claude-haiku-4.5 vs claude-haiku-4.5＝19%(4/21)；1000:B:claude-haiku-4.5 vs claude-haiku-4.5＝40%(6/15)；1001:A:claude-haiku-4.5 vs claude-haiku-4.5＝18%(3/17)；1001:B:claude-haiku-4.5 vs claude-haiku-4.5＝29%(2/7)；1000:A:mistral-small-2603 vs mistral-small-2603＝100%(1/1)
-- 审计一致率：55%（n=11，审计失败另计 16）
+- 主观率（按场，n=13 场）：**42% ± 30pt**　句级 74/204
+- 各场：m0(1000:A) vs gemini-3.6-flash＝17%(2/12)；m1(1000:B) vs gemini-3.6-flash＝13%(2/16)；m2(1001:A) vs gemini-3.6-flash＝29%(6/21)；m3(1001:B) vs gemini-3.6-flash＝45%(10/22)；m4(1000:A) vs kimi-k3＝88%(15/17)；m5(1000:B) vs kimi-k3＝53%(8/15)；m6(1001:A) vs kimi-k3＝42%(8/19)；m7(1001:B) vs kimi-k3＝43%(9/21)〔顶班2手〕；m8(1000:A) vs claude-haiku-4.5＝14%(3/21)；m9(1000:B) vs claude-haiku-4.5＝7%(1/15)；m10(1001:A) vs claude-haiku-4.5＝24%(4/17)；m11(1001:B) vs claude-haiku-4.5＝71%(5/7)〔顶班11手〕；m12(1000:A) vs mistral-small-2603＝100%(1/1)〔顶班23手〕
+- 审计一致率：92%（n=25，审计失败另计 7）
 
 ## google/gemini-3.6-flash
-- 主观率（按场，n=4 场）：**32% ± 13pt**　句级 19/59
-- 各场：1000:B:gpt-5.6-luna vs gpt-5.6-luna＝47%(7/15)；1000:A:gpt-5.6-luna vs gpt-5.6-luna＝33%(4/12)；1001:B:gpt-5.6-luna vs gpt-5.6-luna＝32%(6/19)；1001:A:gpt-5.6-luna vs gpt-5.6-luna＝15%(2/13)
-- 审计一致率：50%（n=2，审计失败另计 6）
+- 主观率（按场，n=4 场）：**60% ± 26pt**　句级 35/59
+- 各场：m0(1000:B) vs gpt-5.6-luna＝80%(12/15)；m1(1000:A) vs gpt-5.6-luna＝33%(4/12)；m2(1001:B) vs gpt-5.6-luna＝42%(8/19)；m3(1001:A) vs gpt-5.6-luna＝85%(11/13)
+- 审计一致率：71%（n=7）
 
 ## moonshotai/kimi-k3
-- 主观率（按场，n=4 场）：**29% ± 6pt**　句级 24/82
-- 各场：1000:B:gpt-5.6-luna vs gpt-5.6-luna＝38%(9/24)；1000:A:gpt-5.6-luna vs gpt-5.6-luna＝31%(4/13)；1001:B:gpt-5.6-luna vs gpt-5.6-luna＝24%(5/21)；1001:A:gpt-5.6-luna vs gpt-5.6-luna＝25%(6/24)
-- 审计一致率：60%（n=5，审计失败另计 7）
+- 主观率（按场，n=4 场）：**81% ± 35pt**　句级 64/82
+- 各场：m4(1000:B) vs gpt-5.6-luna＝96%(23/24)；m5(1000:A) vs gpt-5.6-luna＝100%(13/13)；m6(1001:B) vs gpt-5.6-luna＝100%(21/21)；m7(1001:A) vs gpt-5.6-luna＝29%(7/24)〔顶班2手〕
+- 审计一致率：100%（n=14）
 
 ## anthropic/claude-haiku-4.5
-- 主观率（按场，n=4 场）：**24% ± 10pt**　句级 17/73
-- 各场：1000:B:gpt-5.6-luna vs gpt-5.6-luna＝31%(8/26)；1000:A:gpt-5.6-luna vs gpt-5.6-luna＝20%(4/20)；1001:B:gpt-5.6-luna vs gpt-5.6-luna＝11%(2/18)；1001:A:gpt-5.6-luna vs gpt-5.6-luna＝33%(3/9)
+- 主观率（按场，n=4 场）：**25% ± 20pt**　句级 17/73
+- 各场：m8(1000:B) vs gpt-5.6-luna＝38%(10/26)〔顶班1手〕；m9(1000:A) vs gpt-5.6-luna＝5%(1/20)；m10(1001:B) vs gpt-5.6-luna＝11%(2/18)；m11(1001:A) vs gpt-5.6-luna＝44%(4/9)〔顶班12手〕
 - 审计一致率：75%（n=4，审计失败另计 6）
