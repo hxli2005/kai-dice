@@ -374,7 +374,9 @@ function serializeHistory(payload, who) {
       if (e.type === 'challenge') return `${who(e.actor)}开${who(e.target)}${t}`;
       if (e.type === 'modAction') {
         const raw = { player: e.actor, ...e };
-        return `${OPS[e.op]?.narrate?.(raw, who) ?? `${who(e.actor)}拍${e.action}`}${t}`;
+        // 默认叙事用词条按钮名，不用动作 slug——中文叙事里混进"拍qia"是喂给全桌的走调材料
+        const label = modActionMeta(payload.current, e.action)?.label ?? e.action;
+        return `${OPS[e.op]?.narrate?.(raw, who) ?? `${who(e.actor)}拍「${label}」`}${t}`;
       }
       if (e.type === 'reveal') {
         const dice = Object.entries(e.dice ?? {}).map(([id, ds]) => `${who(id)}[${ds.join(',')}]`).join('、');

@@ -201,7 +201,7 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   // Q45／C1 根治（2026-08-10）：**没拨算盘一个数都不给**——粗档也是数。
   // 玩家侧未拨算盘时是被动零显示，词条的"恰好"同规矩（B.1 双发）。
   assert.ok(!/恰好的概率/.test(user), '未算＝连粗档都不给');
-  assert.match(user, /宣布"这口价恰好为真"当场开牌；掐对你赢回一颗骰/, '规则照说，只是不带数');
+  assert.match(user, /宣布"这口价恰好为真"当场开牌；掐对你收池并拿回一颗骰/, '规则照说，只是不带数');
   await m.act('B', { type: 'calc' });
   assert.match(
     buildPrompts(m.observe('B'), '').user,
