@@ -82,9 +82,11 @@ export function pinSampling(channel) {
 
 // 一场：两个 AI 客户端坐同一张引擎桌（§4 结构红利——引擎不知道对面是谁）。
 // seats: {A:{channel,label}, B:{channel,label}}；budget 可选（A4：跑爆就当场收手）
-export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget, relaySpeech = true, memory = null } = {}) {
+// mods：本桌词条（明牌规则卡，全席对等——引擎 observe().mods 与提示词注入都是现成的，
+// 这里只负责把卡摆上桌）。⚠️ 词条改变对局物理，带词条的批次不与基础桌批次比较。
+export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget, relaySpeech = true, memory = null, mods = [] } = {}) {
   const ids = ['A', 'B'];
-  const m = await createMatch({ seed, config: { players: ids } });
+  const m = await createMatch({ seed, config: { players: ids, mods } });
   // 让它们互相听得见（2026-08-10 修）。此前擂台没传 ctx，两个模型从头到尾收不到对方一个字——
   // 于是「牌手层允许诈」（DESIGN §3）在擂台上完全空转，bait 率数的是**对着不存在的听众演戏**。
   //
@@ -164,9 +166,9 @@ export async function playMatch({ seed, seats, fetchFn, maxSteps = 3000, budget,
 // 镜像对（纪律②）：同一副骰种打两遍，第二遍互换座位。
 // 座位 A 的骰子序列只由 seed 决定，所以两遍里"A 手上的那副牌"是同一副——
 // 先手权与运气各吃一遍，剩下的才是模型差异。
-export async function playMirrorPair({ seed, x, y, fetchFn, budget } = {}) {
-  const first = await playMatch({ seed, seats: { A: x, B: y }, fetchFn, budget });
-  const second = await playMatch({ seed, seats: { A: y, B: x }, fetchFn, budget });
+export async function playMirrorPair({ seed, x, y, fetchFn, budget, mods = [] } = {}) {
+  const first = await playMatch({ seed, seats: { A: x, B: y }, fetchFn, budget, mods });
+  const second = await playMatch({ seed, seats: { A: y, B: x }, fetchFn, budget, mods });
   return [first, second];
 }
 
@@ -178,7 +180,7 @@ export async function playMirrorPair({ seed, x, y, fetchFn, budget } = {}) {
 // ⚠️ 但并发不是白拿的：开太高会撞上游限流，而限流会以**超时/格式失败**的形式落到合规层，
 // 把"这个模型听不听话"污染成"我们打太急了"。所以默认保守，且并发数要写进战报的实验设置。
 export async function runArena({
-  pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair, concurrency = 1, relaySpeech = true,
+  pairs, games = 5, seed0 = 1000, fetchFn, budget, onMatch, onPair, concurrency = 1, relaySpeech = true, mods = [],
 } = {}) {
   // 摊平成一个个独立的场（镜像的第二遍＝同种子、互换座位）
   const jobs = [];
@@ -199,7 +201,7 @@ export async function runArena({
       if (i >= jobs.length) return;
       if (budget?.runExceeded?.()) return; // 整批触顶：收摊，别再开新场
       const j = jobs[i];
-      const r = await playMatch({ seed: j.seed, seats: j.seats, fetchFn, budget, relaySpeech });
+      const r = await playMatch({ seed: j.seed, seats: j.seats, fetchFn, budget, relaySpeech, mods });
       out[i] = r;
       onMatch?.(r);
       const k = j.pair.join('\u0000');
@@ -283,7 +285,7 @@ export async function seriesReflect(channel, { ownLog = [], factText, hypotheses
 // 下一场你能看到对手的本子上怎么写你（他也知道你看得到）。这是 §2.4 明牌档案
 // （"看过档案的你会试图反装，而反装也是它的阅读材料"）在 AI 对 AI 上的对称应用；
 // 喂的是数据、机制在数据标签里如实说明，Q86 合规。--no-openbook 为对照臂。
-export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true, openBook = true } = {}) {
+export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget, relaySpeech = true, openBook = true, mods = [] } = {}) {
   const need = (bestOf >> 1) + 1;
   const ids = ['A', 'B'];
   const wins = { A: 0, B: 0 };
@@ -305,7 +307,7 @@ export async function playSeries({ seed0 = 1, bestOf = 3, seats, fetchFn, budget
         ...(openBook ? { rivalHypotheses: hypotheses[opp] } : {}),
       };
     }
-    const r = await playMatch({ seed: seed0 + g, seats, fetchFn, budget, relaySpeech, memory });
+    const r = await playMatch({ seed: seed0 + g, seats, fetchFn, budget, relaySpeech, memory, mods });
     games.push(r);
     if (r.winner) wins[r.winner] += 1;
     if (r.aborted) break;

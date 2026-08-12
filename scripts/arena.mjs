@@ -22,6 +22,7 @@ import { chat } from '../src/ai/llm.js';
 import { summarize, routingIntegrity, flavorSpread, saysRowsOf } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
+import { catalogMap } from '../src/mods/catalog.js';
 
 const argv = process.argv.slice(2);
 // 参赛者是否显式指定了后端（`id@tag`）。**没指定就是不可复现的**：
@@ -60,6 +61,19 @@ const bestOf = flag('bestof') ? Math.max(1, Math.floor(+flag('bestof'))) : null;
 const openBook = !has('no-openbook');
 // 海选模式：--vs <model>＝该模型坐庄，其余候选逐一对打（N 场而非 N² 场）
 const vsAnchor = typeof flag('vs') === 'string' ? flag('vs').split('@')[0] : null;
+// 词条实验臂：--mods qia[,liang,rang]＝把官方词条摆上桌（明牌，全席对等）。
+// ⚠️ 词条改变对局物理（掐＝唯一回骰通道，对局会变长），带词条的批次**不与基础桌批次比较**。
+// 产品侧词条仍按 Q43 冻结——这只是把 Q37「实验桌放开 1v1 试」跑起来，离屏采证。
+const modIds = typeof flag('mods') === 'string' ? flag('mods').split(',').map((s) => s.trim()).filter(Boolean) : [];
+const mods = modIds.map((id) => {
+  const m = catalogMap()[id];
+  if (!m) {
+    console.error(`✗ 官方词条目录里没有「${id}」（有：${Object.keys(catalogMap()).join('、')}）`);
+    process.exit(2);
+  }
+  return m;
+});
+if (mods.length) console.log(`词条上桌（明牌，全席对等）：${mods.map((m) => `「${m.name}」`).join('')}`);
 
 const base = process.env.OPENROUTER_BASE ?? OPENROUTER_BASE; // 本地假服务器可覆盖（集成自测用）
 
@@ -254,7 +268,7 @@ if (bestOf) {
     while (true) {
       const i = nextJob++;
       if (i >= jobs.length || budget.runExceeded()) return;
-      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech, openBook });
+      const s = await playSeries({ seed0, bestOf, seats: jobs[i], budget, relaySpeech, openBook, mods });
       out[i] = s;
       console.log(
         `[系列赛] ${s.seats.A} ${s.wins.A}–${s.wins.B} ${s.seats.B}（${s.games.length} 场）→ ` +
@@ -273,6 +287,7 @@ if (bestOf) {
     budget,
     concurrency,
     relaySpeech,
+    mods,
     onMatch: (m) => {
       dumpLive(m);
       done += 1;
@@ -300,7 +315,7 @@ const memoryNote = bestOf
 const board =
   memoryNote +
   renderBoard(rows, {
-    run: { seed0, games: bestOf ?? games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech },
+    run: { seed0, games: bestOf ?? games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech, mods: mods.map((m) => m.name) },
     integrity,
     cache,
     spread,
@@ -387,7 +402,7 @@ writeFileSync(
       at,
       provenance: { gitCommit, promptVersion: PROMPT_VERSION, systemPromptHash },
       entrants: entrants.map((e) => ({ label: e.label, ...e.meta, reasoningActual: reasoningActualOf(e.label) })),
-      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, openBook, vsAnchor, handEstimate: HAND_ESTIMATE },
+      setup: { sampling: SAMPLING, maxTokens: MAX_TOKENS, games, seed0, concurrency, relaySpeech, bestOf, openBook, vsAnchor, mods: modIds, handEstimate: HAND_ESTIMATE },
       series: seriesResults?.map((s) => ({
         seats: s.seats,
         bestOf: s.bestOf,

@@ -65,6 +65,10 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
       `- 并发：同时跑 ${run.concurrency} 场` +
         (run.concurrency > 1 ? '（场与场独立；**并发会把上游限流拍成超时/格式失败**，跨批次比对时要看这个数）' : '（串行）'),
     );
+  if (run.mods?.length)
+    out.push(
+      `- **词条上桌：${run.mods.map((n) => `「${n}」`).join('')}**（明牌，全席对等）——词条改变对局物理，本批**不与基础桌批次比较**`,
+    );
   out.push(`- 镜像种子：同一副骰种打两遍、互换座位`);
   out.push(`- 采样钉死：${run.sampling ? JSON.stringify(run.sampling) : '—'}，max_tokens=${run.maxTokens ?? '—'}`);
   out.push(`- 档案：每场独立（v1 不带跨场记忆，避免顺序效应）`);

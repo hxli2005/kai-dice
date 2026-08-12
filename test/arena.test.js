@@ -19,6 +19,7 @@ import {
   roundRobin,
 } from '../src/arena/arena.js';
 import { summarize, routingIntegrity, flavorSpread, seatStats, saysRowsOf } from '../src/arena/metrics.js';
+import { catalogMap } from '../src/mods/catalog.js';
 import { callCost, createBudget, estimateRun, cacheReport, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
 import {
@@ -33,10 +34,15 @@ import {
 } from '../src/ai/openrouter.js';
 
 // ---------- 假模型：从提示词里读出合法动作再回，够跑完整场 ----------
-function fakeDecide(user, { aggressive = false, say, belief } = {}) {
+function fakeDecide(user, { aggressive = false, say, belief, qia = null } = {}) {
   const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
   if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
   if (aggressive && user.includes('拨算盘，动作所有对手可见（{"type":"calc"}）')) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
+  // 词条臂：qia 传 {left:n} 时，候选里一出现「掐」就掐（计数器由调用方持有，跨手共享）
+  if (qia?.left > 0 && user.includes('拍词条「掐」')) {
+    qia.left -= 1;
+    return fix({ action: { type: 'qia' }, say: '我掐你这口价', belief: '恰好为真' });
+  }
   const cur = user.match(/当前报价：(?:你|对方)报(\d+)个(\d+)/);
   const canChallenge = /开牌（\{"type":"challenge"\}）/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
@@ -168,6 +174,42 @@ test('A2：镜像种子——同一副骰种打两遍、互换座位', async () 
   const firstDice = first.events.find((e) => e.type === 'reveal').dice.A;
   const secondDice = second.events.find((e) => e.type === 'reveal').dice.A;
   assert.deepEqual(firstDice, secondDice, 'A 座的第一副骰在两遍里必须一模一样——否则对冲不了运气');
+});
+
+// ---------- 词条实验臂（Q37「掐」上桌；产品侧仍按 Q43 冻结，这是离屏采证） ----------
+test('词条上桌：mods 穿透 playMatch——提示词见规则卡与候选动作，掐落进事件流与棋力层', async () => {
+  const { qia } = catalogMap();
+  const seen = [];
+  const qState = { left: 1 }; // 只掐一次，其余照常打——让一场能正常打完
+  const m = await playMatch({
+    seed: 33,
+    seats: { A: seat('mx'), B: seat('qiaer') },
+    mods: [qia],
+    fetchFn: async (url, init) => {
+      const body = JSON.parse(init.body);
+      return fakeChannel({ seen, qia: /qiaer/.test(body.model) ? qState : null })(url, init);
+    },
+  });
+  assert.equal(qState.left, 0, '假模型应真的掐过一次');
+  // 提示词侧：规则卡明牌注入＋候选动作行（两席都看得见——词条对等）
+  const users = seen.map((r) => r.body.messages[1].content);
+  assert.ok(users.some((u) => u.includes('实验词条（明牌）：「掐」')), '规则卡要进提示词');
+  assert.ok(users.some((u) => u.includes('拍词条「掐」') && u.includes('{"type":"qia"}')), '候选动作行要带 JSON 样例');
+  // 引擎侧：掐走的是 calza 摊牌，事件流里有据可查
+  const rv = m.events.find((e) => e.type === 'reveal' && e.calza);
+  assert.ok(rv, '掐的摊牌必须落进事件流');
+  assert.equal(typeof rv.exact, 'boolean');
+  const re = m.events.find((e) => e.type === 'roundEnd' && e.calza);
+  assert.equal(re.caller, 'B', '掐的归属：B 座主动出手');
+  assert.ok(m.over, '掐完这场要能照常打完');
+  // 指标侧：掐进棋力层，带自己的分母
+  const row = summarize([m]).find((r) => r.label === 'qiaer');
+  assert.equal(row.skill.calzas, 1);
+  assert.equal(typeof row.skill.calzaHitRate, 'number');
+  assert.equal(row.compliance.illegalRate, 0, '掐是合法动作，不许被记成非法');
+  // 榜侧：实验设置必须写明词条上桌（改任何一条设置，跨批次的数就不能比了）
+  const board = renderBoard(summarize([m]), { run: { mods: ['掐'] } });
+  assert.ok(board.includes('词条上桌：「掐」'), '带词条的批次要在实验设置里声明');
 });
 
 // ---------- A3：合规层归因 ----------
