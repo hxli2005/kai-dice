@@ -39,7 +39,13 @@ const flag = (name, dflt = null) => {
 const N = +(flag('n') ?? 8);
 const MODEL = flag('model') ?? 'deepseek:deepseek-v4-pro'; // 官方端＝0813
 const THINK = argv.includes('--think');
-const ARMS = THINK ? ['v7', 'v8', 'v8-think'] : ['v7', 'v8'];
+// --sem：再加一条臂，只把「开牌」的**语义**补上（其余与 v8 逐字相同）。
+// 缘由：提示词一直只说开牌的机械效果「立即摊牌清点，本局当场结算」，从没说它是**质疑**
+//（DESIGN §1.1 自己写的是「开（质疑）」）。模型得从两节之后的胜负表反推这件事，
+// 而 luna 的留档正好卡在这里：「四个5必然成立……继续报价会把确定优势转成风险」——
+// 它把开牌当成了落袋为安的结算键。本臂用来验：补上语义，误开会不会塌。
+const SEM = argv.includes('--sem');
+const ARMS = ['v7', 'v8', ...(THINK ? ['v8-think'] : []), ...(SEM ? ['v8-sem'] : [])];
 const SRC = 'docs/arena/2026-08-13T13-45-45';
 const OUT = `docs/arena/replay-rules-v8/${MODEL.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 // 局面一律取自 v7 那批的 deepseek 席——换型号时局面**不跟着换**，那正是对照的意义
@@ -89,6 +95,11 @@ const JSON_SPEC = `严格输出一行 JSON，不要其他文字，按此字段�
 
 const SYS_V7 = `${V7_RULES(false)}\n\n${INPUT_CONTRACT}\n\n${JSON_SPEC}`;
 const SYS_V8 = seatSystem(false);
+// v8-sem：在 v8 基础上只改一句——把「开牌」是**什么意思**写出来（这是规则陈述，非提醒）
+const SEM_FROM = '开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。效果：立即摊牌清点，本局当场结算。';
+const SEM_TO = '开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。效果：你宣称这口报价不成立，随即摊牌清点、本局当场结算。';
+const SYS_SEM = SYS_V8.replace(SEM_FROM, SEM_TO);
+if (SEM && SYS_SEM === SYS_V8) throw new Error('v8-sem 补丁零命中：开牌那行的措辞变了');
 const h16 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 
 const run = JSON.parse(fs.readFileSync(path.join(SRC, 'run.json'), 'utf8'));
@@ -192,7 +203,7 @@ async function worker() {
     for (let a = 0; a < 2 && raw == null; a++) {
       try {
         raw = await chat(channel, {
-          system: arm === 'v7' ? SYS_V7 : SYS_V8,
+          system: arm === 'v7' ? SYS_V7 : arm === 'v8-sem' ? SYS_SEM : SYS_V8,
           user: c.user, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS, meta,
           ...(arm === 'v8-think' ? { extra: thinkExtra } : {}),
         });
@@ -216,7 +227,7 @@ const rate = (kind, arm) => {
   return { ch, n: rs.length, pct: rs.length ? (ch / rs.length) * 100 : null };
 };
 console.log(`\n实花约 $${spentUsd.toFixed(2)}\n`);
-const ARM_LABEL = { v7: 'v7 记号体', v8: 'v8 规则书体', 'v8-think': 'v8＋开推理' };
+const ARM_LABEL = { v7: 'v7 记号体', v8: 'v8 规则书体', 'v8-think': 'v8＋开推理', 'v8-sem': 'v8＋开牌语义' };
 console.log(`模型：${MODEL}\n`);
 console.log('局面类别'.padEnd(26) + ARMS.map((a) => ARM_LABEL[a].padStart(16)).join(''));
 console.log('─'.repeat(26 + 16 * ARMS.length));
