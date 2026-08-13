@@ -408,12 +408,23 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   assert.equal(sysAvatar, sysModel, '全席 system 必须完全相同');
 
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
-  assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
-  assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
+  assert.match(sysModel, /这张桌上所有人的骰子加在一起，X 点至少有 N 个/, '规则：报价的含义');
+  assert.match(sysModel, /不检查一口价是真是假/, '规则：报价无需为真');
   assert.ok(!sysModel.includes('算盘'), '规则：计算工具不存在');
-  assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
-  assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
+  assert.match(sysModel, /前置条件不满足的动作，会被引擎拒绝/, '操作');
+  assert.match(sysModel, /都要向胜者支付这笔赔付/, '结算：倍率双向');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');
+
+  // v8 靶点（两条被实测读错的规则，各自独立成句，不许再退回公式）：
+  // ①胜负方向——全库 13 次留档明写「必然成立」仍去开牌，9 次是看着算盘 100% 开的
+  assert.match(sysModel, /这口价成立。报价的人赢，开牌的人输/, 'v8：胜负方向说成人话');
+  assert.match(sysModel, /这口价不成立。开牌的人赢，报价的人输/, 'v8：反向同样写全');
+  // ②清点范围——「N 个 X」被读成「报价者手里有 N 个」，或自己的骰不计入门槛
+  assert.match(sysModel, /你自己手里的骰子，同样算在这个总数里面/, 'v8：自己的骰算进总数');
+  assert.match(sysModel, /既包括报价那个人的，也包括开牌那个人的/, 'v8：清点范围含双方');
+  // v8：程序员记号清零——这套写法正是两类误读的病根
+  for (const sym of ['⟺', '∧', '∨', '2^', '|{', 'N₀', 'X₀', '?:'])
+    assert.ok(!sysModel.includes(sym), `v8：记号「${sym}」不许回流，规则一律写成句子`);
 
   // 删干净的东西——任何一条回来都是偷塞人格（Q85/Q86）
   for (const gone of [

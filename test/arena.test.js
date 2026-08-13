@@ -108,11 +108,12 @@ test('A2：擂台席的系统提示词全席逐字相同，且不含任何身份
   for (const banned of ['老李头', '阿飞', '先生', '客席', 'deepseek', 'claude'])
     assert.ok(!sysA.toLowerCase().includes(banned.toLowerCase()), `擂台提示词不许出现「${banned}」`);
   // Q86 二准入：只剩规则与操作＋输出格式（三锁与内容底线已随 Q85/Q86 退场）
-  assert.match(sysA, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
-  assert.match(sysA, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysA, /前置不满足的动作被引擎拒绝/, '操作');
-  assert.match(sysA, /每名非胜者向胜者支付赔付/, '结算：倍率是双向的（本次补上）');
+  assert.match(sysA, /这张桌上所有人的骰子加在一起，X 点至少有 N 个/, '规则：报价的含义');
+  assert.match(sysA, /不检查一口价是真是假/, '规则：报价无需为真');
+  assert.match(sysA, /前置条件不满足的动作，会被引擎拒绝/, '操作');
+  assert.match(sysA, /都要向胜者支付这笔赔付/, '结算：倍率是双向的');
   assert.match(sysA, /严格输出一行 JSON/, '输出格式');
+  assert.match(sysA, /这口价成立。报价的人赢，开牌的人输/, 'v8：胜负方向说成人话（擂台席同规）');
   for (const gone of ['信息边界', '真迹不可改', '不作人身攻击', '你自己的判断', '铁律'])
     assert.ok(!sysA.includes(gone), `Q85/Q86：「${gone}」应已退场`);
   // 档案槽位仍在（v1 每场独立＝"生面孔"，不是把接口拆了）
