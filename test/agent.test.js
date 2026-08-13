@@ -50,7 +50,7 @@ test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   assert.ok(!/用时|\d秒/.test(user));
   // Q45／C1 根治（2026-08-10）：没拨算盘就**一个数都不给**——粗档也是数。
   // 玩家侧未拨算盘是被动零显示，AI 侧再给粗档就是独有的被动优势（破 B.1 双发）。
-  assert.match(user, /当前报价：对方报2个4。[\s\S]*你未拨算盘：手上没有准数。/);
+  assert.match(user, /当前报价：对方报2个4。[\s\S]*你未拨算盘：引擎未发概率数。/);
   assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '未拨算盘时连粗档词都不许出现');
   assert.ok(!/=\s*\d+%/.test(user), '候选不许带任何概率标注');
   assert.match(user, /爱虚张/);
@@ -124,7 +124,7 @@ test('宿主 revision：回答绑定观察时的引擎与引语状态', async ()
   assert.notEqual(stateIdOf(m.observe('A'), { dialogue }), hostId, '引擎不变但宿主引语变化也应使回答过期');
 });
 
-test('Q45 算盘：拨过才给准数，且"算"进得了叙事（何时算＝新 tell）', async () => {
+test('Q45 算盘：拨过引擎才发数，且"算"进得了叙事（何时算＝新 tell）', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
@@ -132,9 +132,17 @@ test('Q45 算盘：拨过才给准数，且"算"进得了叙事（何时算＝�
   await m.act('B', { type: 'calc' });
   const ob = m.observe('B');
   const { user, system } = buildPrompts(ob, '');
-  assert.match(user, /你已拨算盘：按你的骰面算，当前报价为真的精确概率\d+%/);
+  assert.match(user, /你已拨算盘：看不见的骰按每面 1\/6 计，当前报价为真的概率\d+%/);
   assert.ok(!user.includes('只算骰面，不算人'), 'Q86：解释是非程序性的，只留数据');
-  assert.match(system, /未拨算盘你手上就没有准数/, 'Q45：这条是规则，留在规则区');
+  assert.match(system, /未拨则引擎不发此数/, 'Q45：这条是规则，留在规则区');
+  // v4 算盘去权威化：语义写满（输入清单＋均匀假设＋确定性＋职能范围），「准数」话术不许回流——
+  // 「你手上有/没有准数」是认知断言，实测把工具输出抬成压过行为读的最强约束
+  assert.match(system, /算式输入只有你已可见的信息/, 'v4：输入清单');
+  assert.match(system, /看不见的骰一律按每面 1\/6 计/, 'v4：分布假设写明——这个数不含对手行为信息');
+  assert.match(system, /同样的输入谁算都得同一个数/, 'v4：确定性——心算专家不需要算盘');
+  assert.match(system, /只保证不算错/, 'v4：职能范围＝防算错，不是发真理');
+  assert.ok(!system.includes('准数') && !user.includes('准数'), 'v4：「准数」话术全删');
+  assert.ok(!user.includes('精确概率'), 'v4：结果行不再自称精确');
   // 对手侧：拨算盘是公开动作，必须进局面叙事
   const { user: userA } = buildPrompts(m.observe('A'), '');
   assert.match(userA, /对方拨算盘/);
@@ -161,7 +169,7 @@ test('工具：名册上全员有算盘；calc=never 的座位仍然拿不到候
       assert.ok(!u.includes(gone), `Q86：算频染色「${gone}」是行为剧本，应已删`);
 });
 
-test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是他自己的（机制不变：他手上仍没有准数）', async () => {
+test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是他自己的（机制不变：引擎仍未发数）', async () => {
   const m = await createMatch({ seed: 9 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
@@ -178,7 +186,7 @@ test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是�
   assert.equal(d.belief, '其实没底', '留档照留——它是素材，不是判据');
   // 机制没松：他没拨算盘，提示词里就没有任何概率。
   const { user } = buildPrompts(m.observe('B'), '', PERSONAS['model:deepseek-v4-flash']);
-  assert.match(user, /你未拨算盘：手上没有准数/);
+  assert.match(user, /你未拨算盘：引擎未发概率数/);
   assert.ok(!/此话为真的概率 \d+%/.test(user));
 });
 
@@ -431,7 +439,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
   assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysModel, /未拨算盘你手上就没有准数/, '规则：Q45');
+  assert.match(sysModel, /未拨则引擎不发此数/, '规则：Q45');
   assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
   assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');

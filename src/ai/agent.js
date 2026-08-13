@@ -34,7 +34,7 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 
 动作 ｜ 前置 ｜ 效果
 掀盅 ｜ 本局未掀且未宣盲（唯一不需轮到你的动作） ｜ 自己可见本局骰面
-拨算盘 ｜ 轮到你，本局未算 ｜ 得「当前报价为真」的精确概率（按你的骰面与其余未知骰计算）；未拨算盘你手上就没有准数
+拨算盘 ｜ 轮到你，本局未算 ｜ 引擎替你做一道算术并发你结果：「当前报价为真」的概率，本局内随当前报价更新。算式输入只有你已可见的信息（可见的骰、各家骰数、当前报价、斋否），所有你看不见的骰一律按每面 1/6 计；同样的输入谁算都得同一个数，引擎只保证不算错。未拨则引擎不发此数
 宣盲 ｜ 轮到你，未掀盅、未宣盲（已报过价不影响） ｜ 整局不得掀盅；倍率 ×2
 宣斋 ｜ 轮到你，你是首报者，报价次数＝0，未宣斋 ｜ 1 不再万能；倍率 ×1.5
 扳抬 ｜ 轮到你，本局未抬 ｜ 倍率 ×2
@@ -74,9 +74,13 @@ const INPUT_CONTRACT = `输入分区：
 
 // 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
 // 三个机位与擂台席拿到的 system 完全逐字相同（Q53 全席同构在此兑现，测试断言全等）。
-// **版本锁**：v3＝世界语义契约（用户裁决冻结，2026-08-11）。改动本文件的提示词文本
-// 必须升版本号——擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v3';
+// **版本锁**：v3＝世界语义契约（用户裁决冻结，2026-08-11）；v4＝算盘去权威化（用户指示
+// 2026-08-13）——「精确概率／准数／手上没有准数」话术把一道谁都能做的算术抬成唯一真数，
+// 实测模型把它当最强约束压过自己的行为读（k3：「铁律是行为统计，26% 是数学事实」）。
+// 改法不写"防幻觉"元指令（Q86 不许解释），改成把工具语义写满：输入清单＋均匀假设＋
+// 确定性＋「只保证不算错」，通道事实只说「引擎发没发」。改动提示词文本必须升版本号——
+// 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
+export const PROMPT_VERSION = 'v4';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
@@ -212,7 +216,7 @@ const ownActDesc = (a, ob) => {
   if (a?.type === 'bid') return `报了 ${a.count} 个 ${a.face}`;
   if (a?.type === 'peek') return '掀盅看了骰';
   if (a?.type === 'challenge') return '开了牌'; // 只出现在跨局回灌（开牌终结一局）
-  if (a?.type === 'calc') return '拨了算盘（对手都看见了；这局你手上有准数）';
+  if (a?.type === 'calc') return '拨了算盘（对手都看见了；本局内引擎随当前报价发你概率）';
   if (!a?.type) return '（无动作）';
   const meta = modActionMeta(ob, a.type);
   if (!meta) return `用了「${a.type}」`;
@@ -477,8 +481,11 @@ function serializeCurrent(payload, who) {
   if (c.currentBid)
     lines.push(`当前报价：${who(c.currentBid.player)}报${c.currentBid.count}个${c.currentBid.face}${c.ownBidReturned ? '；这口自己的价被原样推回' : ''}。`);
   else lines.push('当前报价：无。');
-  if (c.probability) lines.push(`你已拨算盘：按你的骰面算，当前报价为真的精确概率${pct(c.probability.trueProbability)}。`);
-  else if (c.currentBid) lines.push('你未拨算盘：手上没有准数。');
+  // 算盘话术纪律（v4）：只说算式假设与「引擎发没发这个数」，不说「你手上有/没有准数」——
+  // 后者是认知断言，把工具输出抬成唯一真数；「看不见的骰按每面 1/6 计」在盲局也自动成立
+  //（旧文案「按你的骰面算」在盲局是假的——骰面自己都看不见）。
+  if (c.probability) lines.push(`你已拨算盘：看不见的骰按每面 1/6 计，当前报价为真的概率${pct(c.probability.trueProbability)}。`);
+  else if (c.currentBid) lines.push('你未拨算盘：引擎未发概率数。');
   if (c.latestTableTalk) {
     const t = c.latestTableTalk;
     const when = t.action ? `${actionContext(t.action)}时` : t.kind === 'poke' ? '当面反驳时' : '';
