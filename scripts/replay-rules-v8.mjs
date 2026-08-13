@@ -15,23 +15,34 @@
 //   · **对照**：差一个就满足（自己贡献 = N−1）⇒ 开牌是**正常的判断题**，不是错误。
 //     这一类用来防"v8 只是把它吓得不敢开了"——若两类一起塌，那不是治好，是变怂。
 //
+// **换型号跑同一批局面**＝回答「是不是这个模型自己菜」：局面固定、提示词固定，只换回答的人。
+// 加 --think 再开一条「同 system、开推理」的臂，回答「是不是想得不够久」。
+//
 // 用法：
 //   node scripts/replay-rules-v8.mjs --dry              离线自检（重建哈希＋局面清点），零网络
 //   DEEPSEEK_KEY=sk-... node scripts/replay-rules-v8.mjs [--n 8]
+//   OPENROUTER_KEY=sk-or-... node scripts/replay-rules-v8.mjs --model openai/gpt-5.6-luna --think
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { countBid } from '../src/rules.js';
 import { seatSystem, PROMPT_VERSION, parseDecision } from '../src/ai/agent.js';
 import { chat } from '../src/ai/llm.js';
-import { SAMPLING, MAX_TOKENS, TIMEOUT_MS } from '../src/arena/arena.js';
+import { SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
 
 const argv = process.argv.slice(2);
 const DRY = argv.includes('--dry');
-const nIdx = argv.indexOf('--n');
-const N = nIdx >= 0 ? +argv[nIdx + 1] : 8; // 注意：indexOf 返回 -1 时 argv[0] 会被当成值
+const flag = (name, dflt = null) => {
+  const i = argv.indexOf(`--${name}`); // 注意：indexOf 返回 -1 时 argv[0] 会被当成值
+  return i >= 0 ? argv[i + 1] : dflt;
+};
+const N = +(flag('n') ?? 8);
+const MODEL = flag('model') ?? 'deepseek:deepseek-v4-pro'; // 官方端＝0813
+const THINK = argv.includes('--think');
+const ARMS = THINK ? ['v7', 'v8', 'v8-think'] : ['v7', 'v8'];
 const SRC = 'docs/arena/2026-08-13T13-45-45';
-const OUT = 'docs/arena/replay-rules-v8';
+const OUT = `docs/arena/replay-rules-v8/${MODEL.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+// 局面一律取自 v7 那批的 deepseek 席——换型号时局面**不跟着换**，那正是对照的意义
 const SEAT_MATCH = /deepseek/;
 
 // ---- v7 system 重建（逐字，哈希对不上就中止）----
@@ -115,30 +126,63 @@ const targets = cases.filter((c) => c.kind === 'target');
 const controls = cases.filter((c) => c.kind === 'control');
 console.log(`局面：靶心 ${targets.length} 个（v7 实测误开 ${targets.filter((c) => c.was === 'challenge').length} 次）　对照 ${controls.length} 个`);
 if (DRY) {
-  console.log(`\n--dry 完成。实跑：${cases.length} 局面 × 2 臂 × ${N} 发 = ${cases.length * 2 * N} 发`);
+  console.log(`\n--dry 完成。实跑：${cases.length} 局面 × ${ARMS.length} 臂（${ARMS.join('／')}）× ${N} 发 = ${cases.length * ARMS.length * N} 发`);
   for (const c of targets) console.log(`  靶心 seed${c.seed} r${c.round} 报价${c.bid} 自见[${c.own}]（自己就有${c.mine}个）v7 实测=${c.was}`);
   process.exit(0);
 }
 
-// ---- 通道：与 v7 那批同规（DeepSeek 官方端、非思考档、同采样钉子）----
-const apiKey = process.env.DEEPSEEK_KEY;
-if (!apiKey) {
-  console.error('缺 DEEPSEEK_KEY');
+// ---- 通道：与 v7 那批同规（非思考档、同采样钉子）；`provider:id` 走原厂，否则走 OpenRouter ----
+// 计价用各自的官网/货架价，只为把"这次花了多少"说清楚，不是记账。
+const PRICE = { 'deepseek-v4-pro': { in: 3 / 7.1, out: 6 / 7.1 } }; // 原厂按 ¥ 报价，这里折成 $ 量级
+async function makeChannel(spec) {
+  const i = spec.indexOf(':');
+  if (i > 0 && spec.slice(0, i) === 'deepseek') {
+    const apiKey = process.env.DEEPSEEK_KEY;
+    if (!apiKey) throw new Error('缺 DEEPSEEK_KEY');
+    const model = spec.slice(i + 1);
+    return {
+      ch: { baseUrl: 'https://api.deepseek.com/v1', apiKey, model, format: 'openai', extra: { ...SAMPLING, reasoning_effort: 'none' } },
+      think: { ...SAMPLING, reasoning_effort: 'high' },
+      price: PRICE[model] ?? { in: 0, out: 0 },
+      note: 'DeepSeek 官方端（原厂唯一口，无后端可锁）',
+    };
+  }
+  const apiKey = process.env.OPENROUTER_KEY;
+  if (!apiKey) throw new Error('缺 OPENROUTER_KEY');
+  const { fetchModels, fetchEndpoints, openrouterChannel } = await import('../src/ai/openrouter.js');
+  const info = (await fetchModels({ apiKey })).find((m) => m.id === spec);
+  if (!info) throw new Error(`OpenRouter 清单里没有 ${spec}`);
+  let tag = null;
+  try { tag = (await fetchEndpoints(spec))[0]?.tag ?? null; } catch {}
+  const base = openrouterChannel({ apiKey, model: spec, modelInfo: info, providerTag: tag });
+  const pinned = pinSampling(base);
+  return {
+    // 非思考档：OpenRouter 统一口径显式关推理（与擂台 #nothink 同写法）
+    ch: { ...pinned, reasoningProfile: undefined, extra: { ...pinned.extra, reasoning: { enabled: false } } },
+    think: { ...pinned.extra, reasoning: { effort: 'high' } },
+    price: { in: info.promptPrice * 1e6, out: info.completionPrice * 1e6 },
+    note: `OpenRouter${tag ? `（后端锁 ${tag}）` : '（后端未锁）'}`,
+  };
+}
+let channel;
+let thinkExtra;
+let price;
+try {
+  const c = await makeChannel(MODEL);
+  channel = c.ch;
+  thinkExtra = c.think;
+  price = c.price;
+  console.log(`通道：${MODEL}　${c.note}　计价 $${price.in.toFixed(2)}/$${price.out.toFixed(2)} 每百万`);
+} catch (e) {
+  console.error('✗ ' + e.message);
   process.exit(2);
 }
-const channel = {
-  baseUrl: 'https://api.deepseek.com/v1',
-  apiKey,
-  model: 'deepseek-v4-pro',
-  format: 'openai',
-  extra: { ...SAMPLING, reasoning_effort: 'none' },
-};
 
 const jobs = [];
-for (const c of cases) for (const arm of ['v7', 'v8']) for (let i = 0; i < N; i++) jobs.push({ c, arm, i });
+for (const c of cases) for (const arm of ARMS) for (let i = 0; i < N; i++) jobs.push({ c, arm, i });
 const results = [];
 let cursor = 0;
-let spentCny = 0;
+let spentUsd = 0;
 async function worker() {
   while (cursor < jobs.length) {
     const { c, arm, i } = jobs[cursor++];
@@ -150,16 +194,16 @@ async function worker() {
         raw = await chat(channel, {
           system: arm === 'v7' ? SYS_V7 : SYS_V8,
           user: c.user, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS, meta,
+          ...(arm === 'v8-think' ? { extra: thinkExtra } : {}),
         });
-      } catch (e) { err = e?.message; await new Promise((r) => setTimeout(r, 800)); }
+      } catch (e) { err = e?.message; await new Promise((r) => setTimeout(r, meta.status === 429 ? 4000 : 800)); }
     }
-    // 官网价：¥3/M 输入、¥6/M 输出（缓存未命中口径，估高不估低）
-    spentCny += ((meta.inTokens ?? 0) * 3 + (meta.outTokens ?? 0) * 6) / 1e6;
+    spentUsd += ((meta.inTokens ?? 0) * price.in + (meta.outTokens ?? 0) * price.out) / 1e6;
     let action = null;
     try { action = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).action?.type ?? null; } catch {}
     const belief = (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).belief ?? ''; } catch { return ''; } })();
     results.push({ ...c, user: undefined, arm, i, action, belief, err });
-    if (results.length % 20 === 0) console.log(`  …${results.length}/${jobs.length}　¥${spentCny.toFixed(2)}`);
+    if (results.length % 20 === 0) console.log(`  …${results.length}/${jobs.length}　$${spentUsd.toFixed(2)}`);
   }
 }
 console.log(`开跑：${jobs.length} 发\n`);
@@ -171,19 +215,21 @@ const rate = (kind, arm) => {
   const ch = rs.filter((r) => r.action === 'challenge').length;
   return { ch, n: rs.length, pct: rs.length ? (ch / rs.length) * 100 : null };
 };
-console.log(`\n实花约 ¥${spentCny.toFixed(2)}\n`);
-console.log('局面类别                          v7（记号体）      v8（规则书体）');
-console.log('─'.repeat(70));
+console.log(`\n实花约 $${spentUsd.toFixed(2)}\n`);
+const ARM_LABEL = { v7: 'v7 记号体', v8: 'v8 规则书体', 'v8-think': 'v8＋开推理' };
+console.log(`模型：${MODEL}\n`);
+console.log('局面类别'.padEnd(26) + ARMS.map((a) => ARM_LABEL[a].padStart(16)).join(''));
+console.log('─'.repeat(26 + 16 * ARMS.length));
 for (const [kind, label, note] of [
   ['target', '靶心：自己的骰已让价成立', '开牌必输，越低越好'],
   ['control', '对照：差一个就满足', '正常判断题，不该一起塌'],
 ]) {
-  const a = rate(kind, 'v7');
-  const b = rate(kind, 'v8');
-  console.log(
-    `${label.padEnd(28)}${`${a.ch}/${a.n} = ${a.pct?.toFixed(0)}%`.padStart(14)}${`${b.ch}/${b.n} = ${b.pct?.toFixed(0)}%`.padStart(18)}　${note}`,
-  );
+  const cells = ARMS.map((a) => {
+    const r = rate(kind, a);
+    return `${r.ch}/${r.n} = ${r.pct == null ? '—' : r.pct.toFixed(0) + '%'}`.padStart(16);
+  });
+  console.log(label.padEnd(24) + cells.join('') + '　' + note);
 }
 fs.mkdirSync(OUT, { recursive: true });
-fs.writeFileSync(path.join(OUT, 'result.json'), JSON.stringify({ n: N, sysHash: { v7: h16(SYS_V7), v8: h16(SYS_V8) }, spentCny, results }, null, 1));
+fs.writeFileSync(path.join(OUT, 'result.json'), JSON.stringify({ n: N, sysHash: { v7: h16(SYS_V7), v8: h16(SYS_V8) }, spentUsd, results }, null, 1));
 console.log(`\n落盘 ${OUT}/result.json`);
