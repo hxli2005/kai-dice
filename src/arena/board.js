@@ -69,6 +69,15 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
     out.push(
       `- **词条上桌：${run.mods.map((n) => `「${n}」`).join('')}**（明牌，全席对等）——词条改变对局物理，本批**不与基础桌批次比较**`,
     );
+  // 混供应商的批次：每席从哪个口子进来的必须写在脸上——
+  // 同一个模型 ID 在原厂端与转售端是两套服务（版本、量化、限流都可能不同），
+  // 不写清楚的话，一周后没人分得出 `a:b` 和 `a/b` 哪个是哪个（Q52② 的反面教训）。
+  if (run.channels?.length) {
+    const mixed = new Set(run.channels.map((c) => c.origin)).size > 1;
+    out.push(`- 通道来源：${mixed ? '**本批跨供应商**——版本差异与后端／量化差异分不开，结论只能连着说' : '全席同一供应商'}`);
+    for (const c of run.channels)
+      out.push(`  - \`${c.label}\` ← ${c.origin}${c.tag ? `（后端锁 ${c.tag}）` : ''}${c.note ? `　${c.note}` : ''}`);
+  }
   out.push(`- 镜像种子：同一副骰种打两遍、互换座位`);
   out.push(`- 采样钉死：${run.sampling ? JSON.stringify(run.sampling) : '—'}，max_tokens=${run.maxTokens ?? '—'}`);
   out.push(`- 档案：每场独立（v1 不带跨场记忆，避免顺序效应）`);
@@ -181,6 +190,36 @@ export function renderBoard(rows, { run = {}, integrity, cache, spread, estimate
     out.push('');
   }
 
+    out.push('');
+  out.push('## ③-bis 出手节奏——快枪手与乌龟');
+  out.push('> 肯为一口价想多久、写多少字，跟虚不虚报同样是「它是个什么对手」（2026-08-13 裁定：节奏也是风味）。');
+  out.push('> ');
+  out.push(
+    '> ⚠️ **用时不可跨供应商直接比**——里面混着对方的服务速度、量化档与网络。' +
+      '模型自己选的那个量是「完成 tok/手」，那一列才可比。' +
+      '**「推理 tok/手」要小心读**：`—` ＝ 回执一次都没报这一项；`0` ＝ 报了、但确实是零，' +
+      '那多半意味着**它的思考写在正文里而不是独立推理通道里**（实测 kimi-k3 即如此：' +
+      '推理计 0，可它的留档里是成串的反推链）。两种情况都不等于「它没思考」。',
+  );
+  out.push('');
+  out.push(
+    table(
+      ['模型', '用时中位', 'p90', '完成 tok/手', '推理 tok/手', 'n(计时手)'],
+      sorted.map((r) =>
+        spoiled(r)
+          ? [r.label, '—', '—', '—', '—', `⚠️ ${spoiledNote(r)}`]
+          : [
+              r.label,
+              r.flavor.msMedian == null ? '—' : `${(r.flavor.msMedian / 1000).toFixed(1)}s`,
+              r.flavor.msP90 == null ? '—' : `${(r.flavor.msP90 / 1000).toFixed(1)}s`,
+              r.flavor.outTokensPerHand ?? '—',
+              r.flavor.reasoningPerHand ?? '—',
+              r.flavor.n.ms,
+            ],
+      ),
+    ),
+  );
+  out.push('');
   out.push('## 台词留样（不评分）');
   out.push('> 台词质量评估**须等接地批次 G2 完成**——否则评的是被主客体颠倒污染的台词。这里只留样。');
   out.push('');

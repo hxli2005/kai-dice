@@ -100,6 +100,12 @@ const emptyAcc = () => ({
   costFromApi: 0,
   latencySum: 0,
   latencyN: 0,
+  // 出手节奏（2026-08-13 用户裁定「思考时间也是风味」）：快枪手 vs 乌龟。
+  // 存全量而不只存和——中位数与 p90 才读得出节奏，均值会被一两发长思考带跑。
+  msList: [],
+  outTokPerHand: [],
+  reasonTok: 0,
+  reasonTokN: 0,
   providers: {},
 });
 
@@ -163,10 +169,25 @@ function accumulate(acc, match, seat, { keepLines = 6 } = {}) {
     if (m.ms != null) {
       acc.latencySum += m.ms;
       acc.latencyN += 1;
+      acc.msList.push(m.ms);
+    }
+    if (m.usage?.completion_tokens != null) acc.outTokPerHand.push(m.usage.completion_tokens);
+    // 推理 token **不是每家都报**（实测 kimi-k3／haiku 的回执里没有这一项）——
+    // 没报的不许按 0 计，否则"它不思考"就成了我们编的。分母单独记。
+    const rt = m.usage?.completion_tokens_details?.reasoning_tokens;
+    if (rt != null) {
+      acc.reasonTok += rt;
+      acc.reasonTokN += 1;
     }
     if (m.provider) acc.providers[m.provider] = (acc.providers[m.provider] ?? 0) + 1;
   }
 }
+
+const quantile = (arr, q) => {
+  if (!arr.length) return null;
+  const v = [...arr].sort((a, b) => a - b);
+  return v[Math.min(v.length - 1, Math.floor(v.length * q))];
+};
 
 // 累加器 → 三层报表。每个比率都带自己的分母（A5：**结论必须带样本数**）。
 export function finalize(acc) {
@@ -209,12 +230,19 @@ export function finalize(acc) {
       calcPerRound: r2(div(acc.calcs, acc.rounds)), // 算频（原生 tell：算不算是他自己的事）
       declarePerRound: r2(div(acc.declares, acc.rounds)), // 宣言使用率（盲＋抬）
       baitRate: r2(div(acc.baits, acc.says)), // 自认有意误导的比例
+      // 出手节奏＝风味的一部分（用户裁定）：一个模型肯为一口价想多久、写多少字，
+      // 跟它虚不虚报同样是"它是个什么对手"。⚠️ 用时里混着**供应商的服务速度与网络**，
+      // 跨供应商不可直接比；`outTokensPerHand` 才是模型自己选的量，那个可比。
+      msMedian: quantile(acc.msList, 0.5),
+      msP90: quantile(acc.msList, 0.9),
+      outTokensPerHand: acc.outTokPerHand.length ? Math.round(acc.outTokPerHand.reduce((a, b) => a + b, 0) / acc.outTokPerHand.length) : null,
+      reasoningPerHand: acc.reasonTokN ? Math.round(acc.reasonTok / acc.reasonTokN) : null, // null＝这家回执不报，不是它没想
       // 话密度口径：分母只算它**自己产出合法决策**的手（ok）——错误/超时/顶班的手它没得选，
       // 算进去会把"故障"稀释成"沉默"，污染这个 tell。
       sayRate: r2(div(acc.says, acc.ok)),
       avgSayLen: r2(div(acc.sayLenSum, acc.says)),
       lines: acc.lines, // 留样：台词质量评估等 G2
-      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says, hands: acc.ok },
+      n: { seenBids: acc.seenBids, bids: acc.bids, rounds: acc.rounds, says: acc.says, hands: acc.ok, ms: acc.msList.length, reasoning: acc.reasonTokN },
     },
     // 成本与后端（A4 实收账目／A2 路由锁的验尺）
     cost: {
@@ -262,7 +290,7 @@ export function routingIntegrity(rows) {
 
 // 风味分化的判据（Q51 证据闸门）：**只看风味层**。
 // 机器只能报"分没分开"，"分开得算不算一个人"由人看（红队条款：这里不下结论）。
-export const FLAVOR_AXES = ['bluffRate', 'knowingBluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate'];
+export const FLAVOR_AXES = ['bluffRate', 'knowingBluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate', 'msMedian', 'outTokensPerHand'];
 
 // 顶班率 ≥20% 的行不参与分化计算——那些数里掺着沉默 bot，拿它算"模型之间差多少"是自欺。
 export const CONTAMINATED_RATE = 0.2;
@@ -271,8 +299,13 @@ export function flavorSpread(rows, { minSamples = 20 } = {}) {
   const axes = {};
   const clean = rows.filter((r) => (r.compliance?.silentFallbackRate ?? 0) < CONTAMINATED_RATE);
   for (const key of FLAVOR_AXES) {
+    // 每条轴认自己的分母：虚报看"看过骰的口"、节奏看"计过时的手"，别拿局数糊弄
+    const denom = (r) =>
+      key === 'bluffRate' || key === 'knowingBluffRate' ? r.flavor.n.seenBids
+      : key === 'msMedian' || key === 'outTokensPerHand' ? r.flavor.n.ms
+      : r.flavor.n.rounds;
     const vals = clean
-      .filter((r) => (key === 'bluffRate' ? r.flavor.n.seenBids : r.flavor.n.rounds) >= minSamples)
+      .filter((r) => denom(r) >= minSamples)
       .map((r) => ({ label: r.label, v: r.flavor[key] }))
       .filter((x) => x.v != null);
     if (vals.length < 2) {
