@@ -19,6 +19,9 @@ import {
   roundRobin,
 } from '../src/arena/arena.js';
 import { summarize, routingIntegrity, flavorSpread, seatStats, saysRowsOf } from '../src/arena/metrics.js';
+// 这条用例走的是**产品默认机位**（没传 ARENA_SEAT），所以对的是产品的预算，
+// 不是擂台的 MAX_TOKENS——2026-08-13 擂台放开到 32768 之后，两个数不再相等。
+import { DECISION_MAX_TOKENS } from '../src/ai/personas.js';
 import { catalogMap } from '../src/mods/catalog.js';
 import { callCost, createBudget, estimateRun, cacheReport, HAND_ESTIMATE } from '../src/arena/cost.js';
 import { renderBoard } from '../src/arena/board.js';
@@ -767,7 +770,7 @@ test('推理开关臂：channel.extra.reasoning={enabled:false} 原样下发，�
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"action":{"type":"peek"}}' } }] }) };
   } }).decide((await createMatch({ seed: 3 })).observe('A'));
   assert.deepEqual(seen[0].reasoning, { enabled: false }, '关断显式下发');
-  assert.equal(seen[0].max_tokens, MAX_TOKENS, '显式关断后不套推理信封（裸 3072）');
+  assert.equal(seen[0].max_tokens, DECISION_MAX_TOKENS, '显式关断后不套推理信封（裸预算原样下发）');
 });
 
 // ---------- 逐句制品主键：跨臂同 seed 不得碰撞（2026-08-12 用户核数抓获的伪象根源） ----------

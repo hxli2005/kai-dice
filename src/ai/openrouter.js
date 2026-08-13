@@ -82,12 +82,15 @@ export function normalizeModel(m) {
 //   ① 默认会思考的型号，给推理独立上限并保留答案余量；不替默认关闭的型号强开推理；
 //   ② 支持 JSON 模式的型号只在“决策调用”上锁传输格式，不污染开场白等纯文本任务。
 // 这是能力协商，不是按型号改提示词；所有席位看到的 system/user 仍逐字相同。
-export function requestFeatures(model) {
+// budget 可覆盖（2026-08-13）：**产品与擂台的预算不是一回事**。
+// 产品要守玩家的等待节拍（改它属玩家可感，须走设计裁决）；擂台离屏跑，只该被模型自己的
+// 思考长度限制，不该被我们的盒子限制。所以这里留一个口子，默认值＝产品档，一个字不变。
+export function requestFeatures(model, { completionTokens = OPENROUTER_COMPLETION_TOKENS, reasoningTokens = OPENROUTER_REASONING_TOKENS } = {}) {
   if (!model) return {};
-  const maxCompletion = Math.max(1, Math.min(OPENROUTER_COMPLETION_TOKENS, model.maxOutput ?? Infinity));
+  const maxCompletion = Math.max(1, Math.min(completionTokens, model.maxOutput ?? Infinity));
   // Anthropic 等后端的显式推理预算最低 1024；总信封不足 2048 时不乱下一个会 400 的配置。
   const reasoningMax =
-    maxCompletion >= 2048 ? Math.min(OPENROUTER_REASONING_TOKENS, maxCompletion - 1024) : 0;
+    maxCompletion >= 2048 ? Math.min(reasoningTokens, maxCompletion - 1024) : 0;
   return {
     ...(model.reasoningDefaultEnabled && reasoningMax > 0
       ? {
@@ -162,7 +165,7 @@ export const pickDefaults = (models, picks = DEFAULT_PICKS) => {
 
 // 客席/擂台用的通道对象（与 llm.js 的 chat 同构）。
 // base 可覆盖：本地跑集成测试时指到假服务器，生产不用动。
-export function openrouterChannel({ apiKey, model, modelInfo, referer, title, providerTag, base = OPENROUTER_BASE } = {}) {
+export function openrouterChannel({ apiKey, model, modelInfo, referer, title, providerTag, base = OPENROUTER_BASE, budget } = {}) {
   return {
     baseUrl: base,
     apiKey,
@@ -170,6 +173,6 @@ export function openrouterChannel({ apiKey, model, modelInfo, referer, title, pr
     format: 'openai', // OpenRouter 是 OpenAI 兼容口，Anthropic 模型也从这个口进
     headers: originHeaders({ referer, title }),
     providerTag: providerTag ?? null,
-    ...requestFeatures(modelInfo),
+    ...requestFeatures(modelInfo, budget),
   };
 }

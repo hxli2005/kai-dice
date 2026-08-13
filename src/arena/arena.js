@@ -23,7 +23,6 @@ import { createOpponent, clipHypotheses } from '../ai/agent.js';
 import { createSilentBot } from '../ai/silent.js';
 import { chat } from '../ai/llm.js';
 import { isOpenRouter, providerLock } from '../ai/openrouter.js';
-import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS } from '../ai/personas.js';
 import { seatStats } from './metrics.js';
 
 // 钉死的采样参数（纪律③）。**这不是调参，是钉子**：改了它，跨批次的数就不能比了。
@@ -39,10 +38,21 @@ export const SAMPLING = Object.freeze({
 // 系统性砍断，然后它的"格式失败率"上了榜——那不是它不守契约，是我们的盒子装不下它。
 // 真实 OpenRouter 冒烟：默认推理会把 800、1600 乃至裸 4096 全吃光。总信封统一 3072；
 // 能力层把其中至多 2048 划给推理、保留约 1024 给 JSON。若仍 length，记在我们头上。
-export const MAX_TOKENS = DECISION_MAX_TOKENS;
-// 擂台离屏跑，不吃产品内的节拍预算——超时给到产品档（60s）的 2.5 倍：
-// 实测 GLM 类长思考型号 p95 越过 60s（12 次超时里重试只救回一半），掐它等于替它降级。
-export const TIMEOUT_MS = 150_000;
+// 2026-08-13 放开：3072 的总信封对新一代思考型号是结构性不够的。
+// 实测 deepseek-v4-pro（官方端，0813）在同一道题上推理 tokens 落在 **5383–10717**（n=6），
+// 给 3072 就烧完 3072、给 8192 就烧完 8192，`finish_reason=length`、正文 0 字——
+// 我们付了推理的钱，拿回一个空字符串，然后把它记成"这个模型 94% 的手不听话"。
+// **调大是免费的**：计费按实际生成，探到 max_tokens=200000 都能过，而简单问题只生成 43 tok。
+// 所以这里不再吝啬；真正要防的是下面那条超时，不是这条。
+export const MAX_TOKENS = 32_768;
+// 同批实测：预算够用之后，单发耗时 104–196 秒（n=6，全部自然停止）。
+// 150s 会把其中一半切掉——切掉之后仍然是沉默 bot 顶班，等于修了预算白修。
+export const TIMEOUT_MS = 300_000;
+// OpenRouter 侧的推理信封同步放开（2026-08-13）：**两席必须同规**（Q52②）。
+// 原厂端没有推理信封这层，推理在 32768 的总额里想用多少用多少；若只放开原厂席，
+// 转售席的推理还封在 2048，那两席就不在同一张桌上了——分化里会混进"我们给谁的余量多"。
+// 32768 总额里留 8192 给正文（实测正文只有几十字，绰绰有余）。
+export const REASONING_TOKENS = 24_576;
 
 // 擂台席位：一个没有脸的座位。三个 gear 的取值都必须是"中性"的——
 // calc:'free'＝给算盘但不给算频剧本（算不算是模型自己的 tell，Q45 的原生分化）；
