@@ -19,7 +19,8 @@
 | DESIGN.md | **生效判断**：规则／约束／已验判断 | 仅设计 session | **唯一施工依据** |
 | ASSUMPTIONS.md | 未验假设＋证据台账 | 仅设计 session | **不得作为施工依据**；引用时必须连证据状态一起引用 |
 | ARCHIVE.md | 已作废（僵尸条款）与已搁置（冰箱） | 仅设计 session | **不是设计，不得据以施工** |
-| SYNC.md | 信箱：待决问题 ↑ / 已决裁决 ↓ / 变更日志 | 双方（各写各区） | 待决区的占位实现须带 `TODO(Qn)` |
+| SYNC.md | 信箱：待决问题 ↑ / 已决裁决 ↓ / 变更日志（**只留现阶段**） | 双方（各写各区） | 待决区的占位实现须带 `TODO(Qn)` |
+| SYNC-ARCHIVE.md | 信箱冷库：已执行完的裁决全文／已裁待决原文／已完工施工单／旧变更日志 | 双方（只追加归档批） | **仅史料，不得据以施工** |
 | CLAUDE.md | 本协议 | 仅设计 session | — |
 
 > **三文件分家于 2026-08-10**（SYNC 已决 Q84）。原因：DESIGN.md 里混着大量未验证的市场与体验断言，
@@ -30,7 +31,7 @@
 ## 编码 session 守则
 
 0. 若无 git 仓库：先 `git init` 并建 .gitignore。小步提交；DESIGN/SYNC 的变更单独提交（diff 即变更历史）。
-1. 开工先读：DESIGN.md 全文 + SYNC.md。**ASSUMPTIONS.md 与 ARCHIVE.md 不必读，也不许照做**——前者是赌注，后者是坟场。
+1. 开工先读：DESIGN.md 全文 + SYNC.md。**ASSUMPTIONS.md、ARCHIVE.md 与 SYNC-ARCHIVE.md 不必读，也不许照做**——分别是赌注、坟场与史料，都不是图纸。
 2. **设计缺口三分法**（核心纪律）：
    - DESIGN.md 已覆盖 → 照做；
    - 纯实现细节（玩家不可感）→ 自行决定，SYNC 变更日志记一行；
