@@ -156,7 +156,7 @@ if (DRY) {
 
 // ---- 通道：与 v7 那批同规（非思考档、同采样钉子）；`provider:id` 走原厂，否则走 OpenRouter ----
 // 计价用各自的官网/货架价，只为把"这次花了多少"说清楚，不是记账。
-const PRICE = { 'deepseek-v4-pro': { in: 3 / 7.1, out: 6 / 7.1 } }; // 原厂按 ¥ 报价，这里折成 $ 量级
+const PRICE = { 'deepseek-v4-pro': { in: 3 / 7.1, out: 6 / 7.1 }, 'deepseek-v4-flash': { in: 1 / 7.1, out: 2 / 7.1 } }; // 原厂按 ¥ 报价，折成 $ 量级
 async function makeChannel(spec) {
   const i = spec.indexOf(':');
   if (i > 0 && spec.slice(0, i) === 'deepseek') {
