@@ -27,7 +27,7 @@ import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS, DEFAULT_PERSONA } from './per
 const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 
 场：各 5 骰。每局败者掉 1 骰，掉光出局，余一人则场终。
-局：重掷、全部盖住（自己也看不见），承诺哈希开局公开、摊牌可验（无人能重掷）；掀盅/盲/斋/抬/算盘状态清零（宣言只在当局有效）。
+局：重掷、全部盖住（自己也看不见），承诺哈希开局公开、摊牌可验（无人能重掷）；掀盅/盲/斋/抬状态清零（宣言只在当局有效）。
 首报者：首局＝玩家；之后＝上局败者，该人若出局则为其下家。${
     three ? '\n三人桌：开牌只能开上家（当前报价者）。桌上没有队伍，各自为战。' : ''
   }
@@ -41,7 +41,6 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 开牌 ｜ 轮到你，当前报价存在且不是你报的 ｜ 立即清点结算
 
 除报价外，动作后行动权仍在你。所有动作对手都看得见；你的骰面对手看不见。前置不满足的动作被引擎拒绝。
-桌上另有动作「拨算盘」，你的席位没有此动作：有算盘的席位轮到自己时可拨（每人每局一次，动作公开可见），引擎只向拨者发「当前报价为真」的概率数——按拨者可见的信息算，看不见的骰一律按每面 1/6 计，数值仅拨者自己可见。
 
 报价 (N,X)＝「全场骰子中 X 点至少 N 个」
 合法 ⟺ 2≤N≤总骰数 ∧ X∈(斋局?{1..6}:{2..6}) ∧ (无当前报价 ∨ N>N₀ ∨ (N=N₀ ∧ X>X₀))
@@ -79,10 +78,13 @@ const INPUT_CONTRACT = `输入分区：
 // 当最强约束压过自己的行为读（k3：「铁律是行为统计，26% 是数学事实」）；
 // v5＝模型席拔算盘（用户裁决 2026-08-13「拔了」）——v4 归因时发现 k3 拨算盘**之前**已在
 // belief 里手写出全对的 7/27≈26%，工具零信息增量，纯剩确认仪式与权威锚。算盘保留为真人
-// 辅助（玩家 UI 不动），模型席一律无此动作；规则表仍向模型解释「拨算盘」，因为产品局里
-// 对手（真人）的算是公开事件，它得读得懂。改动提示词文本必须升版本号——
+// 辅助（玩家 UI 不动），模型席一律无此动作；
+// v6＝算盘对模型席**整体不可见**（用户审稿 2026-08-13「还有一堆算盘相关，删干净」）——
+// v5 还留着"桌面动作解释＋对手拨算盘叙事＋已算/未算状态"，v6 全部随席位拔除：
+// 无算盘席位的提示词里这个词不再出现（真人的算盘成了纯私人辅助，模型不接收此信号）。
+// 「打死」改「证伪」同批（用户红笔）。改动提示词文本必须升版本号——
 // 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v5';
+export const PROMPT_VERSION = 'v6';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
@@ -250,7 +252,7 @@ const normalizedMemory = (profile, hypotheses = []) => {
 
 // 按席位投影（接收侧）：数据层全量保存，进提示词时只留**对手**的话——
 // 自己的声音已在自我留档里，混进牌桌发言区等于让模型听见自己的回声。
-const normalizeDialogue = (ctx, you) => {
+const normalizeDialogue = (ctx, you, calcSeat) => {
   const items = (ctx.dialogue ?? []).filter((d) => d.speaker !== you).map((d) => {
     const fullText = String(d.text ?? '').replace(/\s+/g, ' ').trim();
     const text = fullText.slice(0, 300);
@@ -258,7 +260,8 @@ const normalizeDialogue = (ctx, you) => {
       round: d.round ?? null,
       speaker: d.speaker ?? null,
       kind: d.kind ?? 'speech',
-      action: clone(d.action ?? null),
+      // v6：无算盘席位收不到「拨算盘」信号——挂在该动作上的台词只留话、去掉动作语境
+      action: d.action?.type === 'calc' && !calcSeat ? null : clone(d.action ?? null),
       text,
       omittedChars: Math.max(0, fullText.length - text.length),
     };
@@ -296,7 +299,7 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
   memory.pastRoundsSelf = own.filter(
     (l) => l.round != null && l.round !== ob.round && (l.say || l.belief || l.note),
   );
-  const dialogue = normalizeDialogue(ctx, ob.you);
+  const dialogue = normalizeDialogue(ctx, ob.you, calcHabit !== 'never');
   return {
     schemaVersion: 2,
     stateId: stateIdOf(ob, ctx),
@@ -374,7 +377,8 @@ function serializeHistory(payload, who) {
     const events = r.events.map((e) => {
       const t = timingText(e.timing);
       if (e.type === 'peek') return `${who(e.actor)}看骰${t}`;
-      if (e.type === 'calc') return `${who(e.actor)}拨算盘${t}`;
+      // v6：无算盘席位的世界里没有这个动作——真人的拨算盘是纯私人辅助，不进模型叙事
+      if (e.type === 'calc') return payload.current.calcSeat ? `${who(e.actor)}拨算盘${t}` : '';
       if (e.type === 'declare') return `${who(e.actor)}宣${DECL[e.declaration] ?? e.declaration}${t}`;
       if (e.type === 'bid') return `${who(e.actor)}报${e.count}个${e.face}${t}`;
       if (e.type === 'challenge') return `${who(e.actor)}开${who(e.target)}${t}`;
@@ -477,7 +481,8 @@ function serializeCurrent(payload, who) {
       lines.push(`${who(p.id)}：已出局；筹码${p.chips}。`);
       continue;
     }
-    const status = [p.peeked ? '已看' : '未看', p.blind ? '已盲' : '未盲', p.raised ? '已抬' : '未抬', p.calced ? '已算' : '未算'];
+    const status = [p.peeked ? '已看' : '未看', p.blind ? '已盲' : '未盲', p.raised ? '已抬' : '未抬'];
+    if (c.calcSeat) status.push(p.calced ? '已算' : '未算'); // v6：这个状态只存在于有算盘的世界（free 席）
     const dice = p.relation === 'self' && c.privateToYou.dice ? `；骰面[${c.privateToYou.dice.join(',')}]` : '';
     const shown = p.shown.length ? `；已亮[${p.shown.join(',')}]` : '';
     lines.push(`${who(p.id)}：${p.diceCount}骰，筹码${p.chips}；${status.join('、')}${dice}${shown}。`);
@@ -660,7 +665,7 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
         // 输赢经过写在 factText 里，是数据）。
         // 「假设只写关于客人的」是字段口径（决定 hypotheses 装什么），不是性格——留。
         // 注：这一条同时是"型号之间互相记仇"的拦路石，牵动 SYNC 待决 Q80，未裁前不动。
-        system: `一局大话骰刚打完。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被反例打死的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        system: `一局大话骰刚打完。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被证伪的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
         user: `刚发生的事：${factText}
 你既有的假设：${
           hypotheses.length
@@ -687,9 +692,9 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
       channel,
       {
         // Q86：删角色包裹与"判词两三句／不许编"等要求（判词是它的场合，§3 场合律零审查）。
-        // 留下的是任务、字段口径、一条规则（没拨算盘就没有准数）与 schema。
+        // 留下的是任务、字段口径与 schema。v6：算盘句随模型席拔除删净；「打死」改「证伪」（用户红笔）。
         system:
-          '一场大话骰结束了，你在写这位客人的档案。牌桌上没拨算盘算过的概率不是准数。复盘你对他的规律假设（只写关于客人的；被反例打死的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+          '一场大话骰结束了，你在写这位客人的档案。复盘你对他的规律假设（只写关于客人的；被证伪的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
           hypotheses.length
             ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`

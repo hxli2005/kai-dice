@@ -1,4 +1,4 @@
-const CACHE = 'kai-shell-v7';
+const CACHE = 'kai-shell-v8';
 const SHELL = [
   './',
   './index.html',

@@ -139,16 +139,16 @@ test('Q45 算盘机制（v5 后仅显式 free 席可用）：拨过引擎才发�
   const { user, system } = buildPrompts(ob, '', FREE);
   assert.match(user, /你已拨算盘：看不见的骰按每面 1\/6 计，当前报价为真的概率\d+%/);
   assert.ok(!user.includes('只算骰面，不算人'), 'Q86：解释是非程序性的，只留数据');
-  // v5：规则表不再把拨算盘列为"你的动作"，但仍向全席解释这个桌面动作——
-  // 产品局里对手（真人）的算是公开事件，模型得读得懂
-  assert.match(system, /桌上另有动作「拨算盘」，你的席位没有此动作/, 'v5：席位规则');
-  assert.match(system, /看不见的骰一律按每面 1\/6 计/, 'v4 语义保留：分布假设写明——这个数不含对手行为信息');
+  // v6：system 对算盘只字不提（全席逐字相同、模型席无此物）；free 席的机制全在 user 侧
+  assert.ok(!system.includes('算盘'), 'v6：system 删干净');
   assert.ok(!system.includes('{"type":"calc"}'), 'v5：输出 schema 里没有 calc');
   assert.ok(!system.includes('准数') && !user.includes('准数'), 'v4：「准数」话术不回流');
   assert.ok(!user.includes('精确概率'), 'v4：结果行不再自称精确');
-  // 对手侧：拨算盘是公开动作，必须进局面叙事（真人拨算盘时模型看得见）
+  assert.match(user, /你拨算盘/, 'free 席自己的算进公开历史');
+  // v6：无算盘席位连对手的拨算盘都不接收——真人的算盘是纯私人辅助
   const { user: userA } = buildPrompts(m.observe('A'), '');
-  assert.match(userA, /对方拨算盘/);
+  assert.ok(!userA.includes('算盘'), 'v6：默认席位收不到拨算盘信号');
+  assert.ok(!userA.includes('已算') && !userA.includes('未算'), 'v6：已算/未算状态一并拔除');
   // 本局限一次
   assert.ok(!ob.legal.some((a) => a.type === 'calc'), '算过就没得再算');
   await assert.rejects(() => m.act('B', { type: 'calc' }), /illegal calc/);
@@ -442,7 +442,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
   assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysModel, /你的席位没有此动作/, '规则：v5 席位无算盘——桌面动作仍解释，真人拨算盘它得读懂');
+  assert.ok(!sysModel.includes('算盘'), '规则：v6 算盘对模型席整体不可见，system 只字不提');
   assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
   assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');
