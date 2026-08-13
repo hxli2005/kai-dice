@@ -56,9 +56,11 @@ export function modelPersona(model, { hosted = false, official = false } = {}) {
     bare: true,
     hosted,
     official: hosted || official,
-    // 工具全开：算不算、看不看骰，都由它自己决定——那是原生 tell，不是我们配的
+    // 算盘已从模型席拔除（2026-08-13 用户裁决「拔了」）：实测模型心算二项分布本就全对
+    //（k3 拨算盘前已在 belief 手写出 7/27≈26%），工具零信息增量，反被当成压过行为读的
+    // 最强约束。算盘保留为真人辅助；看不看骰仍由它自己决定——那是原生 tell。
     gear: {
-      calc: 'free',
+      calc: 'never',
       usesBlind: true,
       model,
       maxTokens: DECISION_MAX_TOKENS,

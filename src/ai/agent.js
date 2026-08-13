@@ -34,14 +34,14 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 
 动作 ｜ 前置 ｜ 效果
 掀盅 ｜ 本局未掀且未宣盲（唯一不需轮到你的动作） ｜ 自己可见本局骰面
-拨算盘 ｜ 轮到你，本局未算 ｜ 引擎替你做一道算术并发你结果：「当前报价为真」的概率，本局内随当前报价更新。算式输入只有你已可见的信息（可见的骰、各家骰数、当前报价、斋否），所有你看不见的骰一律按每面 1/6 计；同样的输入谁算都得同一个数，引擎只保证不算错。未拨则引擎不发此数
 宣盲 ｜ 轮到你，未掀盅、未宣盲（已报过价不影响） ｜ 整局不得掀盅；倍率 ×2
 宣斋 ｜ 轮到你，你是首报者，报价次数＝0，未宣斋 ｜ 1 不再万能；倍率 ×1.5
 扳抬 ｜ 轮到你，本局未抬 ｜ 倍率 ×2
 报价 ｜ 轮到你，存在合法报价 ｜ 成为当前报价；行动权交下家
 开牌 ｜ 轮到你，当前报价存在且不是你报的 ｜ 立即清点结算
 
-除报价外，动作后行动权仍在你。所有动作对手都看得见；你的骰面与算出的概率对手看不见。前置不满足的动作被引擎拒绝。
+除报价外，动作后行动权仍在你。所有动作对手都看得见；你的骰面对手看不见。前置不满足的动作被引擎拒绝。
+桌上另有动作「拨算盘」，你的席位没有此动作：有算盘的席位轮到自己时可拨（每人每局一次，动作公开可见），引擎只向拨者发「当前报价为真」的概率数——按拨者可见的信息算，看不见的骰一律按每面 1/6 计，数值仅拨者自己可见。
 
 报价 (N,X)＝「全场骰子中 X 点至少 N 个」
 合法 ⟺ 2≤N≤总骰数 ∧ X∈(斋局?{1..6}:{2..6}) ∧ (无当前报价 ∨ N>N₀ ∨ (N=N₀ ∧ X>X₀))
@@ -62,7 +62,7 @@ const RULES_BRIEF = (three) => `大话骰 · 引擎规则
 // say 紧跟 action、note 垫底——台词是对刚落那子的临场反应，别让记账先耗光表达。
 // 输出顺序与字段语义是操作，不是策略。
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
-{"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"calc"}（拨算盘）或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
+{"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。
@@ -75,12 +75,14 @@ const INPUT_CONTRACT = `输入分区：
 // 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
 // 三个机位与擂台席拿到的 system 完全逐字相同（Q53 全席同构在此兑现，测试断言全等）。
 // **版本锁**：v3＝世界语义契约（用户裁决冻结，2026-08-11）；v4＝算盘去权威化（用户指示
-// 2026-08-13）——「精确概率／准数／手上没有准数」话术把一道谁都能做的算术抬成唯一真数，
-// 实测模型把它当最强约束压过自己的行为读（k3：「铁律是行为统计，26% 是数学事实」）。
-// 改法不写"防幻觉"元指令（Q86 不许解释），改成把工具语义写满：输入清单＋均匀假设＋
-// 确定性＋「只保证不算错」，通道事实只说「引擎发没发」。改动提示词文本必须升版本号——
+// 2026-08-13）——「精确概率／准数」话术把一道谁都能做的算术抬成唯一真数，实测模型把它
+// 当最强约束压过自己的行为读（k3：「铁律是行为统计，26% 是数学事实」）；
+// v5＝模型席拔算盘（用户裁决 2026-08-13「拔了」）——v4 归因时发现 k3 拨算盘**之前**已在
+// belief 里手写出全对的 7/27≈26%，工具零信息增量，纯剩确认仪式与权威锚。算盘保留为真人
+// 辅助（玩家 UI 不动），模型席一律无此动作；规则表仍向模型解释「拨算盘」，因为产品局里
+// 对手（真人）的算是公开事件，它得读得懂。改动提示词文本必须升版本号——
 // 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v4';
+export const PROMPT_VERSION = 'v5';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
@@ -273,7 +275,9 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
   if (Object.hasOwn(ctx, 'extraFacts')) throw new Error('extraFacts 已废除：请使用 dialogue / roomEvents / control');
   const total = ob.diceCount.you + ob.diceCount.opp;
   const calced = !!ob.calced?.[ob.you];
-  const calcHabit = persona.gear?.calc ?? 'key';
+  // v5：模型席默认没有算盘（2026-08-13 用户裁决）——'never' 是全席现值；
+  // 'free' 只剩显式构造（测试与 Q89 复活口），机制不删。
+  const calcHabit = persona.gear?.calc ?? 'never';
   const legalActions = ob.legal
     .filter((a) => !(a.type === 'calc' && calcHabit === 'never'))
     .map((a) => {
@@ -336,8 +340,9 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
         shown: clone(ob.shown?.[q.id] ?? []),
       })),
       privateToYou: { dice: clone(ob.yourDice) },
+      calcSeat: calcHabit !== 'never', // v5：席位有没有算盘（决定要不要解释「你未拨」）
       probability:
-        calced && ob.currentBid
+        calced && ob.currentBid && calcHabit !== 'never'
           ? { bid: clone(ob.currentBid), trueProbability: obProb(ob, ob.currentBid) }
           : null,
       legal: {
@@ -484,8 +489,9 @@ function serializeCurrent(payload, who) {
   // 算盘话术纪律（v4）：只说算式假设与「引擎发没发这个数」，不说「你手上有/没有准数」——
   // 后者是认知断言，把工具输出抬成唯一真数；「看不见的骰按每面 1/6 计」在盲局也自动成立
   //（旧文案「按你的骰面算」在盲局是假的——骰面自己都看不见）。
+  // v5：无算盘的席位两行都不出——「你未拨」对没有此动作的席位是噪声。
   if (c.probability) lines.push(`你已拨算盘：看不见的骰按每面 1/6 计，当前报价为真的概率${pct(c.probability.trueProbability)}。`);
-  else if (c.currentBid) lines.push('你未拨算盘：引擎未发概率数。');
+  else if (c.currentBid && c.calcSeat) lines.push('你未拨算盘：引擎未发概率数。');
   if (c.latestTableTalk) {
     const t = c.latestTableTalk;
     const when = t.action ? `${actionContext(t.action)}时` : t.kind === 'poke' ? '当面反驳时' : '';
@@ -713,6 +719,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
 // channel 可传函数（每手求值）——设置保存后下一手立即生效，不用等下一场。
 export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, ctx = {}, fetchFn } = {}) {
   const silent = createSilentBot(persona.strategy); // 策略参数随机位的 strategy（只在沉默 bot 顶班时生效）
+  const calcNever = (persona.gear?.calc ?? 'never') === 'never'; // v5：模型席默认无算盘
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
   return {
     logs,
@@ -788,6 +795,12 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
             );
             decision = parseDecision(raw, ob);
             outcome = classifyOutput(raw, ob);
+            // v5 模型席无算盘：引擎接口保持对称（§2.1 不为 AI 特判），由客户端在此挡下
+            // 清单外的 calc——候选清单没给过它，输出了就按 illegal 计，与其他清单外动作同罪。
+            if (calcNever && decision?.action.type === 'calc') {
+              decision = null;
+              outcome = 'illegal';
+            }
             // 被 max_tokens 截断 ≠ 它不守契约。截断旗（两家口径见 cutShort）另立类目，
             // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
             if (decision === null && cutShort(meta.finish)) outcome = 'truncated';

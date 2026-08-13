@@ -40,7 +40,7 @@ import {
 function fakeDecide(user, { aggressive = false, say, belief, qia = null } = {}) {
   const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
   if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
-  if (aggressive && user.includes('拨算盘，动作所有对手可见（{"type":"calc"}）')) return fix({ action: { type: 'calc' }, say: '我算算', belief: '要个准数' });
+  // v5（2026-08-13）：模型席无算盘——候选里永远不会出现 calc，原「aggressive 就拨算盘」分支已删
   // 词条臂：qia 传 {left:n} 时，候选里一出现「掐」就掐（计数器由调用方持有，跨手共享）
   if (qia?.left > 0 && user.includes('拍词条「掐」')) {
     qia.left -= 1;
@@ -258,7 +258,8 @@ test('A3：风味分化——只在样本够的轴上出结论', async () => {
     games: 2,
     seed0: 77,
     fetchFn: async (url, init) => {
-      // 座位 B（wild）用算盘、爱诈；座位 A 不算——制造一条真实存在的风味差
+      // 座位 B（wild）开牌凶、爱诈；座位 A 稳——制造一条真实存在的风味差。
+      // v5 后模型席无算盘，分化轴改看 bait（wild 有、calm 无）。
       const body = JSON.parse(init.body);
       const aggressive = /wild/.test(body.model);
       return fakeChannel({ seen, aggressive })(url, init);
@@ -267,12 +268,13 @@ test('A3：风味分化——只在样本够的轴上出结论', async () => {
   const rows = summarize(matches);
   const wild = rows.find((r) => r.label === 'wild');
   const calm = rows.find((r) => r.label === 'calm');
-  assert.ok(wild.flavor.calcPerRound > 0, '拨过算盘的那位算频不该是 0');
+  // v5：模型席无算盘——算频轴在纯模型批次恒零（拔除的直接后果，不是采集坏了）
+  assert.equal(wild.flavor.calcPerRound, 0, 'v5：模型席拨不了算盘');
   assert.equal(calm.flavor.calcPerRound, 0);
   assert.ok(wild.flavor.baitRate > 0, 'bait 留档要进风味层');
   const spread = flavorSpread(rows, { minSamples: 1 });
-  assert.equal(spread.calcPerRound.enough, true);
-  assert.ok(spread.calcPerRound.spread > 0);
+  assert.equal(spread.baitRate.enough, true);
+  assert.ok(spread.baitRate.spread > 0, '风味分化由 bait 轴示例（wild 有、calm 无）');
   // 样本门槛：够不着就明说"不出结论"，不硬凑一个小数点
   const strict = flavorSpread(rows, { minSamples: 10_000 });
   assert.equal(strict.bluffRate.enough, false);

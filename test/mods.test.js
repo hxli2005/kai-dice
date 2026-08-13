@@ -203,10 +203,15 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.ok(!/恰好的概率/.test(user), '未算＝连粗档都不给');
   assert.match(user, /宣布"这口价恰好为真"当场开牌；掐对你收池并拿回一颗骰/, '规则照说，只是不带数');
   await m.act('B', { type: 'calc' });
+  // v5：模型席无算盘——「恰好」带数的形态只剩显式 free 席（机制看守）与真人 UI（双发另测）
   assert.match(
-    buildPrompts(m.observe('B'), '').user,
+    buildPrompts(m.observe('B'), '', { gear: { calc: 'free', usesBlind: true } }).user,
     /恰好的概率按你的骰子算是 \d+%/,
-    '拨过算盘＝准数',
+    'free 席拨过算盘＝掐候选带数（机制未删）',
+  );
+  assert.ok(
+    !/恰好的概率按你的骰子算是 \d+%/.test(buildPrompts(m.observe('B'), '').user),
+    'v5：默认席就算引擎记它算过，也不发数',
   );
   assert.match(user, /把这口价原样推回/);
   assert.match(system, /{"type":"qia"}/);

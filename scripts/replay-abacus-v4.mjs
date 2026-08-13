@@ -49,7 +49,13 @@ const V4_CALC_ROW =
 const V3_CALC_ROW =
   '拨算盘 ｜ 轮到你，本局未算 ｜ 得「当前报价为真」的精确概率（按你的骰面与其余未知骰计算）；未拨算盘你手上就没有准数';
 const sysV4 = seatSystem(false);
-if (!sysV4.includes(V4_CALC_ROW)) throw new Error('当前 system 里找不到 v4 算盘行——agent.js 又改过了？');
+if (!sysV4.includes(V4_CALC_ROW)) {
+  console.error(
+    '本实验已被超越：v5（2026-08-13 用户裁决）已从模型席拔掉算盘，当前 system 里没有 v4 算盘行。\n' +
+      '如需考古这组 A/B，checkout 提交 84d91ef（提示词 v4）再跑本脚本。',
+  );
+  process.exit(3);
+}
 const sysV3 = sysV4.replace(V4_CALC_ROW, V3_CALC_ROW);
 const h16 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const wantHash = run.provenance.systemPromptHash;

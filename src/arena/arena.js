@@ -54,15 +54,16 @@ export const TIMEOUT_MS = 300_000;
 // 32768 总额里留 8192 给正文（实测正文只有几十字，绰绰有余）。
 export const REASONING_TOKENS = 24_576;
 
-// 擂台席位：一个没有脸的座位。三个 gear 的取值都必须是"中性"的——
-// calc:'free'＝给算盘但不给算频剧本（算不算是模型自己的 tell，Q45 的原生分化）；
+// 擂台席位：一个没有脸的座位。gear 的取值必须是"中性"的——
+// calc:'never'＝模型席无算盘（2026-08-13 用户裁决，全席一致故仍中性；'free' 是 Q89 复活口）。
+// 连带：F6 calcFollowRate 与算频轴在纯模型批次恒零——那是拔除的直接后果，不是采集坏了；
 // usesBlind:true＝掀盅还是盲上交给模型（揭盅时机是阅读材料，§2.3）。
 export const ARENA_SEAT = Object.freeze({
   id: 'arena',
   name: '',
   arena: true,
   bare: true,
-  gear: Object.freeze({ calc: 'free', usesBlind: true, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS }),
+  gear: Object.freeze({ calc: 'never', usesBlind: true, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS }),
   strategy: Object.freeze({ challengeThreshold: 0.25 }), // 降级顶班时全席同参数
 });
 

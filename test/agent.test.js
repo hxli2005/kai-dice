@@ -49,9 +49,11 @@ test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   assert.match(user, /对方报2个4（这手前停了很久）/);
   assert.ok(!/用时|\d秒/.test(user));
   // Q45／C1 根治（2026-08-10）：没拨算盘就**一个数都不给**——粗档也是数。
-  // 玩家侧未拨算盘是被动零显示，AI 侧再给粗档就是独有的被动优势（破 B.1 双发）。
-  assert.match(user, /当前报价：对方报2个4。[\s\S]*你未拨算盘：引擎未发概率数。/);
-  assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '未拨算盘时连粗档词都不许出现');
+  // v5（2026-08-13 用户裁决）：模型席根本没有算盘——候选不给、拨没拨也不解释，提示词零概率。
+  assert.match(user, /当前报价：对方报2个4。/);
+  assert.ok(!user.includes('拨算盘，动作所有对手可见'), 'v5：候选里没有算盘');
+  assert.ok(!user.includes('你未拨算盘') && !user.includes('你已拨算盘'), 'v5：无算盘席位不解释拨没拨');
+  assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '连粗档词都不许出现');
   assert.ok(!/=\s*\d+%/.test(user), '候选不许带任何概率标注');
   assert.match(user, /爱虚张/);
 });
@@ -124,26 +126,27 @@ test('宿主 revision：回答绑定观察时的引擎与引语状态', async ()
   assert.notEqual(stateIdOf(m.observe('A'), { dialogue }), hostId, '引擎不变但宿主引语变化也应使回答过期');
 });
 
-test('Q45 算盘：拨过引擎才发数，且"算"进得了叙事（何时算＝新 tell）', async () => {
+// v5（2026-08-13 用户裁决「拔了」）：模型席无算盘，'free' 只剩显式构造（Q89 复活口）。
+// 本用例就是那道「机制未删」的看守：free 席拨过，引擎才发数；动作照进全桌叙事。
+test('Q45 算盘机制（v5 后仅显式 free 席可用）：拨过引擎才发数，"算"进得了叙事', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   await m.act('B', { type: 'calc' });
   const ob = m.observe('B');
-  const { user, system } = buildPrompts(ob, '');
+  const FREE = { gear: { calc: 'free', usesBlind: true } };
+  const { user, system } = buildPrompts(ob, '', FREE);
   assert.match(user, /你已拨算盘：看不见的骰按每面 1\/6 计，当前报价为真的概率\d+%/);
   assert.ok(!user.includes('只算骰面，不算人'), 'Q86：解释是非程序性的，只留数据');
-  assert.match(system, /未拨则引擎不发此数/, 'Q45：这条是规则，留在规则区');
-  // v4 算盘去权威化：语义写满（输入清单＋均匀假设＋确定性＋职能范围），「准数」话术不许回流——
-  // 「你手上有/没有准数」是认知断言，实测把工具输出抬成压过行为读的最强约束
-  assert.match(system, /算式输入只有你已可见的信息/, 'v4：输入清单');
-  assert.match(system, /看不见的骰一律按每面 1\/6 计/, 'v4：分布假设写明——这个数不含对手行为信息');
-  assert.match(system, /同样的输入谁算都得同一个数/, 'v4：确定性——心算专家不需要算盘');
-  assert.match(system, /只保证不算错/, 'v4：职能范围＝防算错，不是发真理');
-  assert.ok(!system.includes('准数') && !user.includes('准数'), 'v4：「准数」话术全删');
+  // v5：规则表不再把拨算盘列为"你的动作"，但仍向全席解释这个桌面动作——
+  // 产品局里对手（真人）的算是公开事件，模型得读得懂
+  assert.match(system, /桌上另有动作「拨算盘」，你的席位没有此动作/, 'v5：席位规则');
+  assert.match(system, /看不见的骰一律按每面 1\/6 计/, 'v4 语义保留：分布假设写明——这个数不含对手行为信息');
+  assert.ok(!system.includes('{"type":"calc"}'), 'v5：输出 schema 里没有 calc');
+  assert.ok(!system.includes('准数') && !user.includes('准数'), 'v4：「准数」话术不回流');
   assert.ok(!user.includes('精确概率'), 'v4：结果行不再自称精确');
-  // 对手侧：拨算盘是公开动作，必须进局面叙事
+  // 对手侧：拨算盘是公开动作，必须进局面叙事（真人拨算盘时模型看得见）
   const { user: userA } = buildPrompts(m.observe('A'), '');
   assert.match(userA, /对方拨算盘/);
   // 本局限一次
@@ -151,20 +154,20 @@ test('Q45 算盘：拨过引擎才发数，且"算"进得了叙事（何时算�
   await assert.rejects(() => m.act('B', { type: 'calc' }), /illegal calc/);
 });
 
-// Q89：官方名册上每个型号的工具全开（算盘可拨、盲闸可扳）——不再拿工具差异捏对手。
-// 「不给算盘」这个**机制**仍然在（gear.calc='never'），只是名册上没人用它。
-test('工具：名册上全员有算盘；calc=never 的座位仍然拿不到候选（机制未删）', async () => {
+// Q89 曾定「名册全员工具全开」；v5（2026-08-13 用户裁决）反转其算盘半边：名册全员无算盘，
+// 算盘保留为真人辅助。'free' 只剩显式构造——机制未删（Q89 复活口），本用例守着它。
+test('工具（v5）：名册全员无算盘；calc=free 显式构造仍给候选（机制未删）', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
   for (const per of Object.values(PERSONAS))
-    assert.match(buildPrompts(ob, '', per).user, /拨算盘，动作所有对手可见（\{"type":"calc"\}）/, `${per.name} 应有算盘`);
-  const noAbacus = { ...PERSONAS['model:deepseek-v4-flash'], gear: { calc: 'never', usesBlind: true } };
-  const without = buildPrompts(ob, '', noAbacus).user;
-  assert.ok(!without.includes('拨算盘，动作所有对手可见（{"type":"calc"}）'), 'calc=never 仍然不给候选');
-  for (const u of [buildPrompts(ob, '', PERSONAS['model:deepseek-v4-flash']).user, without])
+    assert.ok(!buildPrompts(ob, '', per).user.includes('拨算盘，动作所有对手可见'), `${per.name} 不应有算盘`);
+  const withAbacus = { ...PERSONAS['model:deepseek-v4-flash'], gear: { calc: 'free', usesBlind: true } };
+  const withUser = buildPrompts(ob, '', withAbacus).user;
+  assert.match(withUser, /拨算盘，动作所有对手可见（\{"type":"calc"\}）/, 'free 席仍给候选——机制未删');
+  for (const u of [buildPrompts(ob, '', PERSONAS['model:deepseek-v4-flash']).user, withUser])
     for (const gone of ['你习惯算', '你只在关键手才算', '你从不碰算盘'])
       assert.ok(!u.includes(gone), `Q86：算频染色「${gone}」是行为剧本，应已删`);
 });
@@ -184,10 +187,10 @@ test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是�
   assert.equal(d.say, '三成。开。', 'Q49：台词侧不再拦截');
   assert.equal(d.note, '我看他虚');
   assert.equal(d.belief, '其实没底', '留档照留——它是素材，不是判据');
-  // 机制没松：他没拨算盘，提示词里就没有任何概率。
+  // 机制没松：席位无算盘（v5），提示词里没有任何概率。
   const { user } = buildPrompts(m.observe('B'), '', PERSONAS['model:deepseek-v4-flash']);
-  assert.match(user, /你未拨算盘：引擎未发概率数/);
-  assert.ok(!/此话为真的概率 \d+%/.test(user));
+  assert.ok(!user.includes('拨算盘，动作所有对手可见'), 'v5：候选无算盘');
+  assert.ok(!/概率\s*\d+%/.test(user) && !/此话为真的概率 \d+%/.test(user));
 });
 
 test('parseDecision：合法动作通过，非法与坏输出拒绝', async () => {
@@ -439,7 +442,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
   assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.match(sysModel, /未拨则引擎不发此数/, '规则：Q45');
+  assert.match(sysModel, /你的席位没有此动作/, '规则：v5 席位无算盘——桌面动作仍解释，真人拨算盘它得读懂');
   assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
   assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');
