@@ -577,8 +577,14 @@ export function parseDecision(text, ob) {
     const modMeta = modActionMeta(ob, a.type);
     const ok =
       (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
+      // v9 容错（用户裁决 2026-08-14「放行」）：**缺 assert 放行，反向 assert 仍然拒绝**。
+      // 两者不是一回事——**缺失**是输出马虎，动作意图没有歧义；**写反**（assert 为别的值）
+      // 是模型明确宣称「我认为这口价成立」却同时开牌，自相矛盾，落子下去就是一手说不清的棋。
+      // 放行缺失的理由：疗效来自「模型每次都得亲手写这句断言」，不来自我们拒绝；拒绝只换来
+      // 一次顶班，而开牌是全局最戏剧的一拍，那一手降级正是施工单 G6 点名要治的最差降级。
+      // 实测底气：四模型 122 次 v9 开牌，漏写 0 次。
       (a.type === 'challenge' &&
-        a.assert === CHALLENGE_ASSERTION &&
+        (a.assert === undefined || a.assert === CHALLENGE_ASSERTION) &&
         ob.legal.some((x) => x.type === 'challenge')) ||
       (a.type === 'bid' &&
         ob.legal.some((x) => x.type === 'bid') &&
@@ -600,6 +606,8 @@ export function parseDecision(text, ob) {
               : a.type === 'peek'
                 ? { type: a.type }
                 : { type: 'challenge', assert: CHALLENGE_ASSERTION },
+      // 漏写断言＝合规瑕疵，不是故障：进决策日志供审计与跨型号统计，不影响这一手能不能落子
+      ...(a.type === 'challenge' && a.assert === undefined ? { assertMissing: true } : {}),
       // 上限是**防失控的护栏，不是控长度的手段**（长度归 max_tokens，Q86「约束长在管线上」）。
       // 原来的 60/100/120 是"台词一两句即可"那个年代定的；Q86 把那句话删了却留着铡刀，
       // 结果 19% 的 belief、15% 的 note 被拦腰砍断（802 条留档实测）——复盘室右栏是产品内容，

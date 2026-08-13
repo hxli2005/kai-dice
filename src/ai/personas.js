@@ -14,10 +14,22 @@
 // 挂机提示（DESIGN §1.4：>30 秒，纯提示，无机制后果）。全席共用，无声口。
 export const IDLE_LINES = ['轮到你了。', '还在？', '该你出手了。'];
 
-export const HOSTED_MODEL = 'deepseek-v4-flash'; // 托管席（零配置免费档）；服务端白名单须同名，见 infra/pages/_worker.js
+// 托管席（零配置免费档）；服务端白名单须同名，见 infra/pages/_worker.js
+//
+// **2026-08-14 由 flash 换成 v4-pro**（用户裁决「直接换 flash」）。换的理由是实测的**棋力**，
+// 不是偏好：同一批 21 个「自己的骰子已经让这口价成立」的局面上（开牌必输、零解释空间），
+// flash 误开 22%、判别力仅 +2pt，v4-pro 误开 6%、判别力 +16pt——**同厂同代差一档，差了八倍**。
+// 判别力＝「该开的局面开、必输的局面不开」的分辨能力（对照率−靶心率），详见 SYNC Q103。
+// ⚠️ **代价明示**：v4-pro ¥3/¥6 对 flash ¥1/¥2，**单价三倍**，而 Q92 之后免费档不设单设备日限，
+// 全局月熔断是唯一的闸——**同样的 ¥500 红线，能烧的手数少了约三分之二**（DESIGN §5.3）。
+export const HOSTED_MODEL = 'deepseek-v4-pro';
 
-// 官方通道钉的型号（Q51：只保 1–2 个控成本，其余走 BYOK）。顺序即卡序。
-export const OFFICIAL_MODELS = [HOSTED_MODEL, 'deepseek-v4-pro'];
+// 官方通道钉的型号（Q51：只保 1–2 个控成本，其余走 BYOK）。**顺序即卡序，排头即托管席。**
+// flash **留在名册上、只是不再坐托管席**：`LEGACY_SEAT_MODEL` 把所有旧机位的档案与身家
+// 都迁到了 `model:deepseek-v4-flash`（写死的历史常量），把它从名册摘掉会让老玩家的战绩
+// 直接没有卡可看——数据还在 localStorage，但界面上凭空消失。户头按型号记（DESIGN §1.2），
+// 卡在人在。它比 v4-pro 便宜，留着也不抬成本。
+export const OFFICIAL_MODELS = [...new Set([HOSTED_MODEL, 'deepseek-v4-flash'])];
 
 // 决策调用的完成信封：推理 token 与最终 JSON 共用 `max_tokens`。
 // 真实 OpenRouter 冒烟表明，800/1600/4096 的裸上限都可能被默认推理全部吃完；

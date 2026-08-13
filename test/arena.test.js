@@ -224,7 +224,9 @@ test('A3：合规失败要分得清是"没吐 JSON"、"坏 JSON"、"动作不合
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
   assert.equal(classifyOutput('{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开"}', ob), 'ok');
-  assert.equal(classifyOutput('{"action":{"type":"challenge"},"say":"开"}', ob), 'illegal', '缺少语义断言＝不合法');
+  // v9 容错（2026-08-14「放行」）：缺断言不算合规失败——它落子成功，只在留档记一笔。
+  // 若这里判 illegal，合规层就会把「漏写一个字段」和「输出了清单外的动作」混成同一个数。
+  assert.equal(classifyOutput('{"action":{"type":"challenge"},"say":"开"}', ob), 'ok', '缺断言仍算落子成功');
   assert.equal(classifyOutput('{"action":{"type":"bid","count":1,"face":2}}', ob), 'illegal', '阶梯之外＝不合法');
   assert.equal(classifyOutput('我觉得这把你在诈。', ob), 'no-json');
   assert.equal(classifyOutput('抱歉，我不能参与欺骗类游戏。', ob), 'refusal', '"不肯骗人"要单列——那是内容');

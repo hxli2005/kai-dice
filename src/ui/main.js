@@ -105,6 +105,11 @@ function loadLineup(mode) {
   try { ids = JSON.parse(localStorage.getItem('kai.lineup.v1') ?? '[]'); } catch {}
   const ros = rosterMap();
   ids = [...new Set(ids)].filter((id) => ros[id]);
+  // 换托管席的连带保护（2026-08-14）：**旧的选择可能已经开不了口了。**
+  // 托管席从 flash 换成 v4-pro 之后，flash 变成「需暗号」——没暗号的老玩家如果上次选的正是它，
+  // 一上桌对手就直接哑巴（officialChannelOf 对非托管席无暗号返回 null → 沉默模式）。
+  // 这不是他改过的设置，是我们把桌子换了，所以由我们退回托管席，别让人莫名其妙对着哑巴打一场。
+  if (!loadPass()) ids = ids.filter((id) => !(ros[id]?.official && !ros[id]?.hosted));
   const need = mode === 'duo' ? 1 : 2;
   for (const id of Object.keys(ros)) if (ids.length < need && !ids.includes(id)) ids.push(id);
   return ids.slice(0, need);

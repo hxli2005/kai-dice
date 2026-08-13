@@ -148,7 +148,8 @@ export const providerLock = (tagOrSlug) =>
 // 常见款默认项（Q52"预置常见款"）：**只用作预选，不作清单**——
 // 拿它去和真清单求交集，清单里没有的就当它不存在（名单腐烂了也只是少个默认值，不会显示幽灵）。
 export const DEFAULT_PICKS = [
-  'deepseek/deepseek-chat',
+  // deepseek-chat 已移除（2026-08-14 用户裁决「去掉 chat」）：本账号下它的三个后端全部 403、
+  // 打不通；且全库审计里它是「自己的骰已让价成立却开牌」误开率最高的之一（6/15＝40%）。
   'anthropic/claude-sonnet-5',
   'openai/gpt-5.6-terra',
   'google/gemini-3.6-flash',

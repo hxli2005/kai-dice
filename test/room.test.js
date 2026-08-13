@@ -10,7 +10,7 @@ import { mulberry32 } from '../src/engine.js';
 import { createRoomCore } from '../src/room/room.js';
 import { viewFor } from '../src/room/rename.js';
 import { PHRASES, BET_CAP } from '../src/room/protocol.js';
-import { PERSONAS } from '../src/ai/personas.js';
+import { PERSONAS, HOSTED_MODEL } from '../src/ai/personas.js';
 
 const sleep = (ms) => new Promise((r) => (ms > 0 ? setTimeout(r, ms) : setImmediate(r)));
 
@@ -97,7 +97,8 @@ test('好友房：建房入座→整场走通→双端对比报告卡（房内�
   assert.equal(roomH.seats.find((s) => s.seat === 'A').seal, '虎');
   assert.equal(roomG.seats.find((s) => s.seat === 'A').seal, '雀');
   assert.equal(roomG.seats.find((s) => s.seat === 'C').seal, '虎', '客视角里主家坐对面');
-  assert.equal(roomH.seats.find((s) => s.seat === 'B').name, PERSONAS['model:deepseek-v4-flash'].name);
+  // 房里那一席 AI 跟着托管席走——别把型号名写死，换托管席时这条会假报警（2026-08-14 踩过）
+  assert.equal(roomH.seats.find((s) => s.seat === 'B').name, PERSONAS[`model:${HOSTED_MODEL}`].name);
   // 客不能开局
   h.core.handle('g1', { t: 'start' });
   assert.match(h.last('g1', 'err').msg, /主家/);

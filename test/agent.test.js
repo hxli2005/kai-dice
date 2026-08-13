@@ -174,7 +174,13 @@ test('parseDecision：合法动作通过，非法与坏输出拒绝', async () =
     ob,
   );
   assert.deepEqual(challenge.action, { type: 'challenge', assert: 'current_bid_is_false' });
-  assert.equal(parseDecision('{"action":{"type":"challenge"},"say":"开"}', ob), null, '开牌必须明确断言当前报价不成立');
+  // v9 容错（用户裁决 2026-08-14「放行」）：缺 assert 照样落子，但要在留档留痕。
+  // 拒绝只换来一次顶班，而开牌是全局最戏剧的一拍——那一手降级是最差的降级（施工单 G6）。
+  const lax = parseDecision('{"action":{"type":"challenge"},"say":"开"}', ob);
+  assert.deepEqual(lax.action, { type: 'challenge', assert: 'current_bid_is_false' }, '缺断言也放行，动作补全');
+  assert.equal(lax.assertMissing, true, '但必须记一笔，供审计与跨型号统计');
+  const strict = parseDecision('{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开"}', ob);
+  assert.equal(strict.assertMissing, undefined, '照规矩写了就不该有这个标记');
   assert.equal(parseDecision('{"action":{"type":"challenge","assert":"current_bid_is_true"}}', ob), null, '反向断言不能开牌');
   assert.equal(parseDecision('{"action":{"type":"bid","count":2,"face":3}}', ob), null); // 阶梯外
   assert.equal(parseDecision('{"action":{"type":"declare","declaration":"zhai"}}', ob), null); // 非首报者
