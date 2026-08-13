@@ -189,7 +189,6 @@ function buildCleanSet() {
       knowingBluffRate: r.flavor.knowingBluffRate,
       blindBidRate: r.flavor.blindBidRate,
       avgDepth: r.flavor.avgDepth,
-      calcPerRound: r.flavor.calcPerRound,
       n: { seenBids: r.flavor.n.seenBids, bids: r.flavor.n.bids, rounds: r.flavor.n.rounds },
     }));
 

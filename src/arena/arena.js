@@ -54,16 +54,14 @@ export const TIMEOUT_MS = 300_000;
 // 32768 总额里留 8192 给正文（实测正文只有几十字，绰绰有余）。
 export const REASONING_TOKENS = 24_576;
 
-// 擂台席位：一个没有脸的座位。gear 的取值必须是"中性"的——
-// calc:'never'＝模型席无算盘（2026-08-13 用户裁决，全席一致故仍中性；'free' 是 Q89 复活口）。
-// 连带：F6 calcFollowRate 与算频轴在纯模型批次恒零——那是拔除的直接后果，不是采集坏了；
-// usesBlind:true＝掀盅还是盲上交给模型（揭盅时机是阅读材料，§2.3）。
+// 擂台席位：一个没有脸的座位。usesBlind=true 让掀盅还是盲上交给模型；
+// 其余 gear 都只是技术上限。
 export const ARENA_SEAT = Object.freeze({
   id: 'arena',
   name: '',
   arena: true,
   bare: true,
-  gear: Object.freeze({ calc: 'never', usesBlind: true, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS }),
+  gear: Object.freeze({ usesBlind: true, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS }),
   strategy: Object.freeze({ challengeThreshold: 0.25 }), // 降级顶班时全席同参数
 });
 
@@ -249,7 +247,7 @@ export function seriesGameFact(match, seat, index) {
     `第${index + 1}场${res}（${st.rounds}局）：你开牌${st.myChallenges}次中${st.myChallengeHits}次；` +
     // G7：虚报拆两笔——明知（自见概率不足 15%）与估悬（15%–50%）
     `对手开牌${so.myChallenges}次中${so.myChallengeHits}次；对手看骰后报价${so.seenBids}口、其中明知站不住${so.myKnowingBluffs}口、估悬${so.myThinBluffs}口；` +
-    `对手宣盲${so.myBlinds}次、扳抬${so.myRaises}次` // v6：算盘对模型席不可见，场间事实同步删净
+    `对手宣盲${so.myBlinds}次、扳抬${so.myRaises}次`
   );
 }
 

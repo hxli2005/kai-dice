@@ -5,7 +5,6 @@
 // 词条（§8 实验桌）：规则卡明牌注入、动作 schema 动态扩展——LLM 读规则即生效（Q24 规则流动性）。
 
 import { isLegalBid } from '../rules.js';
-import { obProb } from '../probability.js';
 import { OPS } from '../mods/catalog.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
@@ -73,25 +72,17 @@ const INPUT_CONTRACT = `输入分区：
 
 // 一张桌子，一份提示词：规则 ＋ 操作 ＋ 输出格式。**没有名字，没有身份，无任何分支**——
 // 三个机位与擂台席拿到的 system 完全逐字相同（Q53 全席同构在此兑现，测试断言全等）。
-// **版本锁**：v3＝世界语义契约（用户裁决冻结，2026-08-11）；v4＝算盘去权威化（用户指示
-// 2026-08-13）——「精确概率／准数」话术把一道谁都能做的算术抬成唯一真数，实测模型把它
-// 当最强约束压过自己的行为读（k3：「铁律是行为统计，26% 是数学事实」）；
-// v5＝模型席拔算盘（用户裁决 2026-08-13「拔了」）——v4 归因时发现 k3 拨算盘**之前**已在
-// belief 里手写出全对的 7/27≈26%，工具零信息增量，纯剩确认仪式与权威锚。算盘保留为真人
-// 辅助（玩家 UI 不动），模型席一律无此动作；
-// v6＝算盘对模型席**整体不可见**（用户审稿 2026-08-13「还有一堆算盘相关，删干净」）——
-// v5 还留着"桌面动作解释＋对手拨算盘叙事＋已算/未算状态"，v6 全部随席位拔除：
-// 无算盘席位的提示词里这个词不再出现（真人的算盘成了纯私人辅助，模型不接收此信号）。
-// 「打死」改「证伪」同批（用户红笔）。改动提示词文本必须升版本号——
+// **版本锁**：v7＝算盘机制从所有模式删除（用户裁决 2026-08-13）。模型与真人都直接依据
+// 已有信息自行判断；引擎、观察、候选动作和提示词协议里均不存在计算工具或计算状态。
+// 改动提示词输入协议必须升版本号——
 // 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v6';
+export const PROMPT_VERSION = 'v7';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
 
 ${jsonSpec(modSpec)}`;
 
-const pct = (p) => `${Math.round(p * 100)}%`;
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
 
 // 称呼表：you→你；其余按 names 映射（三人桌需要分清是谁），缺省"对方"
@@ -122,7 +113,7 @@ export function stateIdOf(ob, ctx = {}) {
 }
 
 // 原始事件流 → 本场全量“游戏语义历史”。删掉 hash/nonce/原始毫秒等技术字段，
-// 但不再删任何公开动作：看/算/三闸/每口报价/词条/开牌/亮骰/结算全部保留。
+// 但不再删任何公开动作：看/三闸/每口报价/词条/开牌/亮骰/结算全部保留。
 function semanticHistory(events = []) {
   const rounds = [];
   let round = null;
@@ -159,7 +150,7 @@ function semanticHistory(events = []) {
     const timed = timingOf(e);
     if (timed) base.timing = timed;
     if (e.timeout) base.timeout = true;
-    if (e.type === 'peek' || e.type === 'calc') add({ ...base });
+    if (e.type === 'peek') add({ ...base });
     else if (e.type === 'declare') add({ ...base, declaration: e.declaration });
     else if (e.type === 'bid') {
       add({ ...base, count: e.count, face: e.face });
@@ -210,17 +201,12 @@ function semanticHistory(events = []) {
   };
 }
 
-// 算频：`gear.calc === 'never'` 是**座位规则**（明牌的工具可用性，如二号机桌上没算盘）——
-// 它决定候选动作里给不给「拨算盘」，是规则不是性格。Q86 删掉了配套的算频染色文案：
-// 常算还是不算，由模型自己长出来（那正是素颜擂台风味层要测的原生 tell）。
-
 // 自己刚才的动作 → 一句话（自我记忆回灌用）；词条动作语义查原子注册表
 const ownActDesc = (a, ob) => {
   if (a?.type === 'declare') return `宣言了「${DECL[a.declaration] ?? a.declaration}」`;
   if (a?.type === 'bid') return `报了 ${a.count} 个 ${a.face}`;
   if (a?.type === 'peek') return '掀盅看了骰';
   if (a?.type === 'challenge') return '开了牌'; // 只出现在跨局回灌（开牌终结一局）
-  if (a?.type === 'calc') return '拨了算盘（对手都看见了；本局内引擎随当前报价发你概率）';
   if (!a?.type) return '（无动作）';
   const meta = modActionMeta(ob, a.type);
   if (!meta) return `用了「${a.type}」`;
@@ -229,9 +215,9 @@ const ownActDesc = (a, ob) => {
 };
 
 // 词条候选动作行只写动作规则与效果；OPS.sayRule 是 Q86 漏网的行为要求，不再进入 prompt。
-function modCandidateLine(meta, ob, fmtP) {
+function modCandidateLine(meta, ob) {
   const json = `{"type":"${meta.type}"${meta.params === 'face' ? ',"face":要亮的点数' : ''}}`;
-  const desc = meta.ops.map((op) => OPS[op]?.ai?.(ob, fmtP)).filter(Boolean).join('，并且');
+  const desc = meta.ops.map((op) => OPS[op]?.ai?.(ob)).filter(Boolean).join('，并且');
   return `拍词条「${meta.label}」${desc ? `——${desc}` : ''}（${json}${meta.keepTurn ? '，之后你继续行动' : ''}）`;
 }
 
@@ -252,7 +238,7 @@ const normalizedMemory = (profile, hypotheses = []) => {
 
 // 按席位投影（接收侧）：数据层全量保存，进提示词时只留**对手**的话——
 // 自己的声音已在自我留档里，混进牌桌发言区等于让模型听见自己的回声。
-const normalizeDialogue = (ctx, you, calcSeat) => {
+const normalizeDialogue = (ctx, you) => {
   const items = (ctx.dialogue ?? []).filter((d) => d.speaker !== you).map((d) => {
     const fullText = String(d.text ?? '').replace(/\s+/g, ' ').trim();
     const text = fullText.slice(0, 300);
@@ -260,8 +246,7 @@ const normalizeDialogue = (ctx, you, calcSeat) => {
       round: d.round ?? null,
       speaker: d.speaker ?? null,
       kind: d.kind ?? 'speech',
-      // v6：无算盘席位收不到「拨算盘」信号——挂在该动作上的台词只留话、去掉动作语境
-      action: d.action?.type === 'calc' && !calcSeat ? null : clone(d.action ?? null),
+      action: clone(d.action ?? null),
       text,
       omittedChars: Math.max(0, fullText.length - text.length),
     };
@@ -277,18 +262,12 @@ const normalizeDialogue = (ctx, you, calcSeat) => {
 export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, ctx = {}) {
   if (Object.hasOwn(ctx, 'extraFacts')) throw new Error('extraFacts 已废除：请使用 dialogue / roomEvents / control');
   const total = ob.diceCount.you + ob.diceCount.opp;
-  const calced = !!ob.calced?.[ob.you];
-  // v5：模型席默认没有算盘（2026-08-13 用户裁决）——'never' 是全席现值；
-  // 'free' 只剩显式构造（测试与 Q89 复活口），机制不删。
-  const calcHabit = persona.gear?.calc ?? 'never';
-  const legalActions = ob.legal
-    .filter((a) => !(a.type === 'calc' && calcHabit === 'never'))
-    .map((a) => {
-      const meta = modActionMeta(ob, a.type);
-      return meta
-        ? { ...clone(a), label: meta.label, params: meta.params, keepTurn: meta.keepTurn, ops: clone(meta.ops) }
-        : clone(a);
-    });
+  const legalActions = ob.legal.map((a) => {
+    const meta = modActionMeta(ob, a.type);
+    return meta
+      ? { ...clone(a), label: meta.label, params: meta.params, keepTurn: meta.keepTurn, ops: clone(meta.ops) }
+      : clone(a);
+  });
   const canBid = legalActions.some((a) => a.type === 'bid');
   const faces = ob.zhai ? [1, 2, 3, 4, 5, 6] : [2, 3, 4, 5, 6];
   const memory = normalizedMemory(profile, ctx.hypotheses ?? []);
@@ -299,7 +278,7 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
   memory.pastRoundsSelf = own.filter(
     (l) => l.round != null && l.round !== ob.round && (l.say || l.belief || l.note),
   );
-  const dialogue = normalizeDialogue(ctx, ob.you, calcHabit !== 'never');
+  const dialogue = normalizeDialogue(ctx, ob.you);
   return {
     schemaVersion: 2,
     stateId: stateIdOf(ob, ctx),
@@ -339,15 +318,9 @@ export function buildPromptPayload(ob, profile = '', persona = DEFAULT_PERSONA, 
         peeked: !!ob.peeked?.[q.id],
         blind: !!ob.blind?.[q.id],
         raised: !!ob.raises?.[q.id],
-        calced: !!ob.calced?.[q.id],
         shown: clone(ob.shown?.[q.id] ?? []),
       })),
       privateToYou: { dice: clone(ob.yourDice) },
-      calcSeat: calcHabit !== 'never', // v5：席位有没有算盘（决定要不要解释「你未拨」）
-      probability:
-        calced && ob.currentBid && calcHabit !== 'never'
-          ? { bid: clone(ob.currentBid), trueProbability: obProb(ob, ob.currentBid) }
-          : null,
       legal: {
         actions: legalActions,
         bid: canBid
@@ -377,8 +350,6 @@ function serializeHistory(payload, who) {
     const events = r.events.map((e) => {
       const t = timingText(e.timing);
       if (e.type === 'peek') return `${who(e.actor)}看骰${t}`;
-      // v6：无算盘席位的世界里没有这个动作——真人的拨算盘是纯私人辅助，不进模型叙事
-      if (e.type === 'calc') return payload.current.calcSeat ? `${who(e.actor)}拨算盘${t}` : '';
       if (e.type === 'declare') return `${who(e.actor)}宣${DECL[e.declaration] ?? e.declaration}${t}`;
       if (e.type === 'bid') return `${who(e.actor)}报${e.count}个${e.face}${t}`;
       if (e.type === 'challenge') return `${who(e.actor)}开${who(e.target)}${t}`;
@@ -409,7 +380,6 @@ function serializeHistory(payload, who) {
 const actionContext = (a) =>
   a?.type === 'bid' ? `报${a.count}个${a.face}`
   : a?.type === 'challenge' ? '开牌'
-  : a?.type === 'calc' ? '拨算盘'
   : a?.type === 'peek' ? '看骰'
   : a?.type === 'declare' ? `宣${DECL[a.declaration] ?? a.declaration}`
   : a?.type ?? '行动';
@@ -482,7 +452,6 @@ function serializeCurrent(payload, who) {
       continue;
     }
     const status = [p.peeked ? '已看' : '未看', p.blind ? '已盲' : '未盲', p.raised ? '已抬' : '未抬'];
-    if (c.calcSeat) status.push(p.calced ? '已算' : '未算'); // v6：这个状态只存在于有算盘的世界（free 席）
     const dice = p.relation === 'self' && c.privateToYou.dice ? `；骰面[${c.privateToYou.dice.join(',')}]` : '';
     const shown = p.shown.length ? `；已亮[${p.shown.join(',')}]` : '';
     lines.push(`${who(p.id)}：${p.diceCount}骰，筹码${p.chips}；${status.join('、')}${dice}${shown}。`);
@@ -491,19 +460,12 @@ function serializeCurrent(payload, who) {
   if (c.currentBid)
     lines.push(`当前报价：${who(c.currentBid.player)}报${c.currentBid.count}个${c.currentBid.face}${c.ownBidReturned ? '；这口自己的价被原样推回' : ''}。`);
   else lines.push('当前报价：无。');
-  // 算盘话术纪律（v4）：只说算式假设与「引擎发没发这个数」，不说「你手上有/没有准数」——
-  // 后者是认知断言，把工具输出抬成唯一真数；「看不见的骰按每面 1/6 计」在盲局也自动成立
-  //（旧文案「按你的骰面算」在盲局是假的——骰面自己都看不见）。
-  // v5：无算盘的席位两行都不出——「你未拨」对没有此动作的席位是噪声。
-  if (c.probability) lines.push(`你已拨算盘：看不见的骰按每面 1/6 计，当前报价为真的概率${pct(c.probability.trueProbability)}。`);
-  else if (c.currentBid && c.calcSeat) lines.push('你未拨算盘：引擎未发概率数。');
   if (c.latestTableTalk) {
     const t = c.latestTableTalk;
     const when = t.action ? `${actionContext(t.action)}时` : t.kind === 'poke' ? '当面反驳时' : '';
     lines.push(`牌桌最新一句：第${t.round ?? c.round}局，${who(t.speaker)}${when}说：「${t.text}」。`);
   }
   if (c.mods.length) lines.push(`实验词条（明牌）：${c.mods.map((m) => `「${m.name}」＝${clean(m.card, 500)}`).join('；')}`);
-  const fmtP = c.probability ? (v) => pct(v) : null;
   const self = c.players.find((p) => p.id === c.you);
   const modOb = {
     you: c.you,
@@ -519,12 +481,11 @@ function serializeCurrent(payload, who) {
   };
   const actions = c.legal.actions.map((a) => {
     if (a.type === 'peek') return '掀盅看骰（{"type":"peek"}）';
-    if (a.type === 'calc') return '拨算盘，动作所有对手可见（{"type":"calc"}）';
     if (a.type === 'challenge') return '开牌（{"type":"challenge"}）';
     if (a.type === 'bid') return '报价（{"type":"bid","count":N,"face":F}）';
     if (a.type === 'declare') return `宣${DECL[a.declaration] ?? a.declaration}（{"type":"declare","declaration":"${a.declaration}"}）`;
     const meta = modActionMeta({ mods: c.mods }, a.type);
-    return meta ? modCandidateLine(meta, modOb, fmtP) : a.type;
+    return meta ? modCandidateLine(meta, modOb) : a.type;
   });
   lines.push(`合法动作（仅限以下，清单外的会被引擎拒绝）：${actions.join('；') || '无'}。`);
   if (c.legal.bid)
@@ -566,7 +527,6 @@ export function parseDecision(text, ob) {
     const modMeta = modActionMeta(ob, a.type);
     const ok =
       (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
-      (a.type === 'calc' && ob.legal.some((x) => x.type === 'calc')) ||
       (a.type === 'challenge' && ob.legal.some((x) => x.type === 'challenge')) ||
       (a.type === 'bid' &&
         ob.legal.some((x) => x.type === 'bid') &&
@@ -585,7 +545,7 @@ export function parseDecision(text, ob) {
             ? { type: 'declare', declaration: a.declaration }
             : modMeta
               ? { type: a.type, ...(modMeta.params === 'face' ? { face: a.face } : {}) }
-              : a.type === 'peek' || a.type === 'calc'
+              : a.type === 'peek'
                 ? { type: a.type }
                 : { type: 'challenge' },
       // 上限是**防失控的护栏，不是控长度的手段**（长度归 max_tokens，Q86「约束长在管线上」）。
@@ -692,7 +652,7 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
       channel,
       {
         // Q86：删角色包裹与"判词两三句／不许编"等要求（判词是它的场合，§3 场合律零审查）。
-        // 留下的是任务、字段口径与 schema。v6：算盘句随模型席拔除删净；「打死」改「证伪」（用户红笔）。
+        // 留下的是任务、字段口径与 schema；「打死」改「证伪」（用户红笔）。
         system:
           '一场大话骰结束了，你在写这位客人的档案。复盘你对他的规律假设（只写关于客人的；被证伪的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
@@ -724,7 +684,6 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
 // channel 可传函数（每手求值）——设置保存后下一手立即生效，不用等下一场。
 export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSONA, ctx = {}, fetchFn } = {}) {
   const silent = createSilentBot(persona.strategy); // 策略参数随机位的 strategy（只在沉默 bot 顶班时生效）
-  const calcNever = (persona.gear?.calc ?? 'never') === 'never'; // v5：模型席默认无算盘
   const logs = []; // 决策日志（B.3）：台词事实来源与审计素材
   return {
     logs,
@@ -800,12 +759,6 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
             );
             decision = parseDecision(raw, ob);
             outcome = classifyOutput(raw, ob);
-            // v5 模型席无算盘：引擎接口保持对称（§2.1 不为 AI 特判），由客户端在此挡下
-            // 清单外的 calc——候选清单没给过它，输出了就按 illegal 计，与其他清单外动作同罪。
-            if (calcNever && decision?.action.type === 'calc') {
-              decision = null;
-              outcome = 'illegal';
-            }
             // 被 max_tokens 截断 ≠ 它不守契约。截断旗（两家口径见 cutShort）另立类目，
             // 与 `rejects`（引擎打回）同性质：**记在我们头上，不算模型的合规失败**。
             if (decision === null && cutShort(meta.finish)) outcome = 'truncated';
@@ -827,7 +780,7 @@ export function createOpponent({ channel, profile = '', persona = DEFAULT_PERSON
         decision = { action: silent.decide(ob), say: '', note: '', belief: '', speechMode: 'straight', reaction: null };
       // Q49 场合律：**他说话零审查**——台词侧的出口拦截已解除。记歪、嘴硬、夸大、言行不一
       // 都是这个对手的活性，不是故障（判据交给盲测玩家："它在玩我" vs "模型又胡说"）。
-      // 系统场合（结算/报告数据面/档案客观层/表盘）另有把关：那些数字根本不经过他的嘴，
+      // 系统场合（结算/报告数据面/档案客观层）另有把关：那些数字根本不经过他的嘴，
       // 由引擎盖章渲染——错了才是 bug（见 test/factcheck.test.js 的数据面回归）。
       const retried = firstOutcome ? { retried: true, firstOutcome } : {};
       logs.push({ round: ob.round, facts: prompts.user, raw, ...decision, observedStateId, silentFallback, error, outcome, meta, ...retried });

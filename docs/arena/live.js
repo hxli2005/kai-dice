@@ -518,8 +518,7 @@ function renderVerifiedBoard() {
       + `<td data-label="虚报率">${pct(row.bluffRate, row.n.seenBids)}</td>`
       + `<td data-label="其中明知">${pct(row.knowingBluffRate, row.n.seenBids)}</td>`
       + `<td data-label="蒙报率">${pct(row.blindBidRate, row.n.bids)}</td>`
-      + `<td data-label="抬价深度">${row.avgDepth ?? '—'} · n=${row.n.rounds}</td>`
-      + `<td data-label="算盘/局">${row.calcPerRound ?? '—'} · n=${row.n.rounds}</td></tr>`)
+      + `<td data-label="抬价深度">${row.avgDepth ?? '—'} · n=${row.n.rounds}</td></tr>`)
     .join('');
 }
 

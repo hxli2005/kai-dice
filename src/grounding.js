@@ -17,7 +17,7 @@ export const TUPLE_KEYS = ['actor', 'target', 'action', 'round'];
 // actor/target 为 null 读作"这一条是引擎在说话"，不是缺数据
 const ENGINE_VOICE = new Set(['roundStart', 'roundEnd', 'matchEnd']);
 // 必须指名道姓的动作（没有 actor 就是故障）
-const NEEDS_ACTOR = new Set(['peek', 'calc', 'bid', 'declare', 'challenge', 'modAction', 'reveal']);
+const NEEDS_ACTOR = new Set(['peek', 'bid', 'declare', 'challenge', 'modAction', 'reveal']);
 // 必须指明"对谁"的动作：开牌与摊牌都指向被开的那口价
 const NEEDS_TARGET = new Set(['challenge', 'reveal']);
 

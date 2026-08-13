@@ -72,7 +72,6 @@ test('Q14 自查：生面孔只有招呼素材，回头客的开场白素材必�
           ...STATS,
           won: false,
           timesChallenged: 3,
-          myCalcs: 4,
           bigPots: [{ round: 4, mult: 8, won: false, transfer: 24 }],
           slowest: { round: 3, bid: { count: 4, face: 5 }, ms: 12000 },
         },
@@ -86,7 +85,6 @@ test('Q14 自查：生面孔只有招呼素材，回头客的开场白素材必�
   assert.match(text, /他把账翻篇过 1 次/);
   assert.match(text, /上一场他开了 2 次牌，中了 1 次/);
   assert.match(text, /上一场他被掀了 3 回/);
-  assert.ok(!text.includes('算盘'), 'v6：算盘素材不进开场白——模型不接收拨算盘信号');
   assert.match(text, /×8 的池/); // F5 高倍局记忆加权
   assert.match(text, /第 3 局他停了半天才报 4 个 5/);
   assert.match(text, /上一场他输了/);

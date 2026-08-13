@@ -77,7 +77,7 @@ test('门禁：沉默 bot 不被清单 bot 稳定击穿（胜率 ≥ 50%）', as
   }
 });
 
-test('概率计算器：边界与已知值', () => {
+test('内部概率函数：边界与已知值', () => {
   // 我 5 骰全是 3，报 5 个 3 必真
   assert.equal(probBidTrue({ count: 5, face: 3 }, [3, 3, 3, 3, 3], 5, false), 1);
   // 需要对方 6 个匹配但对方只有 5 颗 → 0
@@ -103,7 +103,7 @@ test('obKnown：没看骰时自己的骰子也算未知（盲局不许把总骰�
   assert.equal(seen.unknown, 5);
 });
 
-test('粗档词：AI 与训练轮共用同一套（双发同粒度）', () => {
+test('沉默降级台词的粗档边界', () => {
   assert.equal(coarseWord(0.9), '基本稳');
   assert.equal(coarseWord(0.5), '五五开');
   assert.equal(coarseWord(0.2), '悬');

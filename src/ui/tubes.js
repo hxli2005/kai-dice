@@ -75,7 +75,6 @@ export function toTubeView(o, {
   opponentName = '它',
   selectedBid = null,
   busy = false,
-  privateCalc = '',
   connected = null,
   sandbox = false,
 } = {}) {
@@ -100,7 +99,6 @@ export function toTubeView(o, {
   const alivePlayers = o.players.filter((p) => p.alive);
   const stakePerSeat = Math.round(o.potUnits * o.potMult);
   const roundStart = o.events?.findLast((e) => e.type === 'roundStart' && e.round === o.round);
-  const aiCalcCount = (o.events ?? []).filter((e) => e.type === 'calc' && e.actor === 'B').length;
   const modActions = (o.mods ?? [])
     .flatMap((m) => m.actions.map((a) => ({ ...a, mod: m.name })))
     .filter((a) => legalTypes.has(a.type));
@@ -131,8 +129,6 @@ export function toTubeView(o, {
       lower: me?.chips ?? 0,
     },
     fuse: clamp(o.bidCount ?? 0, 0, 10),
-    privateCalc,
-    aiCalcCount,
     seal: roundStart?.commits?.B ? roundStart.commits.B.slice(0, 8).toUpperCase() : '--------',
     legal: {
       bid: legalTypes.has('bid'),
@@ -140,7 +136,6 @@ export function toTubeView(o, {
       countDown: !!(selectedBid && legalCounts.some((count) => count < selectedBid.count)),
       countUp: !!(selectedBid && legalCounts.some((count) => count > selectedBid.count)),
       open: legalTypes.has('challenge'),
-      calc: legalTypes.has('calc'),
       peek: legalTypes.has('peek'),
       ...declares,
     },
@@ -148,7 +143,6 @@ export function toTubeView(o, {
       blind: !!o.blind?.A,
       zhai: !!o.zhai,
       raise: !!o.raises?.A,
-      calc: !!o.calced?.A,
     },
     modActions,
   };
@@ -569,45 +563,6 @@ export function createTubeStage(canvas, handlers = {}) {
     ctx.restore();
   }
 
-  function calcValue() {
-    const hit = String(view?.privateCalc ?? '').match(/\d+(?:\.\d+)?/);
-    return hit ? clamp(Number(hit[0]), 0, 100) : null;
-  }
-
-  function drawCalcInstrument(x, y, pal) {
-    const value = calcValue();
-    const activeCalc = value != null || !!view?.declarations?.calc;
-    ctx.save();
-    ctx.globalAlpha *= activeCalc ? 1 : 0.42;
-    ctx.strokeStyle = pal.lo;
-    ctx.strokeRect(x + 0.5, y + 0.5, 75, 16);
-    // 私有视窗：两片快门只在本席管内张合，不再写“仅你可见”。
-    const shutter = activeCalc ? 1.5 + Math.sin(time / 430) * 0.55 : 0.6;
-    ctx.strokeStyle = activeCalc ? pal.hot : pal.lo;
-    ctx.beginPath();
-    ctx.moveTo(x + 5, y + 8);
-    ctx.quadraticCurveTo(x + 10, y + 3, x + 15, y + 8);
-    ctx.quadraticCurveTo(x + 10, y + 13, x + 5, y + 8);
-    ctx.stroke();
-    ctx.fillStyle = pal.hot;
-    ctx.fillRect(Math.round(x + 9), Math.round(y + 8 - shutter / 2), 2, Math.max(1, Math.round(shutter)));
-    // 五档算盘珠随读数错位，数值变化被表现为机械动作。
-    ctx.strokeStyle = pal.lo;
-    ctx.beginPath();
-    ctx.moveTo(x + 20, y + 8.5);
-    ctx.lineTo(x + 49, y + 8.5);
-    ctx.stroke();
-    for (let i = 0; i < 5; i++) {
-      const bit = value == null ? 0 : (Math.round(value / 5) >> i) & 1;
-      const travel = bit ? 4 : -4;
-      const breathe = activeCalc ? Math.sin(time / 520 + i * 0.8) * 0.5 : 0;
-      ctx.fillStyle = i % 2 ? pal.mid : pal.hot;
-      ctx.fillRect(Math.round(x + 34 + travel + breathe + i * 1.4), y + 6, 3, 5);
-    }
-    if (value != null) tx(Math.round(value), x + 71, y + 3, 9, pal.hot, { bold: true, mono: true, align: 'right' });
-    ctx.restore();
-  }
-
   function drawRoundCounter(pal, tube) {
     const y = tube.h - 16;
     tx('局', 6, y - 1, 9, pal.mid, { bold: true });
@@ -634,19 +589,6 @@ export function createTubeStage(canvas, handlers = {}) {
     tx('个', tube.w / 2 - 5, y + 7, 8, pal.mid, { bold: true, align: 'center' });
     drawDie(tube.w / 2 + 7, y, 18, sel.face, pal);
     ctx.restore();
-  }
-
-  function drawCalcTally(x, y, count, pal) {
-    ctx.strokeStyle = pal.lo;
-    ctx.beginPath();
-    ctx.moveTo(x, y + 3.5);
-    ctx.lineTo(x + 35, y + 3.5);
-    ctx.stroke();
-    for (let i = 0; i < 5; i++) {
-      ctx.fillStyle = i < Math.min(5, count) ? pal.mid : pal.lo;
-      const shift = i < count ? 3 : -2;
-      ctx.fillRect(x + 5 + i * 6 + shift, y + 1, 2, 5);
-    }
   }
 
   function tubeFrame(tube) {
@@ -793,7 +735,6 @@ export function createTubeStage(canvas, handlers = {}) {
       ? `${[...(view?.opponentName ?? '它')].slice(0, 12).join('')}…`
       : view?.opponentName ?? '它';
     tx(opponentLabel, 6, 5, 10, pal.mid, { bold: true });
-    drawCalcTally(6, 19, view?.aiCalcCount ?? 0, pal);
     drawChipDock(tube.w - 52, 18, displayStacks.up, pal, potPop);
     ctx.fillStyle = view?.connected === false ? pal.lo : pal.hot;
     ctx.fillRect(tube.w - 30, 8, 3, 3);
@@ -858,7 +799,6 @@ export function createTubeStage(canvas, handlers = {}) {
   }
 
   function drawLower(pal, tube) {
-    drawCalcInstrument(6, 5, pal);
     drawChipDock(tube.w - 52, 5, displayStacks.down, pal, potPop);
 
     const faces = reveal?.lower ?? view?.myDice;
@@ -1043,10 +983,9 @@ export function createTubeStage(canvas, handlers = {}) {
       ['blind', '盲', !!view?.legal.blind],
       ['zhai', '斋', !!view?.legal.zhai],
       ['raise', '抬', !!view?.legal.raise],
-      ['calc', '算', !!view?.legal.calc],
       [hasMods ? 'more' : 'poke', hasMods ? '扩' : '戳', true],
     ];
-    declarations.forEach(([id, label, enabled], i) => addButton(id, 8 + i * 37, KEY_Y + 34, 33, 20, label, !!(canAct && enabled), 'dark', 10));
+    declarations.forEach(([id, label, enabled], i) => addButton(id, 8 + i * 46, KEY_Y + 34, 42, 20, label, !!(canAct && enabled), 'dark', 10));
     for (const button of buttons) if (button.id !== 'peek') bevel(button);
   }
 
@@ -1312,10 +1251,6 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
       pokeMenu = false;
       moreMenu = false;
       handlers.open?.();
-    } else if (id === 'calc') {
-      pokeMenu = false;
-      moreMenu = false;
-      handlers.calc?.();
     } else if (id === 'blind' || id === 'zhai' || id === 'raise') {
       pokeMenu = false;
       moreMenu = false;

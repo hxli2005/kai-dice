@@ -1,6 +1,4 @@
-// 事实工具：概率计算器（DESIGN 附B.1）。
-// 只回答"世界是什么样"：给定已知骰与报价，报价为真/恰好为真的精确概率。
-// 双发红线：本模块同时供 AI 客户端与玩家 UI 表盘使用。
+// 内部概率函数：只供沉默降级策略与离线指标复算，不构成玩家或模型可调用的桌面工具。
 // 词条「亮一颗」引入公开明骰后，"已知骰"＝自见骰＋他人亮出的骰（obKnown 统一折算）。
 
 import { countBid } from './rules.js';
@@ -30,12 +28,6 @@ export function probBidTrue(bid, knownDice, unknownCount, zhai) {
   return binomTail(unknownCount, need, pMatch(bid, zhai));
 }
 
-// "恰好 count 个 face"的概率（词条「掐」的表盘双发，Q37）
-export function probBidExact(bid, knownDice, unknownCount, zhai) {
-  const need = bid.count - countBid(bid, knownDice, zhai);
-  return binomPmf(unknownCount, need, pMatch(bid, zhai));
-}
-
 // 从 observe() 折算已知/未知：自见骰＋他人亮出的明骰为已知，其余为未知。
 // 盲局/未看骰时 yourDice 为 null——自己那几颗也是未知（它们仍在桌上参与清点，
 // 漏算会把盲局的概率系统性算低）。未知数一律 = 场上总骰 − 已知骰。
@@ -52,13 +44,7 @@ export function obProb(ob, bid) {
   return probBidTrue(bid, known, unknown, ob.zhai);
 }
 
-export function obProbExact(ob, bid) {
-  const { known, unknown } = obKnown(ob);
-  return probBidExact(bid, known, unknown, ob.zhai);
-}
-
-// 粗档（Q45）：没拨算盘时谁都只有手感——AI 与玩家训练轮共用同一套词，
-// 保证"双方同粗"（附B.1 双发红线：同一事实，同一粒度）。
+// 沉默降级台词只用粗档，不展示内部数值。
 export function coarseWord(p) {
   return p >= 0.7 ? '基本稳' : p >= 0.4 ? '五五开' : p >= 0.15 ? '悬' : '纯扯';
 }

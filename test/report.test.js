@@ -92,7 +92,6 @@ const trio = [
   { type: 'peek', actor: 'A' },
   { type: 'bid', actor: 'A', count: 2, face: 4 },
   { type: 'bid', actor: 'B', count: 8, face: 4 },
-  { type: 'calc', actor: 'A' },
   {
     type: 'reveal', bid: { player: 'B', count: 8, face: 4 }, actor: 'A', target: 'B',
     dice: { A: [6], B: [3, 3, 5, 5, 2], C: [2, 2, 2, 6, 6] }, zhai: false, stands: false, actual: 0, loser: 'B',
@@ -124,18 +123,6 @@ test('F5 记忆加权：≥×4 的池入重点素材', () => {
   const st = computeStats(trio, 'A', { 1: [6], 2: [6] });
   assert.equal(st.bigPots.length, 1);
   assert.match(bigPotBrief(st), /第 1 局那个 ×4 的池：他收走了 8/);
-});
-
-test('F6 算盘依赖度：算完照没照着数走', () => {
-  const st = computeStats(trio, 'A', { 1: [6], 2: [6] });
-  assert.equal(st.myCalcs, 1);
-  assert.equal(st.calcDecisions, 1);
-  assert.equal(st.calcFollows, 1, '算完开掉一口 P 很低的价＝照着数走');
-  assert.equal(st.calcFollowRate, 1);
-  const dep = condBrief({ ...st, myCalcs: 4, calcFollowRate: 1 });
-  assert.match(dep, /在跟算盘打牌/);
-  const bluff = condBrief({ ...st, myCalcs: 4, calcFollowRate: 0.25 });
-  assert.match(bluff, /算给人看的/);
 });
 
 test('模板判词：条件倾向（心理侧）排最前', () => {

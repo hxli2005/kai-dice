@@ -130,28 +130,13 @@ test('Q22 盲窗口放宽：报过数、只要没看骰仍可宣盲', async () =
   assert.ok(o.raises && o.blind.A === true);
 });
 
-test('Q45 算：轮到你才能算、每局一次、只落公开事实、下一局复位', async () => {
+test('计算工具从所有模式删除：无动作、无状态、无事件，旧动作直接拒绝', async () => {
   const m = await createMatch({ seed: 3 });
-  await assert.rejects(() => m.act('B', { type: 'calc' }), /illegal calc/, '不是你的轮次不能算');
-  await m.act('A', { type: 'peek' });
-  await m.act('A', { type: 'calc' });
   const o = m.observe('A');
-  assert.equal(o.calced.A, true);
-  assert.equal(o.calced.B, false);
-  assert.equal(o.turn, 'A', '算完行动权还在你');
-  assert.ok(o.events.some((e) => e.type === 'calc' && e.actor === 'A'));
-  // 事件里只有"他算了"，没有算出来的数——结果私有（各自客户端用自己的骰算）
-  const ev = o.events.find((e) => e.type === 'calc');
-  assert.deepEqual(
-    Object.keys(ev).sort(),
-    ['i', 'type', 'actor', 'target', 'action', 'round', 'elapsedMs', 'timeout'].sort(),
-  );
-  assert.equal(m.observe('B').calced.A, true, '拨算盘全桌可见');
+  assert.ok(!Object.hasOwn(o, 'calced'));
+  assert.ok(!o.legal.some((a) => a.type === 'calc'));
   await assert.rejects(() => m.act('A', { type: 'calc' }), /illegal calc/);
-  // 下一局重新摆算盘
-  await m.act('A', { type: 'bid', count: 2, face: 4 });
-  await m.act('B', { type: 'challenge' });
-  assert.equal(m.observe('A').calced.A, false);
+  assert.ok(!m.observe('A').events.some((e) => e.type === 'calc'));
 });
 
 test('startChips 支持 {A,B} 不对称初始（跨场账本）', async () => {

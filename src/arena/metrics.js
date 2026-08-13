@@ -4,7 +4,7 @@
 //
 //   合规层｜非法动作率／格式失败率／拒绝率。"某个模型不肯骗人"本身就是内容，不是噪声。
 //   棋力层｜胜率／开牌命中／掐中。强弱是强弱，跟"是不是另一个人"没关系。
-//   风味层｜虚报率／抬价深度／算频／蒙报／宣言使用／bait 频率。**只有这一层的分化支撑"模型即对手"。**
+//   风味层｜虚报率／抬价深度／蒙报／宣言使用／bait 频率。**只有这一层的分化支撑"模型即对手"。**
 //
 // 台词质量不在这里评——按排期须等接地批次 G2（否则评的是被主客体颠倒污染的台词）。
 // 本模块只负责**留样**：lines 原样存着，等 G2 完了人来打分。
@@ -86,7 +86,6 @@ const emptyAcc = () => ({
   bids: 0,
   depthSum: 0,
   depthN: 0,
-  calcs: 0,
   declares: 0,
   says: 0,
   baits: 0,
@@ -133,7 +132,6 @@ function accumulate(acc, match, seat, { keepLines = 6 } = {}) {
     acc.depthSum += st.avgDepth * st.ladderDepths.length;
     acc.depthN += st.ladderDepths.length;
   }
-  acc.calcs += st.myCalcs;
   acc.declares += st.myBlinds + st.myRaises;
   acc.engineRejects += match.rejects?.[seat] ?? 0;
   const end = match.events.at(-1);
@@ -227,7 +225,6 @@ export function finalize(acc) {
       thinBluffRate: r2(div(acc.thinBluffs, acc.seenBids)),
       blindBidRate: r2(div(acc.blindBids, acc.bids)), // 骰都不看就报
       avgDepth: r2(div(acc.depthSum, acc.depthN)), // 抬价深度
-      calcPerRound: r2(div(acc.calcs, acc.rounds)), // 算频（原生 tell：算不算是他自己的事）
       declarePerRound: r2(div(acc.declares, acc.rounds)), // 宣言使用率（盲＋抬）
       baitRate: r2(div(acc.baits, acc.says)), // 自认有意误导的比例
       // 出手节奏＝风味的一部分（用户裁定）：一个模型肯为一口价想多久、写多少字，
@@ -290,7 +287,7 @@ export function routingIntegrity(rows) {
 
 // 风味分化的判据（Q51 证据闸门）：**只看风味层**。
 // 机器只能报"分没分开"，"分开得算不算一个人"由人看（红队条款：这里不下结论）。
-export const FLAVOR_AXES = ['bluffRate', 'knowingBluffRate', 'blindBidRate', 'avgDepth', 'calcPerRound', 'declarePerRound', 'baitRate', 'sayRate', 'msMedian', 'outTokensPerHand'];
+export const FLAVOR_AXES = ['bluffRate', 'knowingBluffRate', 'blindBidRate', 'avgDepth', 'declarePerRound', 'baitRate', 'sayRate', 'msMedian', 'outTokensPerHand'];
 
 // 顶班率 ≥20% 的行不参与分化计算——那些数里掺着沉默 bot，拿它算"模型之间差多少"是自欺。
 export const CONTAMINATED_RATE = 0.2;

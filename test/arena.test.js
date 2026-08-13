@@ -40,7 +40,6 @@ import {
 function fakeDecide(user, { aggressive = false, say, belief, qia = null } = {}) {
   const fix = (d) => ({ ...d, ...(say ? { say } : {}), ...(belief ? { belief } : {}) });
   if (/掀盅看骰/.test(user)) return fix({ action: { type: 'peek' }, say: '先看看', belief: '先摸底' });
-  // v5（2026-08-13）：模型席无算盘——候选里永远不会出现 calc，原「aggressive 就拨算盘」分支已删
   // 词条臂：qia 传 {left:n} 时，候选里一出现「掐」就掐（计数器由调用方持有，跨手共享）
   if (qia?.left > 0 && user.includes('拍词条「掐」')) {
     qia.left -= 1;
@@ -259,7 +258,6 @@ test('A3：风味分化——只在样本够的轴上出结论', async () => {
     seed0: 77,
     fetchFn: async (url, init) => {
       // 座位 B（wild）开牌凶、爱诈；座位 A 稳——制造一条真实存在的风味差。
-      // v5 后模型席无算盘，分化轴改看 bait（wild 有、calm 无）。
       const body = JSON.parse(init.body);
       const aggressive = /wild/.test(body.model);
       return fakeChannel({ seen, aggressive })(url, init);
@@ -268,9 +266,6 @@ test('A3：风味分化——只在样本够的轴上出结论', async () => {
   const rows = summarize(matches);
   const wild = rows.find((r) => r.label === 'wild');
   const calm = rows.find((r) => r.label === 'calm');
-  // v5：模型席无算盘——算频轴在纯模型批次恒零（拔除的直接后果，不是采集坏了）
-  assert.equal(wild.flavor.calcPerRound, 0, 'v5：模型席拨不了算盘');
-  assert.equal(calm.flavor.calcPerRound, 0);
   assert.ok(wild.flavor.baitRate > 0, 'bait 留档要进风味层');
   const spread = flavorSpread(rows, { minSamples: 1 });
   assert.equal(spread.baitRate.enough, true);
@@ -508,11 +503,11 @@ test('污染守卫：顶班率高的行，棋力层与风味层一律不出数',
   const rows = [
     { label: 'dead-model', compliance: { silentFallbackRate: 1 },
       skill: { winRate: 1, n: 2, challengeHitRate: 1, challenges: 1, calzas: 0, netChips: 42 },
-      flavor: { bluffRate: 0.06, blindBidRate: 0, avgDepth: 2.67, calcPerRound: 0, declarePerRound: 0, baitRate: null, lines: [], n: { bids: 17, rounds: 12, seenBids: 17, says: 0 } },
+      flavor: { bluffRate: 0.06, blindBidRate: 0, avgDepth: 2.67, declarePerRound: 0, baitRate: null, lines: [], n: { bids: 17, rounds: 12, seenBids: 17, says: 0 } },
       samples: { matches: 2, calls: 30 }, cost: { usd: 0, usdFromApi: false, inTokens: 0, cacheRead: 0 } },
     { label: 'live-model', compliance: { silentFallbackRate: 0.06 },
       skill: { winRate: 0, n: 2, challengeHitRate: 0.18, challenges: 11, calzas: 0, netChips: -42 },
-      flavor: { bluffRate: 0, blindBidRate: 0.93, avgDepth: 2.67, calcPerRound: 0.42, declarePerRound: 0.08, baitRate: 0.03, lines: [], n: { bids: 15, rounds: 12, seenBids: 1, says: 33 } },
+      flavor: { bluffRate: 0, blindBidRate: 0.93, avgDepth: 2.67, declarePerRound: 0.08, baitRate: 0.03, lines: [], n: { bids: 15, rounds: 12, seenBids: 1, says: 33 } },
       samples: { matches: 2, calls: 33 }, cost: { usd: 0.0037, usdFromApi: true, inTokens: 24644, cacheRead: 2816 } },
   ];
   const md = renderBoard(rows, { run: {}, spread: flavorSpread(rows) });
@@ -531,9 +526,9 @@ test('污染守卫：顶班率高的行，棋力层与风味层一律不出数',
 
 test('污染守卫：被剔除的行不参与分化计算，且剔除要写出来', () => {
   const spoiledRow = { label: 'dead', compliance: { silentFallbackRate: 1 },
-    flavor: { bluffRate: 0.5, avgDepth: 9, calcPerRound: 9, declarePerRound: 9, blindBidRate: 9, baitRate: 9, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
+    flavor: { bluffRate: 0.5, avgDepth: 9, declarePerRound: 9, blindBidRate: 9, baitRate: 9, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
   const cleanRow = { label: 'live', compliance: { silentFallbackRate: 0 },
-    flavor: { bluffRate: 0.1, avgDepth: 2, calcPerRound: 1, declarePerRound: 0, blindBidRate: 0.2, baitRate: 0, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
+    flavor: { bluffRate: 0.1, avgDepth: 2, declarePerRound: 0, blindBidRate: 0.2, baitRate: 0, n: { bids: 99, rounds: 99, seenBids: 99, says: 99 } } };
   const sp = flavorSpread([spoiledRow, cleanRow]);
   assert.equal(sp.bluffRate.enough, false, '只剩一个干净的，不出结论');
   assert.equal(sp.bluffRate.spoiled, 1, '要说清剔了几个');
@@ -587,7 +582,7 @@ test('台词转发：对家说过的话进得了提示词，belief 永不外传'
   const users = seen.map((r) => r.body.messages[1].content);
   const heard = users.filter((u) => u.includes('对方') && u.includes('你这手牌怕是不硬'));
   assert.ok(heard.length > 0, '对家的台词必须进得了提示词——否则「牌手层允许诈」是空转');
-  assert.ok(heard.some((u) => /第\d+局，对方(报\d+个\d+|开牌|拨算盘|看骰|宣.)时说/.test(u)), '要带上它当时在做什么');
+  assert.ok(heard.some((u) => /第\d+局，对方(报\d+个\d+|开牌|看骰|宣.)时说/.test(u)), '要带上它当时在做什么');
   // belief 可回灌给说话者自己，但绝不能混入公开引语传给对家。
   for (const u of users) {
     const quotes = u.match(/【牌桌发言[\s\S]*?(?=\n\n【|$)/)?.[0] ?? '';
@@ -624,7 +619,7 @@ test('被 max_tokens 截断另立类目，不计入格式失败', async () => {
     fetchFn: async () => ({
       ok: true, status: 200,
       json: async () => ({
-        choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"开","note":"对方拨算盘后报' }, finish_reason: 'length' }],
+        choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"开","note":"对方抬价后报' }, finish_reason: 'length' }],
         usage: { prompt_tokens: 900, completion_tokens: 800 },
       }),
     }),

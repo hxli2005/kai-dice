@@ -22,16 +22,8 @@ test('F2：沉默模式开牌台词只用真事实，且全席共用一句模板
   // Q87：声口全席统一——"谁说话什么调"是人设，已删；有通道时说什么全归模型自己
   assert.equal(one, two, '沉默模式模板全席共用');
   assert.equal(two, three, '沉默模式模板全席共用');
-  // 零准数：沉默 bot 没拨过算盘，嘴里就不许有百分号
+  // 模板只说粗档，不展示内部计算值
   for (const line of [one, two, three]) assert.ok(!/%|成(?!立)/.test(line));
-});
-
-test('F2：拨过算盘的人报的价会被点破（算盘也是可引用的事实）', async () => {
-  const m = await createMatch({ seed: 7 });
-  await m.act('A', { type: 'peek' });
-  await m.act('A', { type: 'calc' });
-  await m.act('A', { type: 'bid', count: 2, face: 4 });
-  assert.equal(readClause(m.observe('B')), '你算完才敢报这个数');
 });
 
 test('F2：无通道的 AI 决策仍给得出台词素材（降级不降差异化）', async () => {

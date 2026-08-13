@@ -57,21 +57,11 @@ function bidRefs(text) {
   return out;
 }
 
-// 没拨算盘就说准数＝编（Q45）。判据同上：这个数在发给它的事实里吗。
-// 「三成」这类中文说法是本桌概率的成语，未算即视为编；粗话（基本稳/五五开/悬/纯扯）永远免检。
-export function hasFakePrecision(text, allowedFrom = '') {
-  const s = String(text ?? '');
-  if (/[一二两三四五六七八九]\s*成(?!立|不|功|交|群)/.test(s) || /百分之/.test(s)) return true;
-  return [...s.matchAll(/(\d+)\s*[%％]/g)].some(
-    (m) => !new RegExp(`${m[1]}\\s*[%％]`).test(String(allowedFrom)),
-  );
-}
-
 // 出口校验主函数：返回违规清单（空数组＝可以出口）。
 // ledger 缺省为空台账（如开场白：此时桌上还没有事实，一切引用都得来自 allowedFrom）。
 // allowedFrom＝发给它的事实全文：出现在里面的数字算"给过的真数据"，免检。
 export function checkFacts(text, ledger = { round: 0, bids: [], lost: {}, seq: [] }, opts = {}) {
-  const { ownBid = null, allowedFrom = '', calced = true } = opts;
+  const { ownBid = null, allowedFrom = '' } = opts;
   const s = String(text ?? '');
   if (!s) return [];
   const bad = [];
@@ -117,7 +107,5 @@ export function checkFacts(text, ledger = { round: 0, bids: [], lost: {}, seq: [
     if (Number.isInteger(n) && ledger.round > 0 && n > ledger.round && !allowed.includes(m[0]))
       bad.push(`round:${n}>${ledger.round}`);
   }
-  // ⑥ 没算过不许报准数（Q45）
-  if (!calced && hasFakePrecision(s, allowed)) bad.push('fake-precision');
   return bad;
 }

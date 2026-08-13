@@ -166,9 +166,6 @@ export function profileBrief(p, personaId = `model:${HOSTED_MODEL}`, withNotes =
   const habits = last
     ? `上一场客人虚报率${Math.round(last.bluffRate * 100)}%（其中明知站不住 ${last.myKnowingBluffs ?? 0} 口、只是估悬了 ${last.myThinBluffs ?? 0} 口），开牌${last.myChallenges}次命中${last.myChallengeHits}次，平均思考${(last.avgTimeMs / 1000).toFixed(1)}秒。`
     : '';
-  // F6 算盘依赖度通道已随 v6 退役（2026-08-13 用户「删干净」）：模型不再接收拨算盘信号，
-  // 「它眼中的你」也就不许再声称读过你的算频——档案页与 AI prompt 同一份，一起摘。
-  // 玩家自己的报告卡（report.js）照旧显示自己的算盘数据，那是给真人的辅助面板。
   const bigPot = last && bigPotBrief(last) ? `上一场最肥的一池：${bigPotBrief(last)}。` : ''; // F5 记忆加权
   const mind = p.minds?.[personaId];
   const notes = withNotes && mind ? mind.notes.slice(-5).join('；') : '';
@@ -198,7 +195,6 @@ export function profilePromptData(p, personaId = `model:${HOSTED_MODEL}`) {
         thinBluffs: last.myThinBluffs ?? null,
         challenges: last.myChallenges,
         challengeHits: last.myChallengeHits,
-        // calcs/calcFollowRate 已删（v6）：算盘数据不进模型的核验统计
         bigPot: bigPotBrief(last) || null,
       });
     }
@@ -228,7 +224,6 @@ export function openerFacts(profile, ledger) {
   else if (last.bluffRate > 0.5) facts.push('上一场他一半以上的报价没站住（多半是估错，不是有意的）');
   if (last.timesChallenged >= 2) facts.push(`上一场他被掀了 ${last.timesChallenged} 回`);
   if (last.myBlinds >= 2) facts.push(`上一场他盲了 ${last.myBlinds} 把`);
-  // 算盘素材已删（v6）：模型不接收拨算盘信号，开场白自然也不许引用
   if (last.blindBids >= 2) facts.push(`上一场他有 ${last.blindBids} 口价是没看骰就报的`); // F0c
   if (bigPotBrief(last)) facts.push(`上一场${bigPotBrief(last)}`); // F5：×4 以上的池必须被记住
   if (last.slowest && last.slowest.ms > 8000)

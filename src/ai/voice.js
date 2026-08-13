@@ -4,7 +4,7 @@
 // 三条纪律：
 // - 零模型：纯模板，输入全部来自 observe（公开事件）与自己的骰子；
 // - 零编造：每个短语都指向一件刚发生过的真事，指不出来就不说；
-// - 零准数（Q45 同规则）：沉默 bot 不拨算盘，所以它嘴里只有粗档手感，没有百分比。
+// - 粗粒度：沉默 bot 的模板只说手感档位，不展示内部计算值。
 
 import { obProb, coarseWord } from '../probability.js';
 
@@ -20,7 +20,6 @@ export function readClause(ob) {
   const evs = ob.events.slice(ob.events.findLastIndex((e) => e.type === 'roundStart') + 1);
   const mine = (e) => e.actor === q;
   if (ob.blind?.[q]) return '你骰都没看就压我';
-  if (ob.calced?.[q]) return '你算完才敢报这个数';
   if (ob.raises?.[q]) return '抬完就报这一口';
   const depth = evs.filter((e) => e.type === 'bid').length;
   if (depth >= 5) return `都第 ${depth} 手了`;

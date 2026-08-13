@@ -38,16 +38,14 @@ test('三管机筹码坞保留负账本符号，不把欠筹美化成零', async
   assert.equal(view.chips.lower - view.stakePerSeat, -45);
 });
 
-test('三管机视图跟随真实报价、倍率、算盘与行动权', async () => {
+test('三管机视图跟随真实报价、倍率与行动权', async () => {
   const match = await createMatch({ seed: 23 });
   await match.act('A', { type: 'peek' });
   await match.act('A', { type: 'declare', declaration: 'raise' });
-  await match.act('A', { type: 'calc' });
   await match.act('A', { type: 'bid', count: 2, face: 4 });
 
   const view = toTubeView(match.observe('A'), {
     selectedBid: { count: 2, face: 5 },
-    privateCalc: '72%',
     busy: false,
   });
   assert.deepEqual(view.currentBid, { player: 'A', count: 2, face: 4 });
@@ -58,9 +56,7 @@ test('三管机视图跟随真实报价、倍率、算盘与行动权', async ()
   assert.equal(view.potMult, 2);
   assert.equal(view.stakePerSeat, 4);
   assert.equal(view.fuse, 1);
-  assert.equal(view.privateCalc, '72%');
   assert.equal(view.declarations.raise, true);
-  assert.equal(view.declarations.calc, true);
   assert.equal(view.myTurn, false);
 
   const stagedTotal = view.chips.upper - view.stakePerSeat

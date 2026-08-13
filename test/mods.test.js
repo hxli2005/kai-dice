@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
 import { countBid } from '../src/rules.js';
-import { probBidTrue, probBidExact, obProb, obProbExact } from '../src/probability.js';
+import { probBidTrue, obProb } from '../src/probability.js';
 import { CATALOG, catalogMap, validateMod, renderCard } from '../src/mods/catalog.js';
 import { selfPlayMods, checkInvariants, smokeMods } from '../src/mods/smoke.js';
 import { examMod } from '../src/mods/exam.js';
@@ -43,7 +43,7 @@ test('亮一颗：看骰前不可亮、看骰后每局一次、明骰全桌可�
   assert.ok(!m.observe('A').legal.some((a) => a.type === 'liang'), '每局限一次');
 });
 
-test('亮一颗：概率表盘双发折算明骰（obProb）', async () => {
+test('亮一颗：内部概率复算会计入公开明骰（obProb）', async () => {
   const m = await matchWith([liang], 5);
   const face = m.observe('A').yourDice[0];
   await m.act('A', { type: 'liang', face });
@@ -140,15 +140,6 @@ test('掐：回骰上限=起始骰数（满编掐对不越界）', async () => {
   assert.equal(re.diceCount.B, 5, '满编不加骰');
 });
 
-test('掐：表盘双发——恰好概率与 obProbExact 一致', async () => {
-  const m = await matchWith([qia], 7);
-  await m.act('A', { type: 'bid', count: 3, face: 4 });
-  const obB = m.observe('B');
-  const expect = probBidExact({ count: 3, face: 4 }, obB.yourDice, 5, false);
-  assert.equal(obProbExact(obB, obB.currentBid), expect);
-  assert.ok(expect > 0 && expect < 1);
-});
-
 // ---------- 让报 ----------
 
 test('让报：推回后报价者必须自己抬（不能开/掐自己的价），每场一次', async () => {
@@ -198,21 +189,8 @@ test('buildPrompts：规则卡明牌注入、词条候选与动作 schema、明�
   assert.match(user, /实验词条（明牌）：「亮一颗」/);
   assert.match(user, /「掐」/);
   assert.match(user, new RegExp(`对方.*亮出.*${faceA}`), '明骰进叙事');
-  // Q45／C1 根治（2026-08-10）：**没拨算盘一个数都不给**——粗档也是数。
-  // 玩家侧未拨算盘时是被动零显示，词条的"恰好"同规矩（B.1 双发）。
-  assert.ok(!/恰好的概率/.test(user), '未算＝连粗档都不给');
-  assert.match(user, /宣布"这口价恰好为真"当场开牌；掐对你收池并拿回一颗骰/, '规则照说，只是不带数');
-  await m.act('B', { type: 'calc' });
-  // v5：模型席无算盘——「恰好」带数的形态只剩显式 free 席（机制看守）与真人 UI（双发另测）
-  assert.match(
-    buildPrompts(m.observe('B'), '', { gear: { calc: 'free', usesBlind: true } }).user,
-    /恰好的概率按你的骰子算是 \d+%/,
-    'free 席拨过算盘＝掐候选带数（机制未删）',
-  );
-  assert.ok(
-    !/恰好的概率按你的骰子算是 \d+%/.test(buildPrompts(m.observe('B'), '').user),
-    'v5：默认席就算引擎记它算过，也不发数',
-  );
+  assert.ok(!/恰好的概率/.test(user), '词条候选不提供计算结果');
+  assert.match(user, /宣布"这口价恰好为真"并当场开牌；掐对你收池并拿回一颗骰/);
   assert.match(user, /把这口价原样推回/);
   assert.match(system, /{"type":"qia"}/);
   assert.match(system, /{"type":"liang","face":点数1到6}/);

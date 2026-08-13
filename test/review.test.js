@@ -15,24 +15,21 @@ const mockFetch = (pick) => async (url, init) => {
   return { ok: true, json: async () => ({ choices: [{ message: { content: pick(body.messages[1].content) } }] }) };
 };
 
-test('F8 双轨：公开事实与内心留档逐手配对，bait 与算的私有结果都在右轨', async () => {
+test('F8 双轨：公开事实与内心留档逐手配对，bait 在右轨', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
-  await m.act('B', { type: 'calc' });
   await m.act('B', { type: 'bid', count: 3, face: 4 });
   const events = m.observe('A').events;
   const logs = [
     { round: 1, action: { type: 'peek' }, say: '', belief: '', speechMode: 'straight', auto: true },
-    { round: 1, action: { type: 'calc' }, say: '我算算。', belief: '这口价有点悬', speechMode: 'straight' },
     {
       round: 1,
       action: { type: 'bid', count: 3, face: 4 },
       say: '你这把是空的，我看死你了。',
       belief: '其实只有五五开，钓他洗白',
       speechMode: 'bait',
-      facts: '当前报价：对方报「2 个 4」。你这局拨过算盘：按你的骰子算，此话为真的概率 87%（只算骰面，不算人）。',
     },
   ];
   const tracks = reviewTracks(events, { logsBySeat: { B: logs }, nameOf: (s) => (s === 'A' ? '你' : '老李头') });
@@ -40,16 +37,14 @@ test('F8 双轨：公开事实与内心留档逐手配对，bait 与算的私有
   const rows = tracks[0].rows;
   assert.deepEqual(
     rows.map((r) => r.text),
-    ['你掀盅看骰', '你报 2 个 4', '老李头掀盅看骰', '老李头当众拨算盘', '老李头报 3 个 4'],
+    ['你掀盅看骰', '你报 2 个 4', '老李头掀盅看骰', '老李头报 3 个 4'],
   );
   assert.equal(rows[1].inner, null, '你自己的手没有"内心留档"这一栏');
   assert.equal(rows[2].inner.auto, true, '不问模型的掀盅也要落日志——否则双轨从这里开始错位');
-  assert.equal(rows[3].inner.belief, '这口价有点悬');
   const last = rows.at(-1).inner;
   assert.equal(last.bait, true, '诈要标出来');
   assert.equal(last.say, '你这把是空的，我看死你了。');
   assert.equal(last.belief, '其实只有五五开，钓他洗白');
-  assert.equal(last.calcP, '87%', '算的私有结果从当时的事实里取回，不重算不编');
   assert.equal(tracks[0].spotlight, true, '有诈的局默认展开（戏眼）');
 });
 

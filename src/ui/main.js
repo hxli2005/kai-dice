@@ -3,7 +3,6 @@
 
 import { createMatch } from '../engine.js';
 import { allLegalBids } from '../rules.js';
-import { obProb, obProbExact, coarseWord } from '../probability.js';
 import { createOpponent, settleVerdict, reflect, personaLine, stateIdOf } from '../ai/agent.js';
 import { silentSay } from '../ai/voice.js';
 import { createSilentBot } from '../ai/silent.js';
@@ -29,9 +28,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (p) => `${Math.round(p * 100)}%`;
 const IDLE_MS = 30_000; // §1.4：无倒计时无超时代报；挂机 >30s 给一句中性提示，无机制后果
 const REVEAL_BAIT_P = 0.25; // F7 揭诈频率，全席同一个数（Q87 起不再挂机位）；定值待 Q51 参数表
-// 训练轮已取消（Q51，用户裁决 2026-08-10）：新手第一场就零显示，与老玩家同规则。
-// 理由是 Q45 的哲学——**不藏答案，而给答案标价**；给三场被动扶手会把玩家养成看档位的习惯，
-// 那正是 C1 要根治的"阈值执行器"。想要准数就自己拨算盘，从第一手起。
 // F1 观战提速：玩家出局后不是你的戏了——演出 4 倍速，还可一键跳到战报
 let watchSpeed = 1;
 let skipToReport = false;
@@ -397,7 +393,6 @@ function syncTubeHitLayer(view) {
   set('tubeBlindBtn', view.myTurn && view.legal.blind);
   set('tubeZhaiBtn', view.myTurn && view.legal.zhai);
   set('tubeRaiseBtn', view.myTurn && view.legal.raise);
-  set('tubeCalcBtn', view.myTurn && view.legal.calc);
 }
 
 // 三人对手条：DOM 每场建一次（气泡与打字机不被 render 摧毁），render 只刷数据
@@ -491,12 +486,7 @@ function render() {
       .filter((s) => o.raises?.[s])
       .map((s) => `<span class="mark">${dispName(s)}抬 ×2</span>`)
       .join('') +
-    (o.potUnits - 1 >= 6 ? '<span class="mark">深水 ×2</span>' : '') +
-    // 算盘是公开的（Q45）：谁算过挂在桌上——数字私有，动作公有
-    seats
-      .filter((s) => o.calced?.[s])
-      .map((s) => `<span class="mark calc">${dispName(s)}算过</span>`)
-      .join('');
+    (o.potUnits - 1 >= 6 ? '<span class="mark">深水 ×2</span>' : '');
   const aliveN = o.players.filter((q) => q.alive).length;
   $('roundTag').textContent = `${sandbox ? '实验 · ' : ''}第 ${o.round} 局`;
   $('pot').innerHTML = marks;
@@ -536,32 +526,6 @@ function render() {
       );
   }
 
-  // 算盘位（F4／Q45）：桌面被动零显示——准数不是常驻攻略提示，是你主动亮出来的思考痕迹。
-  // 拨算盘全桌可见（引擎事件），算出来的数只有算的人看得见（各自用自己的骰子算，§B.1 双发）。
-  const g = $('gauge');
-  const canCalc = myTurn && o.legal.some((a) => a.type === 'calc');
-  const readable = !!o.currentBid; // 盲局/未看骰也能算——只是把自己那几颗也当未知（数照样是真的）
-  const blindCalc = o.yourDice ? '' : '（没看骰：全按未知算）';
-  let read = '';
-  let note = '';
-  if (o.calced?.A && readable) {
-    const canCalza = o.legal.some((l) => modMetaOf(o, l.type)?.ops.includes('calzaResolve'));
-    const exact = canCalza ? ` · 恰好 ${pct(obProbExact(o, o.currentBid))}` : '';
-    read = `「${o.currentBid.count} 个 ${o.currentBid.face}」真 <b>${pct(obProb(o, o.currentBid))}</b>${exact}`;
-    note = `只算骰面 · 不算人${blindCalc}`;
-  } else if (canCalc) {
-    note = '全桌都看得见你在算';
-  }
-  if (!meAlive) {
-    g.innerHTML = '出局 · 观战';
-  } else {
-    g.innerHTML =
-      read +
-      (canCalc ? `<button id="calcBtn" class="calc-btn">拨算盘</button>` : '') +
-      (note ? `<i class="gauge-note">${note}</i>` : '');
-    g.querySelector('#calcBtn')?.addEventListener('click', onCalc);
-  }
-
   // 报数控件
   const bids = ensureSel(o);
   const cnt = $('cntVal');
@@ -588,7 +552,6 @@ function render() {
           render();
         }),
       );
-    // F4（Q45，P0）：报价按钮的实时百分比删除——按钮上挂个准数，等于把算盘焊在手上
     $('bidBtn').textContent = '报';
   } else {
     $('bidBtn').textContent = '—';
@@ -622,15 +585,10 @@ function render() {
   if (tubeStage?.isActive()) {
     const last = opponent?.logs.findLast((l) => !l.auto);
     const connected = !chanForPersona(SEAT_PERSONA.B) ? null : last ? !last.silentFallback : null;
-    const canCalza = o.legal.some((l) => modMetaOf(o, l.type)?.ops.includes('calzaResolve'));
-    const privateCalc = o.calced?.A && o.currentBid
-      ? `${pct(obProb(o, o.currentBid))}${canCalza ? ` · 恰好 ${pct(obProbExact(o, o.currentBid))}` : ''}`
-      : '';
     const tubeView = toTubeView(o, {
       opponentName: NAMES.B,
       selectedBid: sel,
       busy,
-      privateCalc,
       connected,
       sandbox,
     });
@@ -652,7 +610,7 @@ function syncBottomBand() {
 
 // 首场只给最短操作指引（§2.5），规则全文在「规」页——桌面上只留对局
 function hintFor() {
-  return ''; // 设施不说话：教学归指引层，状态归数据（gauge/按钮）
+  return ''; // 设施不说话：教学归指引层，状态归按钮
 }
 
 // ---------- 计时（§2.4：超时＝最小抬价，本身即信号） ----------
@@ -687,16 +645,6 @@ async function onPeek() {
   $('myDice').querySelectorAll('.die').forEach((el) => el.classList.add('reveal'));
   const o = ob();
   myDiceByRound[o.round] = o.yourDice;
-}
-
-// 拨算盘（Q45）：零成本、零假数——公开的是动作，私有的是结果。行动权仍在你。
-async function onCalc() {
-  if (busy) return;
-  await match.act('A', { type: 'calc' }, { elapsedMs: performance.now() - turnStart });
-  if (room) return; // 好友房：演出交给事件重放
-  stampFx('算');
-  sfx.tick();
-  render();
 }
 
 const stampText = (d) => (d === 'blind' ? '盲 ×2' : d === 'zhai' ? '斋 ×1.5' : '抬 ×2');
@@ -741,13 +689,12 @@ function setTubeFace(face) {
 }
 
 // ---------- G1 立的规矩：新增交互必须过"旧动词可点性"检查 ----------
-// 教训（26 局压测）：「戳」上桌那天，算盘按钮就点不着了——新交互没抢走屏幕，
-// 抢走的是**点击**。所以这条规矩不写在文档里写成代码：核心动词的中心点必须
+// 教训（26 局压测）：新交互可能不抢走屏幕，却抢走已有按钮的点击。核心动词的中心点必须
 // hit-test 回它自己，谁盖住了就当场在控制台喊，实机试玩时躲不掉。
-const CORE_VERBS = ['calcBtn', 'bidBtn', 'openBtn', 'blindBtn', 'zhaiBtn', 'raiseBtn', 'cntUp', 'cntDown'];
+const CORE_VERBS = ['bidBtn', 'openBtn', 'blindBtn', 'zhaiBtn', 'raiseBtn', 'cntUp', 'cntDown'];
 const TUBE_CORE_VERBS = [
   'tubeMenuBtn',
-  'tubeCalcBtn', 'tubeBidBtn', 'tubeOpenBtn', 'tubeBlindBtn',
+  'tubeBidBtn', 'tubeOpenBtn', 'tubeBlindBtn',
   'tubeZhaiBtn', 'tubeRaiseBtn', 'tubeCountUpBtn', 'tubeCountDownBtn',
 ];
 // 大厅／抽屉／弹层本来就该盖住牌桌——那不是误触，是遮罩。会误报的规矩没人看，所以先让开。
@@ -987,7 +934,6 @@ async function aiTurnFor(seat) {
   if (meta?.terminal) return doShowdown(seat, { elapsedMs, sayText: d.say, actionType: d.action.type });
   await match.act(seat, d.action, { elapsedMs });
   if (d.action.type === 'declare') stampFx(stampText(d.action.declaration));
-  else if (d.action.type === 'calc') stampFx('算'); // 拨算盘全桌可见（Q45）
   else if (meta) stampFx(modStamp(meta, d.action));
   else sfx.tick();
   if (d.say) {
@@ -995,8 +941,7 @@ async function aiTurnFor(seat) {
     speak(d.say, seat);
   }
   busy = false;
-  // 算是 keepTurn：算完他接着行动（"算手＝两次调用"，配额口径见 SYNC）
-  if (d.action.type === 'declare' || d.action.type === 'calc' || meta?.keepTurn) return aiTurnFor(seat);
+  if (d.action.type === 'declare' || meta?.keepTurn) return aiTurnFor(seat);
   render();
   driveTurn(); // 让报把行动权推回报价者——可能是你，也可能是另一个 AI
 }
@@ -1130,7 +1075,7 @@ function finishShowdown(re) {
   if (myDelta !== 0) showDelta(myDelta);
   const next = ob();
   myDiceByRound[next.round] = null;
-  // 玩家出局后的观战态由算盘位与观战条承载（F1），此处不再另贴提示
+  // 玩家出局后的观战态由观战条承载（F1），此处不再另贴提示
 }
 
 // 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）
@@ -1210,8 +1155,6 @@ async function showReport(end) {
     (stats.myBlinds ? `；盲报${stats.myBlinds}次` : '') +
     (stats.myRaises ? `；拍抬${stats.myRaises}次` : '') +
     (stats.myCalzas ? `；掐${stats.myCalzas}次中${stats.myCalzaHits}次` : '') +
-    `；拨算盘${stats.myCalcs}次` +
-    (stats.calcFollowRate != null ? `（${pct(stats.calcFollowRate)}照着数走）` : '') +
     (sandbox ? `；本场为实验桌沙盒局，词条：${labMods.map((m) => m.name).join('、')}` : '') +
     (bigPotBrief(stats) ? `；高倍局（判词优先引用）：${bigPotBrief(stats)}` : '') + // F5 记忆加权
     (condBrief(stats) ? `；条件倾向（心理侧，判词优先引用）：${condBrief(stats)}` : '') +
@@ -1266,11 +1209,6 @@ async function showReport(end) {
           isTrio()
             ? seats.slice(1).map((s) => `${NAMES[s]} ${vsMe(s).theyOpenedMe} 次`).join(' · ')
             : `${stats.timesChallenged} 次`
-        }</dd>
-        <dt>算盘</dt><dd>${
-          stats.myCalcs
-            ? `${stats.myCalcs} 次${stats.calcFollowRate != null ? ` · ${pct(stats.calcFollowRate)} 照着数走` : ''}`
-            : '一次没拨'
         }</dd>
         <dt>平均思考</dt><dd>${(stats.avgTimeMs / 1000).toFixed(1)} 秒</dd>
       </dl>
@@ -1346,7 +1284,6 @@ function openReview(events) {
     if (r.inner.say) bits.push(`<b>说：</b>${r.inner.say}`);
     if (r.inner.belief) bits.push(`<b>想：</b>${r.inner.belief}`);
     else if (r.inner.note) bits.push(`<b>想：</b>${r.inner.note}`);
-    if (r.inner.calcP) bits.push(`<b>算：</b>${r.inner.calcP}（只他自己看得见）`);
     if (r.inner.auto) bits.push('<i>（不用想：他不玩盲，上桌先掀盅）</i>');
     else if (r.inner.silent) bits.push('<i>（这一手没开口——通道断了，纯算数行棋）</i>');
     if (r.inner.reaction)
@@ -1496,16 +1433,15 @@ function openDrawer(section, inLobby = false) {
       <li>每报一手，全桌各追 1 注；开牌胜者收整池。</li>
       <li>三印的代价（倍率对全桌双向生效，赢多输也多）：盲＝没看骰就能宣、宣了整局不看，池×2　｜　斋＝首报者宣，1 不作癞子，池×1.5　｜　抬＝轮到你拍章，池×2，每人每局一次。</li>
       <li>第 6 手报价起进深水：池自动再 ×2。倍率全部相乘。</li>
-      <li><b>算盘</b>：桌面平时不显示概率。轮到你时可拨一次算盘（本局限一次）——算出来的准数只有你看得见。<b>对面没有算盘，也不看你的</b>：模型收不到你拨算盘的信号，它的概率全靠自己心算，对错都是它的。</li>
       <li><b>小本子</b>：一场打完可以翻开看他当时怎么想的（说的一套、想的一套都在）。**翻本子是公开的**——他知道你研究过他，下回可能拿这个开你玩笑（不想让他知道，设置里可以关）。</li>
       <li>额度片按 1／5／25／100 合并显示。不限时——但你手停多久，他们都记着。</li>
     </ul>
 
     <h2 id="secWho">对面是谁</h2>
     <ul>
-      <li><b>模型是真身</b>：做决定的是一个语言模型。算不算、什么时候掀盅、开不开你这口价，都是它自己的判断。</li>
+      <li><b>模型是真身</b>：做决定的是一个语言模型。怎么算、什么时候掀盅、开不开你这口价，都是它自己的判断。</li>
       <li><b>提示词只管规则</b>：发给它的只有游戏规则、能做哪些动作、输出格式，外加这一局实际发生了什么——<b>没有性格剧本，也没有任何"你该怎么说话"的交代</b>。怎么打、怎么说、说什么，全是它自己的判断。所以换个型号，你换到的是另一个对手。</li>
-      <li><b>系统说话零容忍，他说话零审查</b>：结算、报告卡、档案统计、算盘由引擎复算，错了就是 bug；他的嘴可能记歪、可能夸大——那不是故障，那是对手。不服就「戳」他。</li>
+      <li><b>系统说话零容忍，他说话零审查</b>：结算、报告卡、档案统计由引擎复算，错了就是 bug；他的嘴可能记歪、可能夸大——那不是故障，那是对手。不服就「戳」他。</li>
       <li>站内的模型名只是事实性标注。本作与各模型厂商无关联、未获授权，不使用其商标与形象。<a href="about.html">说明页</a>写得更细。</li>
     </ul>
 
@@ -1891,10 +1827,6 @@ async function presentRoomEvent(e) {
       return;
     case 'bid':
       sfx.tick();
-      render();
-      return;
-    case 'calc':
-      stampFx('算'); // 拨算盘是公开动作：房里谁算了，两端都看得见
       render();
       return;
     case 'declare':
@@ -2547,7 +2479,7 @@ function showCoach() {
     c.innerHTML = `<div class="coach-rules">
       <p>触摸下管骰仓看自己的骰子；用 −／＋ 改数量，点中间换点数，再拍「报」。</p>
       <p>觉得他吹牛，拍红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
-      <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。想要准数就拍「算」：结果只有你看见，但全桌知道你算过。</p>
+      <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。</p>
     </div><div class="anywhere">点任意处，上桌</div>`;
     $('app').appendChild(c);
     c.addEventListener('click', () => {
@@ -2565,7 +2497,7 @@ function showCoach() {
     [['openBtn'], '③ 觉得他吹牛，拍「开」', 0.50, 0.42, 0.72, 0.5],
     [['blindBtn', 'zhaiBtn', 'raiseBtn'], '④ 盲、斋、抬：池子翻倍，赢多输也多', 0.60, 0.02, 0.1, 0.9],
   ].filter(([ids]) => ids.every((id) => $(id)));
-  // F3 教学补课（Q43⑥）：癞子／阶梯／三印代价／算盘——三条底规不该靠玩家自己撞出来
+  // F3 教学补课（Q43⑥）：癞子／阶梯／三印代价不该靠玩家自己撞出来
   const c = document.createElement('div');
   c.id = 'coach';
   c.innerHTML = `<svg></svg>
@@ -2573,7 +2505,6 @@ function showCoach() {
       <p>1 点是万能牌，算作任意点数（宣「斋」的那局失效）。</p>
       <p>报价只能往上抬：数量加大，或同数量、点数加大。抬不动了就只能开。</p>
       <p>盲 ×2、斋 ×1.5、抬 ×2 —— 倍率对全桌双向生效，赢多输也多。</p>
-      <p>想要准数就拨算盘：算出来的数只有你看得见。对面没有算盘，全靠心算。</p>
     </div>
     <div class="anywhere">看明白了？点任意处，上桌</div>`;
   $('app').appendChild(c);
@@ -2630,7 +2561,6 @@ tubeStage = createTubeStage($('tubeStage'), {
   face: setTubeFace,
   bid: onBid,
   open: () => doShowdown('A'),
-  calc: onCalc,
   declare: onDeclare,
   poke: doPoke,
   mod: (type) => {
@@ -2652,7 +2582,6 @@ for (const [id, action] of [
   ['tubeBlindBtn', () => onDeclare('blind')],
   ['tubeZhaiBtn', () => onDeclare('zhai')],
   ['tubeRaiseBtn', () => onDeclare('raise')],
-  ['tubeCalcBtn', onCalc],
 ]) $(id).addEventListener('click', action);
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:')

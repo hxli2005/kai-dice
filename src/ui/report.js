@@ -41,9 +41,6 @@ export function computeStats(events, you, myDiceByRound) {
     myCalzaHits: 0,
     myBlinds: 0,
     myRaises: 0,
-    myCalcs: 0, // Q45/F6：拨算盘的次数
-    calcDecisions: 0, // 算完后可判定的决策手数
-    calcFollows: 0, // 其中"照着数走"的手数
     vs: {}, // F0 归属拆分：{对手座位: {iOpened, iOpenedHit, theyOpenedMe}}
     bigPots: [], // F5 记忆加权：≥×4 的高倍局
     ladderDepths: [],
@@ -64,22 +61,8 @@ export function computeStats(events, you, myDiceByRound) {
   let zhai = false;
   let oppCount = 0;
   let depth = 0;
-  let curBid = null; // 当前报价（算盘依赖度要判"算完这一手照没照着数走"）
-  let calcPending = false;
   let myCount = 0; // 我这一局有几颗骰（蒙报的零信息概率要用全场骰数）
   let seenNow = false; // 报这一口时我到底看没看骰——按事件时序判，不按"这局最后有没有看"
-  // 算完的下一手照没照着数走：开牌看当前报价站不站得住（低概率就开＝照走），
-  // 抬价看自己接下来这口价（或仍在桌上的那口）站不站得住。ref 为空（盲局没记骰）就不判。
-  const judgeCalc = (kind, bid) => {
-    if (!calcPending) return;
-    calcPending = false;
-    const mine = myDiceByRound[round];
-    const ref = curBid ?? bid;
-    if (!mine || !ref) return;
-    const pv = probBidTrue({ count: ref.count, face: ref.face }, mine, oppCount, zhai);
-    s.calcDecisions++;
-    if (kind === 'challenge' ? pv < 0.5 : pv >= 0.5) s.calcFollows++;
-  };
   for (const e of events) {
     if (e.type === 'roundStart') {
       round = e.round;
@@ -87,8 +70,6 @@ export function computeStats(events, you, myDiceByRound) {
       if ((e.diceCount?.[you] ?? 0) > 0) s.roundsAlive++;
       zhai = false;
       depth = 0;
-      curBid = null;
-      calcPending = false;
       seenNow = false;
       myFirstBidThisRound = true;
       myCount = e.diceCount?.[you] ?? 0;
@@ -100,14 +81,9 @@ export function computeStats(events, you, myDiceByRound) {
     if (e.type === 'declare' && e.declaration === 'zhai') zhai = true;
     if (e.type === 'declare' && e.declaration === 'blind' && e.actor === you) s.myBlinds++;
     if (e.type === 'declare' && e.declaration === 'raise' && e.actor === you) s.myRaises++;
-    if (e.type === 'calc' && e.actor === you) {
-      s.myCalcs++;
-      calcPending = true;
-    }
     if (e.type === 'bid') {
       depth++;
       if (e.actor === you) {
-        judgeCalc('bid', { count: e.count, face: e.face });
         s.myBids++;
         // 面对已有报价而选择抬（没开）＝一次放过的开牌机会
         if (depth > 1) {
@@ -151,7 +127,6 @@ export function computeStats(events, you, myDiceByRound) {
             s.slowest = { round, bid: { count: e.count, face: e.face }, ms: e.elapsedMs };
         }
       }
-      curBid = { count: e.count, face: e.face, player: e.actor };
     }
     if (e.type === 'reveal') {
       s.ladderDepths.push(depth);
@@ -159,7 +134,6 @@ export function computeStats(events, you, myDiceByRound) {
       // 旧写法从 stands/loser 回推、且把座位硬编码成 A/B——三人桌上必错。
       const challenger = e.actor;
       const opened = e.target;
-      if (challenger === you) judgeCalc('challenge', e.bid);
       if (challenger === you && e.calza) {
         // 掐的判定是"恰好"，不是"成不成立"——两笔账分开记
         s.myCalzas++;
@@ -207,8 +181,6 @@ export function computeStats(events, you, myDiceByRound) {
     blindBidRate: div(s.blindBids, s.myBids),
     challengedRate: div(s.timesChallenged, s.myBids),
     hitRate: div(s.myChallengeHits, s.myChallenges),
-    // F6 算盘依赖度：算完照着数走的比例——纯心算的人这项永远是 0，那是他的隐身衣（Q45 明示接受）
-    calcFollowRate: s.calcDecisions ? div(s.calcFollows, s.calcDecisions) : null,
     avgDepth: div(s.ladderDepths.reduce((a, b) => a + b, 0), s.ladderDepths.length),
     avgTimeMs: div(s.myTimes.reduce((a, b) => a + b, 0), s.myTimes.length),
   };
@@ -249,22 +221,15 @@ export function condBrief(st) {
         st.blindWildest ? `（最狠一口：第 ${st.blindWildest.round} 局 ${st.blindWildest.bid.count} 个 ${st.blindWildest.bid.face}）` : ''
       }`,
     );
-  // F6 算盘依赖度：他信数还是信人——这是 Q45 新开的读心通道
-  if (st.myCalcs >= 2 && st.calcFollowRate != null) {
-    if (st.calcFollowRate >= 0.8)
-      bits.push(`算了 ${st.myCalcs} 次，几乎次次照着数走（他在跟算盘打牌，不是跟人）`);
-    else if (st.calcFollowRate <= 0.4)
-      bits.push(`算了 ${st.myCalcs} 次，多半没照数走（算给人看的，算完还是照自己的性子来）`);
-  }
   return bits.join('；');
 }
 
 // ---------- F8 复盘室「他的小本子」（Q48）：双轨时间轴的数据层 ----------
-// 左轨＝桌面公开史实（引擎盖章），右轨＝当时的内心留档（belief/bait/算的私有结果）。
+// 左轨＝桌面公开史实（引擎盖章），右轨＝当时的内心留档（belief/bait）。
 // 硬法：**禁事后供词**——右轨只许来自决策日志，散场后不许再问模型"你当时怎么想"。
 // 纯函数，零调用：UI 只负责画，账在这里对。
 
-const ACT_EVENTS = new Set(['peek', 'calc', 'bid', 'declare', 'challenge', 'modAction']);
+const ACT_EVENTS = new Set(['peek', 'bid', 'declare', 'challenge', 'modAction']);
 const DECL_CN = { zhai: '斋', blind: '盲', raise: '抬' };
 
 // 决策日志与事件按时序 1:1 配对（同一席位的第 n 个动作 ↔ 第 n 条日志）
@@ -273,9 +238,6 @@ function logQueues(logsBySeat) {
   for (const [seat, logs] of Object.entries(logsBySeat ?? {})) q[seat] = [...(logs ?? [])];
   return q;
 }
-
-// 算的私有结果：从当时喂给它的事实里取回它手上真有的那个数（不重算、不编）
-const calcPOf = (log) => log?.facts?.match(/为真的概率 (\d+%)/)?.[1] ?? null;
 
 export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you = 'A' } = {}) {
   const queues = logQueues(logsBySeat);
@@ -306,7 +268,6 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
               belief: log?.belief ?? '',
               note: log?.note ?? '',
               bait,
-              calcP: e.type === 'calc' ? null : calcPOf(log),
               silent: !!log?.silentFallback,
               auto: !!log?.auto, // 不问模型的固定动作（扳不动盲闸的座位先掀盅）
               reaction: log?.reaction ?? null, // F9：被戳之后他怎么接
@@ -341,8 +302,6 @@ function publicText(e, nameOf) {
   switch (e.type) {
     case 'peek':
       return `${who}掀盅看骰`;
-    case 'calc':
-      return `${who}当众拨算盘`;
     case 'bid':
       return `${who}报 ${e.count} 个 ${e.face}`;
     case 'declare':
@@ -409,11 +368,6 @@ export function templateVerdict(st, won) {
     bits.push(`你开我${st.myChallenges}次错${st.myChallenges - st.myChallengeHits}次，手比脑子快`);
   if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3)
     bits.push('一次都不敢开，我报什么你都得受着');
-  // 判词只许说有数据撑的话（F0b 同一条纪律）：没判定过的手不许被说成"照着数走"
-  if (st.myCalcs >= 2 && st.calcFollowRate != null && st.calcFollowRate >= 0.8)
-    bits.push(`算了${st.myCalcs}次，次次照着数走——你在跟算盘打牌，我把谎放在"大概"里就够了`);
-  else if (st.myCalcs >= 2 && st.calcFollowRate != null && st.calcFollowRate <= 0.4)
-    bits.push(`算了${st.myCalcs}次，算完照样由着性子来——那算盘是拨给我看的`);
   if (bigPotBrief(st)) bits.push(bigPotBrief(st).replace('他', '你'));
   if (st.slowest && st.slowest.ms > 8000)
     bits.push(`第${st.slowest.round}局你停了半天才报${st.slowest.bid.count}个${st.slowest.bid.face}——不是在算数，是在攒胆子`);

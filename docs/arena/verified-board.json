@@ -553,7 +553,6 @@
    "knowingBluffRate": 0,
    "blindBidRate": 0,
    "avgDepth": 1.875,
-   "calcPerRound": 0.388,
    "n": {
     "seenBids": 139,
     "bids": 139,
@@ -566,7 +565,6 @@
    "knowingBluffRate": 0.1,
    "blindBidRate": 0.07,
    "avgDepth": 1.642,
-   "calcPerRound": 0.642,
    "n": {
     "seenBids": 40,
     "bids": 43,
@@ -579,7 +577,6 @@
    "knowingBluffRate": 0,
    "blindBidRate": 0,
    "avgDepth": 2.173,
-   "calcPerRound": 0.346,
    "n": {
     "seenBids": 57,
     "bids": 57,
@@ -592,7 +589,6 @@
    "knowingBluffRate": 0,
    "blindBidRate": 0.018,
    "avgDepth": 1.652,
-   "calcPerRound": 0.101,
    "n": {
     "seenBids": 112,
     "bids": 114,
@@ -605,7 +601,6 @@
    "knowingBluffRate": 0.068,
    "blindBidRate": 0.083,
    "avgDepth": 1.804,
-   "calcPerRound": 0.536,
    "n": {
     "seenBids": 44,
     "bids": 48,
@@ -618,7 +613,6 @@
    "knowingBluffRate": 0.029,
    "blindBidRate": 0.081,
    "avgDepth": 1.79,
-   "calcPerRound": 0.519,
    "n": {
     "seenBids": 68,
     "bids": 74,
@@ -631,7 +625,6 @@
    "knowingBluffRate": 0.091,
    "blindBidRate": 0.744,
    "avgDepth": 1.604,
-   "calcPerRound": 0.333,
    "n": {
     "seenBids": 11,
     "bids": 43,

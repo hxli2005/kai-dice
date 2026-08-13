@@ -282,10 +282,7 @@ main {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  /* 底部那条带子是给绝对定位的印章行留的（三印 bottom:0.35rem、词条/戳 bottom:3.55rem）。
-     不留的话，短屏（375×667 实测）上居中的流内容会直接压进带子里——
-     算盘按钮上沿被「戳」盖住、正中被「斋」盖住，点哪儿都不是算盘。G1 的病根在这儿，
-     不是差 14px，是两套定位坐标系在短屏上撞车。 */
+  /* 底部那条带子给绝对定位的印章行留空间；短屏上两套定位坐标系不能相撞。 */
   padding: 0 1rem var(--bottom-band, 3.4rem);
   position: relative;
 }
@@ -365,26 +362,6 @@ footer {
   padding: 0 1rem calc(env(safe-area-inset-bottom) + 2.4rem);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent);
 }
-/* 算盘位（Q45）：桌面平时不显示概率——这块地方平时只放一个"拨算盘"，
-   拨了才有数，且数只有你看得见。註脚一行小字说清代价与口径。 */
-#gauge {
-  font-size: 0.85rem; color: var(--dim); text-align: center; margin-top: 0.35rem;
-  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
-}
-#gauge b { color: var(--lamp); font-weight: 400; font-variant-numeric: tabular-nums; }
-.gauge-note { font-style: normal; font-size: 0.66rem; color: var(--dim); opacity: 0.75; letter-spacing: 0.06em; }
-.calc-btn {
-  background: none;
-  border: 1px dashed var(--lamp-dim);
-  color: var(--lamp);
-  font-family: var(--serif);
-  font-size: 0.82rem;
-  letter-spacing: 0.12em;
-  padding: 0.2rem 0.8rem;
-  border-radius: 1rem;
-}
-.calc-btn:active { background: rgba(232, 169, 79, 0.16); }
-.mark.calc { border-color: var(--lamp-dim); color: var(--lamp-dim); transform: rotate(3deg); }
 #myDice { justify-content: center; margin-bottom: 0.8rem; }
 #myDice .die.back { cursor: pointer; }
 
@@ -573,7 +550,6 @@ button.danger:active { transform: scale(0.95); }
   margin-bottom: 0.4rem;
   letter-spacing: 0.04em;
 }
-#gauge:empty { display: none; }
 .hyp {
   font-size: 0.88rem;
   color: var(--ink);
@@ -752,7 +728,7 @@ button.danger:active { transform: scale(0.95); }
   white-space: nowrap;
 }
 #coach .tip small { display: block; font-size: 0.72rem; color: var(--dim); margin-top: 0.1rem; }
-/* F3 教学补课：三条底规（癞子/阶梯/三印代价）＋算盘，箭头之外的静态一栏 */
+/* F3 教学补课：三条底规（癞子/阶梯/三印代价），箭头之外的静态一栏 */
 #coach .coach-rules {
   position: absolute;
   left: 50%;
@@ -1193,12 +1169,10 @@ button.ghost {
 .tube-hit.open { left: 51.3%; top: 86.7%; width: 44.6%; height: 7.2%; }
 .tube-hit.blind,
 .tube-hit.zhai,
-.tube-hit.raise,
-.tube-hit.calc { bottom: 0; width: 16.9%; height: 4.8%; }
+.tube-hit.raise { bottom: 0; width: 21.5%; height: 4.8%; }
 .tube-hit.blind { left: 4.1%; }
-.tube-hit.zhai { left: 23.1%; }
-.tube-hit.raise { left: 42.1%; }
-.tube-hit.calc { left: 61%; }
+.tube-hit.zhai { left: 27.7%; }
+.tube-hit.raise { left: 51.3%; }
 #app.tube-mode > header,
 #app.tube-mode > main,
 #app.tube-mode > footer {

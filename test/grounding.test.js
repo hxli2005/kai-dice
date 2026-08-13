@@ -80,7 +80,7 @@ test('G2 全事件四元组：每一条都填齐 actor/target/action/round，一
     assert.equal(e.target, null);
   }
   // 玩家动作必须指名道姓
-  for (const e of events.filter((x) => ['peek', 'calc', 'bid', 'declare', 'challenge'].includes(x.type)))
+  for (const e of events.filter((x) => ['peek', 'bid', 'declare', 'challenge'].includes(x.type)))
     assert.ok(e.actor, `事件 ${e.i}(${e.type}) 没有 actor`);
   assert.ok(seen.has('challenge') && seen.has('reveal') && seen.has('roundEnd'));
 });

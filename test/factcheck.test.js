@@ -130,7 +130,7 @@ test('Q49 系统场合零容忍：报告数据面的数字由引擎盖章，与�
   const dataText =
     `${st.rounds} 局；虚报率 ${Math.round(st.bluffRate * 100)}%；` +
     `开牌 ${st.myChallenges} 次命中 ${st.myChallengeHits} 次；被开 ${st.timesChallenged} 次；` +
-    `蒙报 ${st.blindBids} 口；拨算盘 ${st.myCalcs} 次`;
+    `蒙报 ${st.blindBids} 口`;
   assert.deepEqual(checkFacts(dataText, led), [], `数据面不许出现台账里没有的数：${dataText}`);
 });
 

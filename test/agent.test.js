@@ -37,7 +37,7 @@ test('llm.chat：OpenAI 与 Anthropic 两种格式的请求与解析', async () 
   assert.deepEqual(seen[1], { url: 'https://a.test/v1/messages', key: 'k2', sys: 's' });
 });
 
-test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
+test('buildPrompts：注入真实骰面与本局叙事，不注入计算工具', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 }, { elapsedMs: 9200 });
@@ -48,11 +48,9 @@ test('buildPrompts：注入真实骰面、概率与本局叙事', async () => {
   // Q15 证据分级：极端犹豫只给现象学标注，秒数不进提示词
   assert.match(user, /对方报2个4（这手前停了很久）/);
   assert.ok(!/用时|\d秒/.test(user));
-  // Q45／C1 根治（2026-08-10）：没拨算盘就**一个数都不给**——粗档也是数。
-  // v5（2026-08-13 用户裁决）：模型席根本没有算盘——候选不给、拨没拨也不解释，提示词零概率。
   assert.match(user, /当前报价：对方报2个4。/);
-  assert.ok(!user.includes('拨算盘，动作所有对手可见'), 'v5：候选里没有算盘');
-  assert.ok(!user.includes('你未拨算盘') && !user.includes('你已拨算盘'), 'v5：无算盘席位不解释拨没拨');
+  assert.ok(!user.includes('算盘'), '计算工具已从输入协议删除');
+  assert.ok(!user.includes('"type":"calc"'));
   assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '连粗档词都不许出现');
   assert.ok(!/=\s*\d+%/.test(user), '候选不许带任何概率标注');
   assert.match(user, /爱虚张/);
@@ -126,53 +124,24 @@ test('宿主 revision：回答绑定观察时的引擎与引语状态', async ()
   assert.notEqual(stateIdOf(m.observe('A'), { dialogue }), hostId, '引擎不变但宿主引语变化也应使回答过期');
 });
 
-// v5（2026-08-13 用户裁决「拔了」）：模型席无算盘，'free' 只剩显式构造（Q89 复活口）。
-// 本用例就是那道「机制未删」的看守：free 席拨过，引擎才发数；动作照进全桌叙事。
-test('Q45 算盘机制（v5 后仅显式 free 席可用）：拨过引擎才发数，"算"进得了叙事', async () => {
+test('计算工具从所有 AI 席删除：旧 gear 也不能复活动作或状态', async () => {
   const m = await createMatch({ seed: 5 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
-  await m.act('B', { type: 'calc' });
   const ob = m.observe('B');
-  const FREE = { gear: { calc: 'free', usesBlind: true } };
-  const { user, system } = buildPrompts(ob, '', FREE);
-  assert.match(user, /你已拨算盘：看不见的骰按每面 1\/6 计，当前报价为真的概率\d+%/);
-  assert.ok(!user.includes('只算骰面，不算人'), 'Q86：解释是非程序性的，只留数据');
-  // v6：system 对算盘只字不提（全席逐字相同、模型席无此物）；free 席的机制全在 user 侧
-  assert.ok(!system.includes('算盘'), 'v6：system 删干净');
-  assert.ok(!system.includes('{"type":"calc"}'), 'v5：输出 schema 里没有 calc');
-  assert.ok(!system.includes('准数') && !user.includes('准数'), 'v4：「准数」话术不回流');
-  assert.ok(!user.includes('精确概率'), 'v4：结果行不再自称精确');
-  assert.match(user, /你拨算盘/, 'free 席自己的算进公开历史');
-  // v6：无算盘席位连对手的拨算盘都不接收——真人的算盘是纯私人辅助
-  const { user: userA } = buildPrompts(m.observe('A'), '');
-  assert.ok(!userA.includes('算盘'), 'v6：默认席位收不到拨算盘信号');
-  assert.ok(!userA.includes('已算') && !userA.includes('未算'), 'v6：已算/未算状态一并拔除');
-  // 本局限一次
-  assert.ok(!ob.legal.some((a) => a.type === 'calc'), '算过就没得再算');
+  const legacyGear = { gear: { calc: 'free', usesBlind: true } };
+  const { user, system, payload } = buildPrompts(ob, '', legacyGear);
+  assert.ok(!user.includes('算盘') && !system.includes('算盘'));
+  assert.ok(!user.includes('"type":"calc"') && !system.includes('"type":"calc"'));
+  assert.ok(!Object.hasOwn(payload.current, 'probability'));
+  assert.ok(!Object.hasOwn(payload.current, 'calcSeat'));
+  assert.ok(payload.current.players.every((p) => !Object.hasOwn(p, 'calced')));
+  assert.ok(!ob.legal.some((a) => a.type === 'calc'));
   await assert.rejects(() => m.act('B', { type: 'calc' }), /illegal calc/);
 });
 
-// Q89 曾定「名册全员工具全开」；v5（2026-08-13 用户裁决）反转其算盘半边：名册全员无算盘，
-// 算盘保留为真人辅助。'free' 只剩显式构造——机制未删（Q89 复活口），本用例守着它。
-test('工具（v5）：名册全员无算盘；calc=free 显式构造仍给候选（机制未删）', async () => {
-  const m = await createMatch({ seed: 5 });
-  await m.act('A', { type: 'peek' });
-  await m.act('A', { type: 'bid', count: 2, face: 4 });
-  await m.act('B', { type: 'peek' });
-  const ob = m.observe('B');
-  for (const per of Object.values(PERSONAS))
-    assert.ok(!buildPrompts(ob, '', per).user.includes('拨算盘，动作所有对手可见'), `${per.name} 不应有算盘`);
-  const withAbacus = { ...PERSONAS['model:deepseek-v4-flash'], gear: { calc: 'free', usesBlind: true } };
-  const withUser = buildPrompts(ob, '', withAbacus).user;
-  assert.match(withUser, /拨算盘，动作所有对手可见（\{"type":"calc"\}）/, 'free 席仍给候选——机制未删');
-  for (const u of [buildPrompts(ob, '', PERSONAS['model:deepseek-v4-flash']).user, withUser])
-    for (const gone of ['你习惯算', '你只在关键手才算', '你从不碰算盘'])
-      assert.ok(!u.includes(gone), `Q86：算频染色「${gone}」是行为剧本，应已删`);
-});
-
-test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是他自己的（机制不变：引擎仍未发数）', async () => {
+test('Q49 场合律：模型自行心算后把"三成"说满，照样出口——嘴是他自己的', async () => {
   const m = await createMatch({ seed: 9 });
   await m.act('A', { type: 'peek' });
   await m.act('A', { type: 'bid', count: 2, face: 4 });
@@ -187,9 +156,8 @@ test('Q49 场合律：没算过却把"三成"说满，照样出口——嘴是�
   assert.equal(d.say, '三成。开。', 'Q49：台词侧不再拦截');
   assert.equal(d.note, '我看他虚');
   assert.equal(d.belief, '其实没底', '留档照留——它是素材，不是判据');
-  // 机制没松：席位无算盘（v5），提示词里没有任何概率。
   const { user } = buildPrompts(m.observe('B'), '', PERSONAS['model:deepseek-v4-flash']);
-  assert.ok(!user.includes('拨算盘，动作所有对手可见'), 'v5：候选无算盘');
+  assert.ok(!user.includes('算盘'));
   assert.ok(!/概率\s*\d+%/.test(user) && !/此话为真的概率 \d+%/.test(user));
 });
 
@@ -283,13 +251,13 @@ test('跨局自我留档：前几局的台词与判断压缩回灌，本局照�
     ownLog: [
       { round: 1, action: { type: 'bid', count: 2, face: 4 }, say: '两个4。', belief: '虚的，试探他', speechMode: 'bait' },
       { round: 1, action: { type: 'peek' } }, // 无 say/belief/note → 不回灌（动作已在公开历史）
-      { round: 2, action: { type: 'calc' }, note: '这局先算' },
+      { round: 2, action: { type: 'declare', declaration: 'raise' }, note: '这局先抬' },
     ],
   });
   assert.ok(user.includes('你前几局：第1局：报了 2 个 4，说「两个4。」，判断「虚的，试探他」（那句是有意误导）'), user);
   assert.ok(!user.includes('第1局：掀盅看了骰'), '无私有内容的旧条目不回灌');
-  assert.ok(user.includes('你本局此前：拨了算盘'), '本局条目照旧全量格式');
-  assert.ok(user.includes('当时记录「这局先算」'));
+  assert.ok(user.includes('你本局此前：宣言了「抬」'), '本局条目照旧全量格式');
+  assert.ok(user.includes('当时记录「这局先抬」'));
 });
 
 test('createOpponent：跨局回灌走真实决策日志——第 2 局的提示词里带着第 1 局的心思', async () => {
@@ -412,7 +380,7 @@ test('createOpponent：决策日志自动回灌——第二手调用的提示词
       prompts.push(body.messages[1].content);
       return { choices: [{ message: { content: '{"action":{"type":"declare","declaration":"raise"},"say":"抬了，跑不了","note":"先把池做大"}' } }] };
     }),
-    persona: { ...(({ id: 'laolitou' }) ), name: '测', identity: '测。', tone: 'mild', style: '', flaws: '', gear: { calc: 'often', usesBlind: true }, strategy: {} },
+    persona: { ...(({ id: 'laolitou' }) ), name: '测', identity: '测。', tone: 'mild', style: '', flaws: '', gear: { usesBlind: true }, strategy: {} },
   });
   await m.act('B', { type: 'peek' });
   const d1 = await ai.decide(m.observe('B'));
@@ -432,7 +400,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   await m.act('A', { type: 'bid', count: 2, face: 4 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
-  const model = { id: 'model:test-model', name: 'test-model', bare: true, gear: { calc: 'often', usesBlind: true } };
+  const model = { id: 'model:test-model', name: 'test-model', bare: true, gear: { usesBlind: true } };
   const sysModel = buildPrompts(ob, '', model).system;
   const sysAvatar = buildPrompts(ob, '', PERSONAS['model:deepseek-v4-flash']).system;
 
@@ -442,7 +410,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   // 留下的只有三样：规则、动作/输出格式、（三人桌时）无队伍声明
   assert.match(sysModel, /全场骰子中 X 点至少 N 个/, '规则：报价的含义');
   assert.match(sysModel, /引擎不校验报价真假/, '规则：报价无需为真');
-  assert.ok(!sysModel.includes('算盘'), '规则：v6 算盘对模型席整体不可见，system 只字不提');
+  assert.ok(!sysModel.includes('算盘'), '规则：计算工具不存在');
   assert.match(sysModel, /前置不满足的动作被引擎拒绝/, '操作');
   assert.match(sysModel, /每名非胜者向胜者支付赔付/, '结算：倍率双向（本次补上）');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');

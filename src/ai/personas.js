@@ -8,11 +8,6 @@
 // 提示词里一切非规则内容（Q86）→ 催话台词／声口／pace／blurb 散文／分档身家（Q87·Q88）→
 // **一号机·二号机·三号机这三个机号本身（Q89）**。
 //
-// 为什么连机号也删：一号机与二号机钉的是同一个型号，差别只有"桌上给不给算盘"。
-// 那是 Q51 写明的**兜底手段**（"分化不足时的最小区分"）——而证据闸门还没跑。
-// 在测出模型分不分得开之前就先用兜底，等于用我们造的差异去掩盖我们要测的问题。
-// 工具可用性的机制**没有删**（gear.calc／gear.usesBlind 照常生效），只是不再拿它捏对手。
-//
 // **户头按型号记**（DESIGN §1.2）——这条宪法到 Q89 才真正做到：以前 seat1／seat2 钉同一个
 // 型号却各开一本账，本身就违反它。老档的合并迁移见 src/ui/profile.js。
 
@@ -56,11 +51,7 @@ export function modelPersona(model, { hosted = false, official = false } = {}) {
     bare: true,
     hosted,
     official: hosted || official,
-    // 算盘已从模型席拔除（2026-08-13 用户裁决「拔了」）：实测模型心算二项分布本就全对
-    //（k3 拨算盘前已在 belief 手写出 7/27≈26%），工具零信息增量，反被当成压过行为读的
-    // 最强约束。算盘保留为真人辅助；看不看骰仍由它自己决定——那是原生 tell。
     gear: {
-      calc: 'never',
       usesBlind: true,
       model,
       maxTokens: DECISION_MAX_TOKENS,
