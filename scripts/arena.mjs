@@ -17,7 +17,7 @@ import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { seatSystem, PROMPT_VERSION } from '../src/ai/agent.js';
 import { fetchModels, fetchEndpoints, openrouterChannel, pickDefaults, OPENROUTER_BASE } from '../src/ai/openrouter.js';
-import { runArena, roundRobin, playSeries, SAMPLING, MAX_TOKENS, TIMEOUT_MS, pinSampling } from '../src/arena/arena.js';
+import { runArena, roundRobin, playSeries, SAMPLING, MAX_TOKENS, TIMEOUT_MS, REASONING_TOKENS, pinSampling } from '../src/arena/arena.js';
 import { chat } from '../src/ai/llm.js';
 import { summarize, routingIntegrity, flavorSpread, saysRowsOf } from '../src/arena/metrics.js';
 import { createBudget, estimateRun, cacheReport, thinkingNote, HAND_ESTIMATE } from '../src/arena/cost.js';
@@ -38,10 +38,52 @@ const flag = (name, dflt = null) => {
 };
 const has = (name) => argv.includes(`--${name}`);
 
+// 分席供应商（2026-08-13）：默认全席走 OpenRouter；写成 `provider:id` 的那一席改走该厂自己的 API。
+// 为什么要有这个口子——有些构建只在原厂端拿得到（OpenRouter 的清单里有 id 却打不通）。
+// ⚠️ 代价必须写在脸上：**跨供应商的一批，版本差异与后端／量化差异是分不开的**（Q52② 反面），
+// 所以 label 里带上供应商前缀，让榜上每一行自己说清楚它是从哪个口子进来的。
+// 汇率只用于成本护栏的粗估（原厂按人民币计价，护栏按美元设）。**不是记账汇率**，
+// 只求量级对：护栏的作用是"跑爆当场收手"，不是出账单。
+const CNY_PER_USD = 7.1;
+const PROVIDERS = {
+  deepseek: {
+    base: 'https://api.deepseek.com/v1',
+    keyEnv: 'DEEPSEEK_KEY',
+    label: 'DeepSeek 官方 API',
+    // 官网价目（2026-08-13）：缓存未命中 ¥3/M 输入、¥6/M 输出（v4-pro）；命中 ¥0.025/M。
+    // 这里按未命中报价（保守，估高不估低）；实测缓存确实在命中，所以真实花费会低于估算。
+    // 非思考模式关掉推理：见 nothink 字段——DeepSeek 吃 `reasoning_effort`，不吃 OpenRouter 那套信封。
+    prices: { 'deepseek-v4-pro': { cny: [3, 6] }, 'deepseek-v4-flash': { cny: [1, 2] } },
+    nothink: { reasoning_effort: 'none' },
+  },
+};
+const splitProvider = (raw) => {
+  const i = raw.indexOf(':');
+  if (i < 0) return { provider: null, id: raw };
+  const provider = raw.slice(0, i);
+  if (!PROVIDERS[provider]) {
+    console.error(`✗ 不认识的供应商前缀「${provider}:」（有：${Object.keys(PROVIDERS).join('、')}）`);
+    process.exit(2);
+  }
+  return { provider, id: raw.slice(i + 1) };
+};
+
+const wantedRaw = (flag('models') && typeof flag('models') === 'string' ? flag('models').split(',') : [])
+  .map((s) => s.trim())
+  .filter(Boolean);
+const needsOpenRouter = !wantedRaw.length || wantedRaw.some((s) => !splitProvider(s.replace('#nothink', '')).provider);
+
 const apiKey = process.env.OPENROUTER_KEY ?? process.env.KAI_KEY;
-if (!apiKey) {
+if (!apiKey && needsOpenRouter) {
   console.error('缺 OPENROUTER_KEY（BYOK 专属，官方通道不开放擂台——Q52①）');
   process.exit(2);
+}
+for (const raw of wantedRaw) {
+  const { provider } = splitProvider(raw.replace('#nothink', ''));
+  if (provider && !process.env[PROVIDERS[provider].keyEnv]) {
+    console.error(`缺 ${PROVIDERS[provider].keyEnv}（${raw} 要走 ${PROVIDERS[provider].label}）`);
+    process.exit(2);
+  }
 }
 
 const games = +(flag('games', 5) || 5);
@@ -82,9 +124,7 @@ const live = await fetchModels({ base }); // 清单是公开的，不必拿钥�
 console.log(`清单 ${live.length} 个纯文本模型`);
 
 // 参赛名单
-let wanted = (flag('models') && typeof flag('models') === 'string' ? flag('models').split(',') : [])
-  .map((s) => s.trim())
-  .filter(Boolean);
+let wanted = [...wantedRaw];
 if (!wanted.length && flag('cheap')) {
   const n = +flag('cheap');
   wanted = live
@@ -108,7 +148,46 @@ if (!wanted.length) {
 const entrants = [];
 for (const raw of wanted) {
   const noThink = raw.includes('#nothink');
-  const [id, tagOverride] = raw.replace('#nothink', '').split('@');
+  const { provider, id: idPart } = splitProvider(raw.replace('#nothink', ''));
+  // 原厂端：不查 OpenRouter 清单（那是另一家的货架），也没有后端可锁——只有一个口子。
+  // 价格从 /models 拿不到，因此按"价格不定"上报：估算会点名少算了谁，不许悄悄按 0 算。
+  if (provider) {
+    const p = PROVIDERS[provider];
+    const channel = {
+      baseUrl: p.base,
+      apiKey: process.env[p.keyEnv],
+      model: idPart,
+      format: 'openai',
+      providerTag: null,
+    };
+    // #nothink 的关法各家不同：OpenRouter 用 `reasoning:{enabled:false}` 信封，
+    // DeepSeek 原厂端不认那个字段（实测被忽略），认的是 `reasoning_effort:'none'`。
+    if (noThink) channel.extra = { ...channel.extra, ...(p.nothink ?? {}) };
+    const cny = p.prices?.[idPart]?.cny ?? null;
+    entrants.push({
+      label: `${provider}:${idPart}` + (noThink ? '#nothink' : ''),
+      price: cny
+        ? { priceKnown: true, promptPrice: cny[0] / 1e6 / CNY_PER_USD, completionPrice: cny[1] / 1e6 / CNY_PER_USD }
+        : { priceKnown: false },
+      channel,
+      endpoints: [],
+      meta: {
+        tag: null,
+        quant: null,
+        provider,
+        providerBase: p.base,
+        thinking: null,
+        reasoningRequested: noThink ? 'off' : 'native',
+      },
+    });
+    console.log(
+      `  · ${provider}:${idPart}　${p.label}　` +
+        (cny ? `¥${cny[0]}/¥${cny[1]} 每百万（官网价，按缓存未命中估）` : '价格不定（原厂端不报价）') +
+        `　后端＝原厂唯一口${noThink ? '　非思考档' : ''}`,
+    );
+    continue;
+  }
+  const [id, tagOverride] = idPart.split('@');
   const model = live.find((m) => m.id === id);
   if (!model) {
     console.error(`✗ 清单里没有 ${id}（拼错了，或它下架了）`);
@@ -126,7 +205,11 @@ for (const raw of wanted) {
       console.warn(`  ! ${id} 拉不到 endpoint 清单，本次不锁后端（方差里可能混后端差异）`);
     }
   }
-  const channel = openrouterChannel({ apiKey, model: id, modelInfo: model, providerTag: tag, base });
+  // 擂台预算，不是产品预算（见 arena.js 的 MAX_TOKENS/REASONING_TOKENS 注释）
+  const channel = openrouterChannel({
+    apiKey, model: id, modelInfo: model, providerTag: tag, base,
+    budget: { completionTokens: MAX_TOKENS, reasoningTokens: REASONING_TOKENS },
+  });
   if (noThink) {
     // 推理开关臂：OpenRouter 统一口径显式关推理；chat() 会据此不再下发推理信封
     channel.extra = { ...channel.extra, reasoning: { enabled: false } };
@@ -190,8 +273,8 @@ for (const e of entrants) {
       e.channel = ch;
       e.meta.tag = tag;
       console.log(
-        `  ✓ ${e.label}${tag ? `（锁 ${tag}）` : '（未锁后端）'}` +
-          (tagOverrideOf(e.label) ? '' : tag ? `　← 未显式指定，本次自动选中；要复现这一批请写 ${e.label}@${tag}` : ''),
+        `  ✓ ${e.label}${e.meta.provider ? `（${PROVIDERS[e.meta.provider].label}，原厂唯一口）` : tag ? `（锁 ${tag}）` : '（未锁后端）'}` +
+          (e.meta.provider || tagOverrideOf(e.label) ? '' : tag ? `　← 未显式指定，本次自动选中；要复现这一批请写 ${e.label}@${tag}` : ''),
       );
       ok = true;
       break;
@@ -202,8 +285,10 @@ for (const e of entrants) {
   if (!ok) {
     console.error(`  ✗ ${e.label} 打不通：${lastErr}`);
     console.error(
-      '    → 淘汰。若是 400，多半它不接受钉死的采样参数；' +
-        '若是 404，是所有后端在你的数据策略下都不可达（见 openrouter.ai/settings/privacy）。',
+      e.meta.provider
+        ? `    → 淘汰。原厂端只有一个口，打不通就是 key、模型名或该端点本身的问题（${e.meta.providerBase}）。`
+        : '    → 淘汰。若是 400，多半它不接受钉死的采样参数；' +
+            '若是 404，是所有后端在你的数据策略下都不可达（见 openrouter.ai/settings/privacy）。',
     );
   } else fit.push(e);
 }
@@ -315,7 +400,16 @@ const memoryNote = bestOf
 const board =
   memoryNote +
   renderBoard(rows, {
-    run: { seed0, games: bestOf ?? games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech, mods: mods.map((m) => m.name) },
+    run: {
+      seed0, games: bestOf ?? games, at, sampling: SAMPLING, maxTokens: MAX_TOKENS, concurrency, relaySpeech,
+      mods: mods.map((m) => m.name),
+      channels: entrants.map((e) => ({
+        label: e.label,
+        origin: e.meta.provider ? PROVIDERS[e.meta.provider].label : 'OpenRouter',
+        tag: e.meta.tag ?? null,
+        note: e.meta.provider ? '原厂唯一口，无后端可锁' : null,
+      })),
+    },
     integrity,
     cache,
     spread,
