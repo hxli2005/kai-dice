@@ -97,7 +97,7 @@ test('Q49 场合律：他把旧账记歪照样出口（台词侧解链），留�
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     persona: { ...PERSONAS['model:deepseek-v4-flash'], gear: { ...PERSONAS['model:deepseek-v4-flash'].gear, usesBlind: false } }, // 自动掀盅要一个不扳盲闸的座位
     fetchFn: mockFetch(
-      '{"action":{"type":"challenge"},"say":"你两次九个六，开。","belief":"其实五五开","speechMode":"bait","note":"n"}',
+      '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"你两次九个六，开。","belief":"其实五五开","speechMode":"bait","note":"n"}',
     ),
   });
   const d = await ai.decide(m.observe('B'));
@@ -138,12 +138,12 @@ test('F0b 留档字段：belief/speechMode 进 schema 与决策日志', async ()
   const m = await ladderMatch();
   const ob = m.observe('B');
   const good = parseDecision(
-    '{"action":{"type":"challenge"},"say":"看死你了","belief":"其实只是五五开，钓他洗白","speechMode":"bait"}',
+    '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"看死你了","belief":"其实只是五五开，钓他洗白","speechMode":"bait"}',
     ob,
   );
   assert.equal(good.speechMode, 'bait');
   assert.match(good.belief, /五五开/);
-  const plain = parseDecision('{"action":{"type":"challenge"},"say":"开"}', ob);
+  const plain = parseDecision('{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开"}', ob);
   assert.equal(plain.speechMode, 'straight');
   assert.equal(plain.belief, '');
 });

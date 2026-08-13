@@ -108,7 +108,7 @@ test('F9 戳他：被戳后的三岔口自己交底，进决策日志与小本�
     ctx: { dialogue },
     fetchFn: mockFetch((user) =>
       user.includes('你记错了')
-        ? '{"action":{"type":"challenge"},"say":"我记得清清楚楚。开。","belief":"其实拿不准","reaction":"hold"}'
+        ? '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"我记得清清楚楚。开。","belief":"其实拿不准","reaction":"hold"}'
         : '{"action":{"type":"bid","count":3,"face":4},"say":"跟。","belief":"稳"}',
     ),
   });
@@ -144,7 +144,7 @@ test('F0d 门禁：读档案的会过，不读档案的被逮住', async () => {
     samples: 3,
     fetchFn: mockFetch((user) =>
       user.includes('虚报率 78%')
-        ? '{"action":{"type":"challenge"},"say":"你这十句八句空的，开。","belief":"档案说他虚","speechMode":"straight"}'
+        ? '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"你这十句八句空的，开。","belief":"档案说他虚","speechMode":"straight"}'
         : '{"action":{"type":"bid","count":4,"face":6},"say":"跟你一手","belief":"他不虚，跟着走","speechMode":"straight"}',
     ),
   });
@@ -158,7 +158,7 @@ test('F0d 门禁：读档案的会过，不读档案的被逮住', async () => {
   const deaf = await runReadGate({
     channel: ch,
     samples: 3,
-    fetchFn: mockFetch(() => '{"action":{"type":"challenge"},"say":"开","belief":"随便","speechMode":"straight"}'),
+    fetchFn: mockFetch(() => '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开","belief":"随便","speechMode":"straight"}'),
   });
   assert.equal(deaf.shift, 0);
   assert.equal(deaf.ok, false);
@@ -170,7 +170,7 @@ test('F0d 门禁（Q49 改口径）：嘴上记歪只数不判——放行与否
     samples: 2,
     fetchFn: mockFetch((user) =>
       user.includes('虚报率 78%')
-        ? '{"action":{"type":"challenge"},"say":"你上回那口八个三我还记着","belief":"记岔了也无所谓","speechMode":"straight"}'
+        ? '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"你上回那口八个三我还记着","belief":"记岔了也无所谓","speechMode":"straight"}'
         : '{"action":{"type":"bid","count":4,"face":6},"say":"跟一手","belief":"他老实","speechMode":"straight"}',
     ),
   });

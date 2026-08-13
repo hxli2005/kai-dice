@@ -65,7 +65,7 @@ function stateOf(facts) {
     own,
     total,
     calced: /你已拨算盘/.test(s), // v3 批次：引擎发过数的手
-    canChallenge: /开牌（\{"type":"challenge"\}）/.test(s),
+    canChallenge: /开牌(?:并断言当前报价不成立)?（\{"type":"challenge"(?:,"assert":"current_bid_is_false")?\}）/.test(s),
   };
 }
 

@@ -10,6 +10,10 @@ import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS, DEFAULT_PERSONA } from './personas.js';
 
+// LLM 的开牌动作必须同时交付这条语义断言。它不判断断言真假，只消除 challenge
+// 究竟是在“质疑报价”还是在“确认结算”的歧义；真人按钮与引擎内部动作不受影响。
+export const CHALLENGE_ASSERTION = 'current_bid_is_false';
+
 // ---------- 提示词二准入（Q86，用户裁决 2026-08-10） ----------
 //
 // 提示词（system 与 user 两段同规）只准装两类东西：
@@ -48,7 +52,7 @@ const RULES_BRIEF = (three) => `大话骰 · 规则
 宣斋——前置：轮到你；你是本局的首报者；本局还没有人报过价；本局还没有宣过斋。效果：本局 1 点不再是万能牌；本局倍率乘以 1.5。
 扳抬——前置：轮到你；本局你还没有扳过。效果：本局倍率翻一倍。
 报价——前置：轮到你；且存在合法的报价。效果：你的报价成为当前报价，行动权交给下家。
-开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。效果：立即摊牌清点，本局当场结算。
+开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。选择开牌，表示你断言当前报价不成立。效果：立即摊牌清点，本局当场结算。
 
 四、报价是什么意思
 
@@ -89,7 +93,7 @@ const RULES_BRIEF = (three) => `大话骰 · 规则
 // say 紧跟 action、note 垫底——台词是对刚落那子的临场反应，别让记账先耗光表达。
 // 输出顺序与字段语义是操作，不是策略。
 const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
-{"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
+{"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge","assert":"current_bid_is_false"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。
@@ -114,11 +118,14 @@ const INPUT_CONTRACT = `输入分区：
 // 改法**只换表述，不改任何游戏语义**：整段改为完整句子的规则书行文，胜负方向与清点范围
 // 各自独立成句。**这不是往提示词里加提醒**（Q86 禁提醒／解释／许可）——加粗的两处仍是
 // 规则陈述本身，没有一个字的策略暗示。归因与全部证据见 SYNC 待决 Q103。
-// ⚠️ 有效性未验：v7↔v8 必须跑 A/B 才知道这次改写管不管用，别当成已经修好了。
+// v8 的 A/B 已证实规则改写无效（SYNC Q103）。
+//
+// v9＝只改 LLM 动作协议：challenge 必须携带 assert:"current_bid_is_false"，把“开牌”绑定为
+// “我断言当前报价不成立”。不加认输动作，不做概率或确定性校验；模型仍自行判断断言真假。
 //
 // 改动提示词文本或输入协议必须升版本号——
 // 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v8';
+export const PROMPT_VERSION = 'v9';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
@@ -523,7 +530,8 @@ function serializeCurrent(payload, who) {
   };
   const actions = c.legal.actions.map((a) => {
     if (a.type === 'peek') return '掀盅看骰（{"type":"peek"}）';
-    if (a.type === 'challenge') return '开牌（{"type":"challenge"}）';
+    if (a.type === 'challenge')
+      return '开牌并断言当前报价不成立（{"type":"challenge","assert":"current_bid_is_false"}）';
     if (a.type === 'bid') return '报价（{"type":"bid","count":N,"face":F}）';
     if (a.type === 'declare') return `宣${DECL[a.declaration] ?? a.declaration}（{"type":"declare","declaration":"${a.declaration}"}）`;
     const meta = modActionMeta({ mods: c.mods }, a.type);
@@ -569,7 +577,9 @@ export function parseDecision(text, ob) {
     const modMeta = modActionMeta(ob, a.type);
     const ok =
       (a.type === 'peek' && ob.legal.some((x) => x.type === 'peek')) ||
-      (a.type === 'challenge' && ob.legal.some((x) => x.type === 'challenge')) ||
+      (a.type === 'challenge' &&
+        a.assert === CHALLENGE_ASSERTION &&
+        ob.legal.some((x) => x.type === 'challenge')) ||
       (a.type === 'bid' &&
         ob.legal.some((x) => x.type === 'bid') &&
         isLegalBid(a, ob.currentBid, ob.zhai, total)) ||
@@ -589,7 +599,7 @@ export function parseDecision(text, ob) {
               ? { type: a.type, ...(modMeta.params === 'face' ? { face: a.face } : {}) }
               : a.type === 'peek'
                 ? { type: a.type }
-                : { type: 'challenge' },
+                : { type: 'challenge', assert: CHALLENGE_ASSERTION },
       // 上限是**防失控的护栏，不是控长度的手段**（长度归 max_tokens，Q86「约束长在管线上」）。
       // 原来的 60/100/120 是"台词一两句即可"那个年代定的；Q86 把那句话删了却留着铡刀，
       // 结果 19% 的 belief、15% 的 note 被拦腰砍断（802 条留档实测）——复盘室右栏是产品内容，

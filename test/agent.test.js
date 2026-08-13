@@ -149,7 +149,7 @@ test('Q49 场合律：模型自行心算后把"三成"说满，照样出口—�
     channel: { baseUrl: 'https://x.test', apiKey: 'k', model: 'm' },
     persona: { ...PERSONAS['model:deepseek-v4-flash'], gear: { ...PERSONAS['model:deepseek-v4-flash'].gear, usesBlind: true } },
     fetchFn: mockFetch(() => ({
-      choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"三成。开。","note":"我看他虚","belief":"其实没底"}' } }],
+      choices: [{ message: { content: '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"三成。开。","note":"我看他虚","belief":"其实没底"}' } }],
     })),
   });
   const d = await bragger.decide(m.observe('B'));
@@ -169,7 +169,13 @@ test('parseDecision：合法动作通过，非法与坏输出拒绝', async () =
   const ob = m.observe('B');
   const good = parseDecision('{"action":{"type":"bid","count":2,"face":5},"say":"跟。","note":"n"}', ob);
   assert.deepEqual(good.action, { type: 'bid', count: 2, face: 5 });
-  assert.ok(parseDecision('前缀 {"action":{"type":"challenge"},"say":"开"} 后缀', ob));
+  const challenge = parseDecision(
+    '前缀 {"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开"} 后缀',
+    ob,
+  );
+  assert.deepEqual(challenge.action, { type: 'challenge', assert: 'current_bid_is_false' });
+  assert.equal(parseDecision('{"action":{"type":"challenge"},"say":"开"}', ob), null, '开牌必须明确断言当前报价不成立');
+  assert.equal(parseDecision('{"action":{"type":"challenge","assert":"current_bid_is_true"}}', ob), null, '反向断言不能开牌');
   assert.equal(parseDecision('{"action":{"type":"bid","count":2,"face":3}}', ob), null); // 阶梯外
   assert.equal(parseDecision('{"action":{"type":"declare","declaration":"zhai"}}', ob), null); // 非首报者
   assert.equal(parseDecision('胡言乱语', ob), null);
@@ -270,8 +276,8 @@ test('createOpponent：跨局回灌走真实决策日志——第 2 局的提示
       const u = body.messages[1].content;
       const raw = /掀盅看骰/.test(u)
         ? '{"action":{"type":"peek"},"say":"","belief":""}'
-        : /开牌（\{"type":"challenge"\}）/.test(u)
-          ? '{"action":{"type":"challenge"},"say":"开。","belief":"第1局我诈了他"}'
+        : /开牌并断言当前报价不成立/.test(u)
+          ? '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开。","belief":"第1局我诈了他"}'
           : '{"action":{"type":"bid","count":2,"face":4},"say":"两个4。","belief":"虚报钓他"}';
       return { choices: [{ message: { content: raw } }] };
     }),
@@ -346,7 +352,7 @@ test('瞬态失败重试一次：网络错误后第二发成功不落沉默 bot�
     fetchFn: async () => {
       calls += 1;
       if (calls === 1) throw new Error('network down');
-      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"action":{"type":"challenge"},"say":"开。"}' } }] }) };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开。"}' } }] }) };
     },
   });
   const d = await flaky.decide(m.observe('B'));
@@ -414,6 +420,7 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
   assert.match(sysModel, /前置条件不满足的动作，会被引擎拒绝/, '操作');
   assert.match(sysModel, /都要向胜者支付这笔赔付/, '结算：倍率双向');
   assert.match(sysModel, /严格输出一行 JSON/, '输出格式');
+  assert.match(sysModel, /"type":"challenge","assert":"current_bid_is_false"/, 'v9：开牌动作绑定为断言当前报价不成立');
 
   // v8 靶点（两条被实测读错的规则，各自独立成句，不许再退回公式）：
   // ①胜负方向——全库 13 次留档明写「必然成立」仍去开牌，9 次是看着算盘 100% 开的

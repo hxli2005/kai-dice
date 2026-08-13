@@ -45,7 +45,11 @@ const THINK = argv.includes('--think');
 // 而 luna 的留档正好卡在这里：「四个5必然成立……继续报价会把确定优势转成风险」——
 // 它把开牌当成了落袋为安的结算键。本臂用来验：补上语义，误开会不会塌。
 const SEM = argv.includes('--sem');
-const ARMS = ['v7', 'v8', ...(THINK ? ['v8-think'] : []), ...(SEM ? ['v8-sem'] : [])];
+// --v9：用户方案——不是「告诉」它开牌是质疑，而是**逼它每次亲手写出断言**
+// （action 必须是 {"type":"challenge","assert":"current_bid_is_false"}）。
+// 这条臂同时量副作用：模型漏写 assert 时 parseDecision 会判非法 → 顶班。
+const V9 = argv.includes('--v9');
+const ARMS = ['v7', 'v8', ...(THINK ? ['v8-think'] : []), ...(SEM ? ['v8-sem'] : []), ...(V9 ? ['v9'] : [])];
 const SRC = 'docs/arena/2026-08-13T13-45-45';
 const OUT = `docs/arena/replay-rules-v8/${MODEL.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 // 局面一律取自 v7 那批的 deepseek 席——换型号时局面**不跟着换**，那正是对照的意义
@@ -94,8 +98,15 @@ const JSON_SPEC = `严格输出一行 JSON，不要其他文字，按此字段�
 {"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
 
 const SYS_V7 = `${V7_RULES(false)}\n\n${INPUT_CONTRACT}\n\n${JSON_SPEC}`;
-const SYS_V8 = seatSystem(false);
+const SYS_V9 = seatSystem(false); // 当前代码＝v9（challenge 必须带 assert）
+// v8 由 v9 反向还原：v9 相对 v8 只动了「开牌」那行与 jsonSpec 里的 action 样例
+const SYS_V8 = SYS_V9
+  .replace('。选择开牌，表示你断言当前报价不成立。效果：立即摊牌清点', '。效果：立即摊牌清点')
+  .replace('{"type":"challenge","assert":"current_bid_is_false"}', '{"type":"challenge"}');
+const V8_HASH = 'fd699c47e0b38a78'; // 前几轮实测记录的 v8 哈希，用来自检还原是否逐字
 // v8-sem：在 v8 基础上只改一句——把「开牌」是**什么意思**写出来（这是规则陈述，非提醒）
+const U9_FROM = '开牌（{"type":"challenge"}）';
+const U9_TO = '开牌并断言当前报价不成立（{"type":"challenge","assert":"current_bid_is_false"}）';
 const SEM_FROM = '开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。效果：立即摊牌清点，本局当场结算。';
 const SEM_TO = '开牌——前置：轮到你；当前存在一口报价；且那口报价不是你自己报的。效果：你宣称这口报价不成立，随即摊牌清点、本局当场结算。';
 const SYS_SEM = SYS_V8.replace(SEM_FROM, SEM_TO);
@@ -105,7 +116,8 @@ const h16 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const run = JSON.parse(fs.readFileSync(path.join(SRC, 'run.json'), 'utf8'));
 if (h16(SYS_V7) !== run.provenance.systemPromptHash)
   throw new Error(`v7 重建失败：${h16(SYS_V7)} ≠ 存档 ${run.provenance.systemPromptHash}`);
-console.log(`v7 重建哈希 ${h16(SYS_V7)} ＝ 存档 ✓　｜　v8（当前 ${PROMPT_VERSION}）哈希 ${h16(SYS_V8)}`);
+if (h16(SYS_V8) !== V8_HASH) throw new Error(`v8 还原失败：${h16(SYS_V8)} ≠ ${V8_HASH}`);
+console.log(`v7 重建 ${h16(SYS_V7)} ＝存档 ✓　v8 还原 ${h16(SYS_V8)} ＝旧记录 ✓　v9（当前 ${PROMPT_VERSION}）${h16(SYS_V9)}`);
 
 // ---- 采集局面 ----
 const cases = [];
@@ -203,17 +215,22 @@ async function worker() {
     for (let a = 0; a < 2 && raw == null; a++) {
       try {
         raw = await chat(channel, {
-          system: arm === 'v7' ? SYS_V7 : arm === 'v8-sem' ? SYS_SEM : SYS_V8,
-          user: c.user, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS, meta,
+          system: arm === 'v7' ? SYS_V7 : arm === 'v8-sem' ? SYS_SEM : arm === 'v9' ? SYS_V9 : SYS_V8,
+          user: arm === 'v9' ? c.user.replaceAll(U9_FROM, U9_TO) : c.user, maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS, meta,
           ...(arm === 'v8-think' ? { extra: thinkExtra } : {}),
         });
       } catch (e) { err = e?.message; await new Promise((r) => setTimeout(r, meta.status === 429 ? 4000 : 800)); }
     }
     spentUsd += ((meta.inTokens ?? 0) * price.in + (meta.outTokens ?? 0) * price.out) / 1e6;
     let action = null;
-    try { action = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).action?.type ?? null; } catch {}
+    let asserted = null; // v9 副作用：漏写 assert 的 challenge 会被 parseDecision 判非法→顶班
+    try {
+      const a = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).action ?? {};
+      action = a.type ?? null;
+      if (a.type === 'challenge') asserted = a.assert === 'current_bid_is_false';
+    } catch {}
     const belief = (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)[0]).belief ?? ''; } catch { return ''; } })();
-    results.push({ ...c, user: undefined, arm, i, action, belief, err });
+    results.push({ ...c, user: undefined, arm, i, action, asserted, belief, err });
     if (results.length % 20 === 0) console.log(`  …${results.length}/${jobs.length}　$${spentUsd.toFixed(2)}`);
   }
 }
@@ -227,7 +244,12 @@ const rate = (kind, arm) => {
   return { ch, n: rs.length, pct: rs.length ? (ch / rs.length) * 100 : null };
 };
 console.log(`\n实花约 $${spentUsd.toFixed(2)}\n`);
-const ARM_LABEL = { v7: 'v7 记号体', v8: 'v8 规则书体', 'v8-think': 'v8＋开推理', 'v8-sem': 'v8＋开牌语义' };
+const ARM_LABEL = { v7: 'v7 记号体', v8: 'v8 规则书体', 'v8-think': 'v8＋开推理', 'v8-sem': 'v8＋开牌语义', v9: 'v9 强制断言' };
+if (ARMS.includes('v9')) {
+  const ch = results.filter((r) => r.arm === 'v9' && r.action === 'challenge');
+  const miss = ch.filter((r) => r.asserted === false).length;
+  console.log(`\n⚠️ v9 副作用：开牌 ${ch.length} 次，漏写 assert ${miss} 次（${ch.length ? ((miss / ch.length) * 100).toFixed(0) : 0}%）——这些会被 parseDecision 判非法→顶班\n`);
+}
 console.log(`模型：${MODEL}\n`);
 console.log('局面类别'.padEnd(26) + ARMS.map((a) => ARM_LABEL[a].padStart(16)).join(''));
 console.log('─'.repeat(26 + 16 * ARMS.length));

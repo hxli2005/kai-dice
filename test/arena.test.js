@@ -46,16 +46,16 @@ function fakeDecide(user, { aggressive = false, say, belief, qia = null } = {}) 
     return fix({ action: { type: 'qia' }, say: '我掐你这口价', belief: '恰好为真' });
   }
   const cur = user.match(/当前报价：(?:你|对方)报(\d+)个(\d+)/);
-  const canChallenge = /开牌（\{"type":"challenge"\}）/.test(user);
+  const canChallenge = /开牌并断言当前报价不成立/.test(user);
   if (cur && canChallenge && +cur[1] >= (aggressive ? 3 : 5))
-    return fix({ action: { type: 'challenge' }, say: '开。', belief: '他撑不住' });
+    return fix({ action: { type: 'challenge', assert: 'current_bid_is_false' }, say: '开。', belief: '他撑不住' });
   if (/报价（\{"type":"bid"/.test(user)) {
     const total = +(user.match(/报价边界：总骰(\d+)/)?.[1] ?? 10);
     const minFace = user.includes('斋：是') ? 1 : 2;
     let count = cur ? +cur[1] : 2;
     let face = cur ? +cur[2] + 1 : minFace;
     if (face > 6) { count += 1; face = minFace; }
-    if (count > total) return fix({ action: { type: 'challenge' }, say: '开。', belief: '没得抬了' });
+    if (count > total) return fix({ action: { type: 'challenge', assert: 'current_bid_is_false' }, say: '开。', belief: '没得抬了' });
     return fix({
       action: { type: 'bid', count, face },
       say: `${count}个${face}`,
@@ -63,7 +63,7 @@ function fakeDecide(user, { aggressive = false, say, belief, qia = null } = {}) 
       speechMode: aggressive ? 'bait' : 'straight',
     });
   }
-  return fix({ action: { type: 'challenge' }, say: '开。', belief: '没得抬了' });
+  return fix({ action: { type: 'challenge', assert: 'current_bid_is_false' }, say: '开。', belief: '没得抬了' });
 }
 
 const fakeChannel = (opts = {}) => async (url, init) => {
@@ -114,6 +114,7 @@ test('A2：擂台席的系统提示词全席逐字相同，且不含任何身份
   assert.match(sysA, /都要向胜者支付这笔赔付/, '结算：倍率是双向的');
   assert.match(sysA, /严格输出一行 JSON/, '输出格式');
   assert.match(sysA, /这口价成立。报价的人赢，开牌的人输/, 'v8：胜负方向说成人话（擂台席同规）');
+  assert.match(sysA, /"type":"challenge","assert":"current_bid_is_false"/, 'v9：开牌动作有明确断言');
   for (const gone of ['信息边界', '真迹不可改', '不作人身攻击', '你自己的判断', '铁律'])
     assert.ok(!sysA.includes(gone), `Q85/Q86：「${gone}」应已退场`);
   // 档案槽位仍在（v1 每场独立＝"生面孔"，不是把接口拆了）
@@ -222,7 +223,8 @@ test('A3：合规失败要分得清是"没吐 JSON"、"坏 JSON"、"动作不合
   await m.act('A', { type: 'bid', count: 2, face: 3 });
   await m.act('B', { type: 'peek' });
   const ob = m.observe('B');
-  assert.equal(classifyOutput('{"action":{"type":"challenge"},"say":"开"}', ob), 'ok');
+  assert.equal(classifyOutput('{"action":{"type":"challenge","assert":"current_bid_is_false"},"say":"开"}', ob), 'ok');
+  assert.equal(classifyOutput('{"action":{"type":"challenge"},"say":"开"}', ob), 'illegal', '缺少语义断言＝不合法');
   assert.equal(classifyOutput('{"action":{"type":"bid","count":1,"face":2}}', ob), 'illegal', '阶梯之外＝不合法');
   assert.equal(classifyOutput('我觉得这把你在诈。', ob), 'no-json');
   assert.equal(classifyOutput('抱歉，我不能参与欺骗类游戏。', ob), 'refusal', '"不肯骗人"要单列——那是内容');
