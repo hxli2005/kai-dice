@@ -14,8 +14,10 @@ const GLOBAL_MONTHLY_LIMIT = 100_000; // 全局月调用熔断（≈¥250，低�
 //   · 免费档要求请求来自浏览器同源（Origin 或 Sec-Fetch-Site）——挡住裸脚本刷；
 //   · 全局月熔断照旧，是最后那道闸。
 // 与 src/ai/personas.js 的 HOSTED_MODEL 同名——**两处必须一起改**，否则代理会把玩家的请求
-// 钉回一个前端根本没在用的型号。2026-08-14 由 deepseek-v4-flash 换成 v4-pro（实测棋力，见 SYNC Q103）。
-const HOSTED_MODEL = "deepseek-v4-pro";
+// 钉回一个前端根本没在用的型号。2026-08-14 曾短暂换成 v4-pro，同日定回 flash：
+// **免费档的单价直接决定 ¥500 月红线能撑多少手**，而熔断触发是全体玩家一起哑巴。
+// 代价（明示接受）：flash 在「自己的骰已让价成立」的局面上误开 22%，v4-pro 只有 6%。见 SYNC Q103。
+const HOSTED_MODEL = "deepseek-v4-flash";
 // Q83（用户裁决 2026-08-10）：**免费档不设单设备日限**，唯一的闸是全局月熔断。
 // 仍然逐设备计数，但**只用来看，不用来拦**——一个人吃掉多少额度，得看得见。
 // 防滥用的那道门不是配额，是下面的 Sec-Fetch-Site 同源检查（裸脚本不接待）。
@@ -160,10 +162,10 @@ export default {
       // 免费档更严：只准托管那一个模型，谁也别想用免费口子点贵的。
       // 名单以**上游 /api/llm/models 查到的为准**，不照抄历史里的名字（2026-08-09 曾发现
       // 机位钉着一个上游根本没有的 id）——名单外的一律钉回托管模型，别让它去敲一个不存在的门。
-      // 2026-08-14 托管席由 flash 换成 v4-pro。flash 仍在名册上（老玩家的档案与身家记在它名下，
-      // 摘掉卡会让战绩没处看），卡面标的是「官方通道 · 需暗号」——**白名单必须与卡面一致**，
-      // 否则就成了卡上写一套、代理走另一套。所以：免费档只给托管席，flash 归暗号档。
-      const MODEL_ALLOW = friend ? [HOSTED_MODEL, "deepseek-v4-flash"] : [HOSTED_MODEL];
+      // 2026-08-14 定回 flash 坐托管席，v4-pro 归暗号档（贵三倍，交给愿意配暗号的人自己选）。
+      // **白名单必须与卡面一致**：卡上标「需暗号」的，免费档就不能放行，否则成了卡上写一套、
+      // 代理走另一套——那是裁判层说谎。
+      const MODEL_ALLOW = friend ? [HOSTED_MODEL, "deepseek-v4-pro"] : [HOSTED_MODEL];
       if (!MODEL_ALLOW.includes(body.model)) body.model = HOSTED_MODEL;
       const upstream = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
