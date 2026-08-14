@@ -20,6 +20,9 @@ import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByR
 import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 import { createTubeStage, toTubeView } from './tubes.js';
+import { installEnglishUi, isEnglish, languageUrl } from './i18n.js';
+
+installEnglishUi();
 
 document.addEventListener('pointerdown', unlockAudio, { once: true });
 
@@ -177,8 +180,8 @@ async function testGuest(cfg) {
     const ch = withGuestHeaders(cfg);
     const gear = modelPersona(cfg.model)?.gear ?? {};
     const raw = await chat(ch, {
-      system: '连通测试。严格输出一行 JSON：{"ok":true}',
-      user: '输出指定 JSON。',
+      system: isEnglish() ? 'Connection test. Output exactly one line of JSON: {"ok":true}' : '连通测试。严格输出一行 JSON：{"ok":true}',
+      user: isEnglish() ? 'Output the specified JSON.' : '输出指定 JSON。',
       maxTokens: gear.maxTokens,
       timeoutMs: gear.timeoutMs,
       extra: ch.decisionExtra,
@@ -1700,6 +1703,7 @@ function toastFx(text) {
 function enterRoom({ roomId, hostKey = null }) {
   tubeStage?.setActive(false);
   tubeStage?.setThinking(false);
+  $('app').classList.remove('lobby-mode');
   atTable = true;
   matchGen++;
   muteBubble();
@@ -2163,6 +2167,7 @@ async function runExam(mod, out) {
 function showLobby() {
   tubeStage?.setActive(false);
   tubeStage?.setThinking(false);
+  $('app').classList.add('lobby-mode');
   const lb = $('lobby');
   const led = loadLedger();
   let mode = loadTable();
@@ -2185,7 +2190,7 @@ function showLobby() {
         return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays), plays: rec.plays };
       }),
     ].filter((r) => r.plays > 0 || r.bal !== 0);
-    if (!rows.length) return '<p class="board-empty">榜上还没有人。打一场，这里就有第一行。</p>';
+    if (!rows.length) return '<p class="board-empty">榜上还没有人。完成第一局，本机会把第一行写在这里。</p>';
     return rows
       .sort((a, b) => b.bal - a.bal)
       .map(
@@ -2196,68 +2201,114 @@ function showLobby() {
       .join('');
   };
   const draw = () => {
+    const lab = loadLab();
+    const labHtml = `<section class="lab-box lobby-module" aria-labelledby="labTitle">
+      <button class="lab-head" id="labToggle" type="button" aria-expanded="${lab.on}">
+        <span id="labTitle">实验桌</span><i class="${lab.on ? 'on' : ''}">${lab.on ? '开 · 沙盒' : '关'}</i>
+      </button>
+      ${
+        lab.on
+          ? `<div class="lab-chips">${allMods()
+              .map(
+                (m) =>
+                  `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" type="button" data-mod="${m.id}" aria-pressed="${lab.picks.includes(m.id)}">${m.name}${m.origin === 'wish' ? '<u>愿</u>' : ''}</button>`,
+              )
+              .join('')}<button class="lab-chip wish" id="wishBtn" type="button">许愿＋</button></div>
+      <p class="lab-note">勾上的新规矩全桌明牌。实验局不入榜、不记账、不进档案。</p>`
+          : ''
+      }
+    </section>`;
     const note =
       localStorage.getItem('kai.note.v1') === 'byok-moved'
-        ? '<button class="lobby-note" id="lobbyNote">钥匙已分流：你的自带钥匙在「客席」卡上；官方人物（李/飞/账）只认「设置」里的暗号。点此收起</button>'
+        ? '<button class="lobby-note" id="lobbyNote" type="button">钥匙已分流：你的自带钥匙在「客席」卡上；官方人物（李/飞/账）只认「设置」里的暗号。点此收起</button>'
         : '';
-    lb.innerHTML = `<div class="lobby-title">开！</div>
+    const startLabel = lab.on && pickedMods().length ? '开实验局' : '开局';
+    lb.innerHTML = `<div class="lobby-machine" data-lobby-shell="tube-workbench">
+      <header class="lobby-mast">
+        <div class="lobby-brand" aria-label="《开！》大厅">
+          <span class="lobby-brand__mark">开！</span>
+          <span class="lobby-brand__name">三管对局机</span>
+        </div>
+        <nav class="lobby-utility" aria-label="大厅工具">
+          <span class="lobby-prompt" aria-hidden="true">&gt;</span>
+          <button id="lobbySettings" type="button">--设置</button>
+          <a href="about.html">--说明</a>
+          <a class="lobby-lang" href="${languageUrl()}">${isEnglish() ? '中文' : 'EN'}</a>
+          <span class="lobby-caret" aria-hidden="true">▮</span>
+        </nav>
+      </header>
       ${note}
-      <div class="board">${boardHtml()}</div>
-      <div class="mode-row">
-        <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" data-m="duo">单挑</button>
-        <button class="mode-btn ${mode === 'trio' ? 'sel' : ''}" data-m="trio">三人桌</button>
+      <div class="lobby-workbench">
+        <main class="lobby-console" aria-label="开局控制台">
+          <section class="lobby-tube lobby-tube--mode" aria-labelledby="modeTitle">
+            <div class="lobby-tube__head">
+              <h2 id="modeTitle">选择桌型</h2><span>${mode === 'duo' ? '正席' : '副席'}</span>
+            </div>
+            <div class="mode-row">
+              <button class="mode-btn ${mode === 'duo' ? 'sel' : ''}" type="button" data-m="duo" aria-pressed="${mode === 'duo'}">单挑</button>
+              <button class="mode-btn ${mode === 'trio' ? 'sel' : ''}" type="button" data-m="trio" aria-pressed="${mode === 'trio'}">三人桌</button>
+            </div>
+            <p class="mode-note">${
+              mode === 'trio'
+                ? '朋友局／混沌局：热闹，但两个人分他的心。想被读透，回单挑。'
+                : '一整场，他只读你一个人。'
+            }</p>
+          </section>
+
+          <section class="lobby-judge" aria-labelledby="judgeTitle">
+            <span class="lobby-judge__label">裁判线路</span>
+            <strong id="judgeTitle">${mode === 'duo' ? '单挑' : '三人桌'}</strong>
+            <span class="lobby-judge__state" id="lobbyJudgeState" aria-live="polite">${picked.length}/${need()} 席已接通</span>
+            <button class="primary" id="lobbyStart" type="button" aria-describedby="lobbyJudgeState" ${picked.length === need() ? '' : 'disabled'}>${startLabel}</button>
+          </section>
+
+          <section class="lobby-tube lobby-tube--roster" aria-labelledby="rosterTitle">
+            <div class="lobby-tube__head">
+              <h2 id="rosterTitle">选择对手</h2><span>需要 ${need()} 席</span>
+            </div>
+            <div class="roster">${rosterAll()
+              .map(
+                (per) => `<button class="p-card ${picked.includes(per.id) ? 'sel' : ''}" type="button" data-p="${per.id}" aria-pressed="${picked.includes(per.id)}">
+                  <span class="seal">${per.seal}</span>
+                  <span class="p-info">
+                    <span class="p-name">${per.name}</span>
+                    <span class="p-sub">${per.tag ?? ''}</span>
+                    <span class="p-data">${dataOf(per)}</span>
+                  </span>
+                  ${!per.official ? '<span class="card-edit" data-edit="1">改</span>' : ''} <!-- 只有客席能改：官方通道的型号是钉死的（Q28 两把钥匙互不越界） -->
+                </button>`,
+              )
+              .join('')}${
+              guestPersona()
+                ? ''
+                : `<button class="p-card add-guest" id="addGuest" type="button">
+                  <span class="seal">＋</span>
+                  <span class="p-info">
+                    <span class="p-name">客席</span>
+                    <span class="p-sub">自带钥匙 · 你的模型以本名上桌</span>
+                  </span>
+                </button>`
+            }</div>
+          </section>
+        </main>
+
+        <aside class="lobby-rack" aria-label="其他设备">
+          <section class="lobby-module lobby-board-module" aria-labelledby="boardTitle">
+            <header class="lobby-module__head"><h2 id="boardTitle">本机榜</h2><span>本地账本</span></header>
+            <div class="board lobby-board">${boardHtml()}</div>
+          </section>
+          ${labHtml}
+          <section class="lobby-portals" aria-label="其他模式">
+            <button class="lobby-portal lobby-portal--room" id="roomBtn" type="button"><span>好友房</span><small>邀朋友同桌</small></button>
+            <a class="arena-line lobby-portal lobby-portal--arena" href="docs/arena/live.html"><span>模型竞技场</span><small>双模型自战 · BYOK</small></a>
+          </section>
+        </aside>
       </div>
-      <p class="mode-note">${
-        mode === 'trio'
-          ? '副席 · 朋友局／混沌局：热闹，但两个人分他的心——想被读透，回单挑。'
-          : '正席 · 一整场他只读你一个人。'
-      }</p>
-      <div class="roster">${rosterAll()
-        .map(
-          (per) => `<button class="p-card ${picked.includes(per.id) ? 'sel' : ''}" data-p="${per.id}">
-            <span class="seal">${per.seal}</span>
-            <span class="p-info">
-              <span class="p-name">${per.name}</span>
-              <span class="p-sub">${per.tag ?? ''}</span>
-              <span class="p-data">${dataOf(per)}</span>
-            </span>
-            ${!per.official ? '<span class="card-edit" data-edit="1">改</span>' : ''} <!-- 只有客席能改：官方通道的型号是钉死的（Q28 两把钥匙互不越界） -->
-          </button>`,
-        )
-        .join('')}${
-        guestPersona()
-          ? ''
-          : `<button class="p-card add-guest" id="addGuest">
-            <span class="seal">＋</span>
-            <span class="p-info">
-              <span class="p-name">客席</span>
-              <span class="p-sub">自带钥匙 · 你的模型以本名上桌</span>
-            </span>
-          </button>`
-      }</div>
-      ${(() => {
-        // 实验桌（Q32）：默认关；开着即沙盒。词条可多勾（获批反驳②：单轴纪律管毕业评审，不管沙盒并存）
-        const lab = loadLab();
-        return `<div class="lab-box">
-        <button class="lab-head" id="labToggle"><span>实验桌</span><i class="${lab.on ? 'on' : ''}">${lab.on ? '开 · 沙盒' : '关'}</i></button>
-        ${
-          lab.on
-            ? `<div class="lab-chips">${allMods()
-                .map(
-                  (m) =>
-                    `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" data-mod="${m.id}">${m.name}${m.origin === 'wish' ? '<u>愿</u>' : ''}</button>`,
-                )
-                .join('')}<button class="lab-chip wish" id="wishBtn">许愿＋</button></div>
-        <p class="lab-note">勾上的新规矩全桌明牌——对面读的是同一张卡。实验局随便造：不入榜、不记账、不进档案。</p>`
-            : ''
-        }
-      </div>`;
-      })()}
-      <button class="primary" id="lobbyStart" ${picked.length === need() ? '' : 'disabled'}>${loadLab().on && pickedMods().length ? '开实验局' : '开局'}</button>
-      <button class="mode-btn room-line" id="roomBtn">好友房 · 邀朋友同桌</button>
-      <a class="arena-line" href="docs/arena/live.html"><span>模型竞技场</span><small>双模型自战 · BYOK</small></a>
-      <div class="lobby-links"><a id="lobbySettings">设置</a><a href="about.html">说明</a></div>`;
-    lb.querySelectorAll('.mode-btn').forEach((el) =>
+      <footer class="lobby-colophon">
+        <p>本机存档 · 无账号 · 模型名仅作事实性标注 · 非官方 · 无关联</p>
+      </footer>
+    </div>`;
+    lb.querySelectorAll('.mode-btn[data-m]').forEach((el) =>
       el.addEventListener('click', () => {
         mode = el.dataset.m;
         picked = picked.slice(0, need());
@@ -2283,6 +2334,7 @@ function showLobby() {
       pickSeal(async () => {
         const btn = lb.querySelector('#roomBtn');
         btn.disabled = true;
+        btn.dataset.state = 'loading';
         btn.textContent = '开房中…';
         try {
           const { room: rid, hostKey } = await createRemoteRoom();
@@ -2290,7 +2342,8 @@ function showLobby() {
           enterRoom({ roomId: rid, hostKey });
         } catch {
           btn.disabled = false;
-          btn.textContent = '房间服务没应——稍后再试';
+          btn.dataset.state = 'error';
+          btn.textContent = '房间未响应 · 再试';
         }
       });
     });
@@ -2306,6 +2359,7 @@ function showLobby() {
     lb.querySelector('#lobbyStart').addEventListener('click', () => {
       localStorage.setItem('kai.table.v1', mode);
       localStorage.setItem('kai.lineup.v1', JSON.stringify(picked));
+      $('app').classList.remove('lobby-mode');
       lb.classList.add('hidden');
       newMatch();
     });

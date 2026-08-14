@@ -1,11 +1,11 @@
 {
-  "scanned_at": "2026-08-12T22:21:48+08:00",
-  "revalidated_after": "package.json script-only update; dependencies unchanged",
+  "scanned_at": "2026-08-14T01:09:36+08:00",
+  "revalidated_after": "package.json changed after the prior scan; scripts only, dependencies remain empty",
   "design_system": "DESIGN.md (locked, read-only)",
-  "font_stack": "Existing Songti SC and monospace foundation; arena adds Tomorrow, IBM Plex Sans, and IBM Plex Mono",
+  "font_stack": "Shared Tomorrow display and IBM Plex Mono body stack, with PingFang SC fallbacks",
   "palette": "Warm dark industrial phosphor palette through OKLCH custom properties",
   "motion": "Motion-cut; no animation library",
-  "spacing": "Arena uses a named 4pt spacing scale",
+  "spacing": "Lobby and arena share the named 4pt spacing scale",
   "framework": "Vanilla HTML, CSS, and ES modules",
   "preserve": [
     "mobile-first 9:16 play surface",

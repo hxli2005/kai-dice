@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-08-14",
+    "macrostructure": "Workbench",
+    "theme": "Three-Tube Terminal",
+    "enrichment": "none",
+    "brief": "《开！》大厅改为可直接开机的三管电子控制台",
+    "nav": "N8",
+    "footer": "Ft4"
+  },
+  {
     "date": "2026-08-12",
     "macrostructure": "Split Studio",
     "theme": "Three-Tube Terminal",
