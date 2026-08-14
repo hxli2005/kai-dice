@@ -7,10 +7,14 @@
 // - 粗粒度：沉默 bot 的模板只说手感档位，不展示内部计算值。
 
 import { obProb, coarseWord } from '../probability.js';
+import { isEnglish } from '../ui/i18n.js';
 
 // **全席共用同一句**（Q87：原来一人一种声口，那是角色设定）。
 // 注：这是表现层模板，不是提示词——通道断了时由我们代它开口。
-const TEMPLATE = (f) => `${f.clause ? `${f.clause}。` : ''}这话${f.coarse}。开。`;
+const COARSE_EN = { '基本稳': 'looks solid', '五五开': 'could go either way', '悬': 'looks thin', '纯扯': 'is pure bluff' };
+const TEMPLATE = (f) => isEnglish()
+  ? `${f.clause ? `${f.clause}. ` : ''}That bid ${COARSE_EN[f.coarse] ?? f.coarse}. Call.`
+  : `${f.clause ? `${f.clause}。` : ''}这话${f.coarse}。开。`;
 
 // 本局最扎的一条公开事实 → 一句短语（挑一条就够；挑不出就闭嘴，别凑废话）
 export function readClause(ob) {
@@ -19,11 +23,11 @@ export function readClause(ob) {
   const q = bid.player;
   const evs = ob.events.slice(ob.events.findLastIndex((e) => e.type === 'roundStart') + 1);
   const mine = (e) => e.actor === q;
-  if (ob.blind?.[q]) return '你骰都没看就压我';
-  if (ob.raises?.[q]) return '抬完就报这一口';
+  if (ob.blind?.[q]) return isEnglish() ? 'You pushed that bid without seeing your dice' : '你骰都没看就压我';
+  if (ob.raises?.[q]) return isEnglish() ? 'You raised the stakes, then made that bid' : '抬完就报这一口';
   const depth = evs.filter((e) => e.type === 'bid').length;
-  if (depth >= 5) return `都第 ${depth} 手了`;
-  if (evs.some((e) => e.type === 'bid' && mine(e) && e.elapsedMs > 8000)) return '你报这口价前停了很久';
+  if (depth >= 5) return isEnglish() ? `We are already ${depth} bids deep` : `都第 ${depth} 手了`;
+  if (evs.some((e) => e.type === 'bid' && mine(e) && e.elapsedMs > 8000)) return isEnglish() ? 'You paused a long time before that bid' : '你报这口价前停了很久';
   if (evs.some((e) => e.type === 'peek' && mine(e))) return null; // 掀盅人人都掀，不算话
   return null;
 }

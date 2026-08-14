@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0c0a">
+<title>KAI! · How to Play</title>
+<link rel="stylesheet" href="src/ui/style.css">
+<style>
+  body { overflow: auto; }
+  .page { max-width: 36rem; margin: 0 auto; padding: 2rem 1.4rem 4rem; }
+  .page h1 { font-size: 1.5rem; letter-spacing: 0.16em; color: var(--lamp); font-weight: 400; margin-bottom: 0.3rem; }
+  .page h2 { font-size: 1.05rem; letter-spacing: 0.12em; margin: 1.6rem 0 0.6rem; color: var(--lamp); font-weight: 400; }
+  .page p, .page li { font-size: 0.88rem; color: var(--dim); line-height: 1.8; }
+  .page ul { padding-left: 1.1rem; }
+  .page li { margin-bottom: 0.4rem; }
+  .page b { color: var(--ink); font-weight: 400; }
+  .back { color: var(--lamp); text-decoration: none; font-size: 0.85rem; }
+  .lang { float: right; }
+</style>
+</head>
+<body>
+<div class="page">
+  <a class="back" href="index.html?lang=en">← Back to the table</a>
+  <a class="back lang" href="about.html">中文</a>
+  <h1>KAI!</h1>
+  <p>Liar’s Dice against a model that calculates, remembers how you play, and records its reasoning before it calls your bid.</p>
+
+  <h2>How to play</h2>
+  <ul>
+    <li>Each player rolls five hidden dice. Take turns bidding: “Across the whole table, there are at least N dice showing X.”</li>
+    <li>Every bid must be higher: increase the quantity, or keep the quantity and increase the face. The opening bid must be at least two dice.</li>
+    <li><b>Ones are wild</b> and count as any face, except during a No-Wilds round.</li>
+    <li>Think a bid is false? Press <b>Call</b>. In a three-player game you may only call the previous bidder. If the bid stands, the caller loses; if it falls short, the bidder loses.</li>
+    <li>The loser drops one die. A player with no dice is eliminated, and the match continues until one player remains.</li>
+    <li>Every player antes one stake at the start of a round, then adds one more after every bid. The winner of the call takes the whole pot, including eliminated spectators’ stakes.</li>
+    <li>Chips are grouped into 1 / 5 / 25 / 100 denominations. Balances carry across matches and may go negative. You can reset your balance at any time, but the reset is recorded in your profile.</li>
+    <li>Every seat keeps a separate model-based balance. Every point in your balance must be won from the opponents at the table.</li>
+    <li>There is no timer. The opponents can see how long you take and remember it.</li>
+  </ul>
+
+  <h2>Declarations</h2>
+  <ul>
+    <li><b>Blind</b>: do not look at your dice for the entire round; pot ×2. You may declare it at any point before peeking, even after bidding.</li>
+    <li><b>No-Wilds</b>: ones stop being wild for this round; pot ×1.5. Only the opening bidder may declare it, before the first bid.</li>
+    <li><b>Raise</b>: on your turn, double the round’s pot. Each player may do this once per round. The multiplier applies equally to everyone.</li>
+    <li>From the sixth bid onward the table enters <b>Deep Water</b>, automatically doubling the pot again. All multipliers stack.</li>
+  </ul>
+
+  <h2>Why the game is verifiable</h2>
+  <ul>
+    <li>At the start of every round, each player’s dice and a nonce are sealed into a hash shown on screen. The reveal opens that commitment, so no one can reroll midway.</li>
+    <li>The AI and the human use the same interface and receive the same shape of data. Your hidden dice are not a field in the AI’s observation.</li>
+    <li>Hovering, hesitation, and touch movement before you commit an action are not sampled.</li>
+    <li><b>System facts are strict; model speech is unfiltered.</b> Results, report data, and objective profile statistics are recomputed by the engine. The opponent may still misjudge, exaggerate, or misremember — that is the opponent speaking, not the referee. You can poke the AI at the table when you disagree.</li>
+  </ul>
+
+  <h2>The machine at the table: a model</h2>
+  <ul>
+    <li><b>The model is the opponent.</b> A language model decides how to reason, when to reveal its dice, and whether to call your bid.</li>
+    <li><b>The prompt contains rules and table data only.</b> It has no persona script, aggression setting, or prescribed voice. Change the model and you change the opponent.</li>
+    <li><b>We do not filter the model’s table talk.</b> Its own provider or local alignment determines its boundaries. If you connect an unaligned local model with your own key, you are responsible for what it says.</li>
+    <li><b>Each model keeps its own record.</b> Profiles, balances, and standings are keyed by model name. Hosted and BYOK access to the same model refer to the same opponent.</li>
+  </ul>
+  <p>Before a match, choose head-to-head or a three-player table and select the opponents. Each card shows that model’s record against you.</p>
+
+  <h2>Connecting a model</h2>
+  <ul>
+    <li><b>No setup (default)</b>: the first lobby seat is hosted. Start immediately; its usage is covered by the game while the shared service is available.</li>
+    <li><b>Access code</b>: enter it in Lobby Settings to unlock the other official model seat and its quota.</li>
+    <li><b>Bring your own API</b>: configure Base URL / API Key / Model on the Guest Seat card. OpenAI-compatible and Anthropic formats are supported. An OpenRouter URL can load its current model catalog. <b>Your key stays on this device</b>; the browser connects directly to the provider.</li>
+    <li><b>No available model channel</b>: the opponent still plays using the silent mathematical fallback. On a call, it gives a short fact-based reason.</li>
+  </ul>
+
+  <h2>About model names</h2>
+  <ul>
+    <li>Model names in the game are factual labels so you can identify and verify which model is connected to a seat.</li>
+    <li>This game is <b>unofficial, unaffiliated with model providers, and not endorsed by them</b>. It uses none of their logos, trademarks, or mascot imagery.</li>
+  </ul>
+
+  <p style="margin-top:2.5rem"><a class="back" href="index.html?lang=en">← Back to the table</a></p>
+</div>
+</body>
+</html>

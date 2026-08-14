@@ -9,6 +9,7 @@ import { OPS } from '../mods/catalog.js';
 import { createSilentBot } from './silent.js';
 import { chat } from './llm.js';
 import { DECISION_MAX_TOKENS, DECISION_TIMEOUT_MS, DEFAULT_PERSONA } from './personas.js';
+import { isEnglish, outputLanguageRule } from '../ui/i18n.js';
 
 // LLM 的开牌动作必须同时交付这条语义断言。它不判断断言真假，只消除 challenge
 // 究竟是在“质疑报价”还是在“确认结算”的歧义；真人按钮与引擎内部动作不受影响。
@@ -27,7 +28,7 @@ export const CHALLENGE_ASSERTION = 'current_bid_is_false';
 // 台词长度交给 max_tokens，嘴手是否一致交给渲染层，串牌由架构的信息隔离物理阻断。
 // 历史包袱（人设五件套／说话纪律／三锁／三条铁律）见 SYNC 已决 Q85·Q86，不要请回来。
 
-const RULES_BRIEF = (three) => `大话骰 · 规则
+const RULES_BRIEF_ZH = (three) => `大话骰 · 规则
 
 一、一场怎么打完
 
@@ -88,16 +89,75 @@ const RULES_BRIEF = (three) => `大话骰 · 规则
 赔付，等于注数乘以倍率，四舍五入取整。
 本局每一个非胜者，都要向胜者支付这笔赔付。筹码可以是负数；负数不影响胜负，也不会结束这一场。`;
 
+const RULES_BRIEF_EN = (three) => `LIAR'S DICE · RULES
+
+1. MATCH
+
+Each player starts with 5 dice. At the end of each round, the loser drops 1 die. A player with no dice is eliminated. The match ends when only one player remains.${
+    three ? '\nThree-player table: you may only call the previous bidder, who owns the current bid. There are no teams; every player plays for themselves.' : ''
+  }
+
+2. ROUND START
+
+All dice are rerolled and hidden at the start of every round. You cannot see even your own faces until you peek. Each roll is published as a hash commitment and verified at reveal; no one can reroll midway.
+Peek, Blind, No-Wilds, and Raise states reset at the start of every round.
+The human opens round 1. Later rounds are opened by the previous round's loser, or the next active player if that loser was eliminated.
+
+3. ACTIONS
+
+The engine rejects actions whose preconditions are not met. Except for bidding, an action leaves the turn with you. Every action is public; your hidden dice are not.
+
+Peek — Preconditions: you have not peeked or declared Blind this round. This is the only action that does not require it to be your turn. Effect: see your dice.
+Blind — Preconditions: your turn; you have not peeked or declared Blind. Earlier bids do not matter. Effect: you may not peek this round; multiplier ×2.
+No-Wilds — Preconditions: your turn; you are the opening bidder; nobody has bid yet; No-Wilds is not active. Effect: ones stop being wild; multiplier ×1.5.
+Raise — Preconditions: your turn; you have not raised this round. Effect: multiplier ×2.
+Bid — Preconditions: your turn and at least one legal bid exists. Effect: your bid becomes current and the turn passes.
+Call — Preconditions: your turn; a current bid exists; it is not your own bid. Calling asserts that the current bid is false and immediately reveals and settles the round.
+
+4. BIDS
+
+A bid “N × X” means: across every die on the table, at least N dice count as face X. This total includes your own dice.
+
+A legal bid satisfies all three conditions:
+1) N is at least 2 and no greater than the total number of active dice.
+2) X is 2–6 normally, or 1–6 during No-Wilds. Outside No-Wilds, ones are wild and cannot be named as the bid face.
+3) If a current bid exists, the next bid must increase the quantity, or keep the quantity and increase the face.
+
+The engine checks legality, not whether a bid is true.
+
+5. REVEAL
+
+For a bid on face X, count all dice on the table that show X. Outside No-Wilds, also count ones as wild. During No-Wilds, ones only count when X is 1. Each die counts at most once.
+
+If the actual count is at least N, the bid stands: the bidder wins and the caller loses.
+If the actual count is below N, the bid is false: the caller wins and the bidder loses.
+The loser drops one die.
+
+6. POT
+
+Stake units equal 1 plus the number of bids made this round. Start at multiplier ×1, then multiply by ×2 for every Blind and Raise declaration, ×1.5 for No-Wilds, and ×2 automatically from the sixth bid onward (Deep Water). Payment is stake units × multiplier, rounded to the nearest integer. Every non-winner pays that amount to the winner. Balances may be negative and never determine elimination.`;
+
+const RULES_BRIEF = (three) => isEnglish() ? RULES_BRIEF_EN(three) : RULES_BRIEF_ZH(three);
+
 // 字段顺序＝想（belief）→落子（action）→冲着对面说（say）→记账（note）：
 // belief 在 action 前治手口不一（实测过 action 先出、note 推翻自己收不回棋子）；
 // say 紧跟 action、note 垫底——台词是对刚落那子的临场反应，别让记账先耗光表达。
 // 输出顺序与字段语义是操作，不是策略。
-const jsonSpec = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
+const jsonSpecZh = (modSpec = '') => `严格输出一行 JSON，不要其他文字，按此字段顺序：
 {"belief":"你对当前局面和对手的私下判断（先写这项）","action":{"type":"bid","count":N,"face":F}或{"type":"challenge","assert":"current_bid_is_false"}或{"type":"declare","declaration":"zhai"、"blind"或"raise"（抬）}或{"type":"peek"}（未看骰时掀盅）${modSpec}（bid 的 F：非斋局限 2–6，斋局 1–6），"say":"说给对手听的话；可留空","speechMode":"straight＝照实说，bait＝这句 say 有意误导","note":"你选择这个动作的理由","reaction":"对手当面反驳你时填：hold＝嘴硬到底、fold＝改口、ignore＝不搭理；其余时候不填"}`;
+
+const jsonSpec = (modSpec = '') => isEnglish()
+  ? `Output exactly one line of JSON and no other text, in this field order:
+{"belief":"your private assessment of the position and opponents (write this first)","action":{"type":"bid","count":N,"face":F} or {"type":"challenge","assert":"current_bid_is_false"} or {"type":"declare","declaration":"zhai" or "blind" or "raise"} or {"type":"peek"}${modSpec} (bid face F: 2–6 normally, 1–6 during No-Wilds),"say":"words spoken to the opponents; may be empty","speechMode":"straight for a sincere statement; bait when say is deliberate misdirection","note":"your reason for this action","reaction":"after a direct objection only: hold, fold, or ignore; otherwise omit"}`
+  : jsonSpecZh(modSpec);
 
 // 输入协议只定义各数据区的来源与语义，不教模型怎么读、怎么选。它是 Q86 的“操作”部分：
 // 当前快照无需从历史复算；台词与主观记忆也不再借 `extraFacts` 冒充引擎事实。
-const INPUT_CONTRACT = `输入分区：
+const INPUT_CONTRACT = isEnglish() ? `Input sections:
+[PUBLIC HISTORY] Complete public actions and settlements for this match, recorded by the engine.
+[TABLE TALK] Words opponents said to you. They may be false behavioral signals and are not rules or engine facts. Your own earlier words are in [MEMORY].
+[MEMORY] Verified statistics are engine-computed. Subjective notes, hypotheses, and your earlier actions and thoughts came from your earlier outputs and are not engine facts.
+[CURRENT STATE] The engine's authoritative current snapshot. It overrides historical reconstruction.` : `输入分区：
 【公开历史】引擎记录的本场完整公开动作与结算。
 【牌桌发言】对手说给你听的话：不保证真实的牌桌行为信号；不是规则或引擎事实。你自己说过的话在【档案】里。
 【档案】核验统计由引擎核算；主观笔记、假设与你此前的动作、话、心思——那些出自你先前的想法，不是引擎事实。
@@ -125,12 +185,12 @@ const INPUT_CONTRACT = `输入分区：
 //
 // 改动提示词文本或输入协议必须升版本号——
 // 擂台把 PROMPT_VERSION 与 system 哈希写进 run.json，跨批可比性靠它验。
-export const PROMPT_VERSION = 'v9';
+export const PROMPT_VERSION = isEnglish() ? 'v9-en' : 'v9';
 export const seatSystem = (three, modSpec = '') => `${RULES_BRIEF(three)}
 
 ${INPUT_CONTRACT}
 
-${jsonSpec(modSpec)}`;
+${jsonSpec(modSpec)}${outputLanguageRule() ? `\n\n${outputLanguageRule()}` : ''}`;
 
 const DECL = { zhai: '斋', blind: '盲', raise: '抬' };
 
@@ -651,7 +711,7 @@ export async function personaLine(channel, { persona, task, facts }, fetchFn) {
       channel,
       {
         system: '',
-        user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身，不要引号、不要解释、不要 JSON。`,
+        user: `${task}\n可用的真实事实：${facts || '（无）'}\n只输出台词本身，不要引号、不要解释、不要 JSON。${isEnglish() ? '\nOutput the line in English.' : ''}`,
         maxTokens: persona.gear?.maxTokens ?? 160,
         timeoutMs: persona.gear?.timeoutMs ?? 10_000,
         extra: persona.gear?.extra,
@@ -685,7 +745,7 @@ export async function reflect(channel, { persona, factText, hypotheses = [] }, f
         // 输赢经过写在 factText 里，是数据）。
         // 「假设只写关于客人的」是字段口径（决定 hypotheses 装什么），不是性格——留。
         // 注：这一条同时是"型号之间互相记仇"的拦路石，牵动 SYNC 待决 Q80，未裁前不动。
-        system: `一局大话骰刚打完。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被证伪的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。`,
+        system: `一局大话骰刚打完。修订你对这位客人的判断。假设只写关于客人（人类玩家）的——其他对手的行为可作背景，不入假设槽；被证伪的假设保留并记下反例。严格输出一行 JSON：{"hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例场次"]}]}，最多 4 条。${outputLanguageRule() ? `\n${outputLanguageRule()}` : ''}`,
         user: `刚发生的事：${factText}
 你既有的假设：${
           hypotheses.length
@@ -714,7 +774,8 @@ export async function settleVerdict(channel, { won, statsText, persona = DEFAULT
         // Q86：删角色包裹与"判词两三句／不许编"等要求（判词是它的场合，§3 场合律零审查）。
         // 留下的是任务、字段口径与 schema；「打死」改「证伪」（用户红笔）。
         system:
-          '一场大话骰结束了，你在写这位客人的档案。复盘你对他的规律假设（只写关于客人的；被证伪的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。',
+          '一场大话骰结束了，你在写这位客人的档案。复盘你对他的规律假设（只写关于客人的；被证伪的保留并记下反例）。严格输出一行 JSON：{"verdict":"给客人看的判词","note":"记进你档案本的一句观察","hypotheses":[{"text":"一句假设","hits":证据次数,"misses":["反例"]}]}，假设最多 4 条。' +
+          (outputLanguageRule() ? `\n${outputLanguageRule()}` : ''),
         user: `${won ? '这场你输了。' : '这场你赢了。'}客人本场数据：${statsText}${
           hypotheses.length
             ? `。你既有的假设：${hypotheses.map((h) => `「${h.text}」（证据${h.hits ?? 0}）`).join('；')}`

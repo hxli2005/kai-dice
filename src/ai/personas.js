@@ -11,8 +11,12 @@
 // **户头按型号记**（DESIGN §1.2）——这条宪法到 Q89 才真正做到：以前 seat1／seat2 钉同一个
 // 型号却各开一本账，本身就违反它。老档的合并迁移见 src/ui/profile.js。
 
+import { isEnglish } from '../ui/i18n.js';
+
 // 挂机提示（DESIGN §1.4：>30 秒，纯提示，无机制后果）。全席共用，无声口。
-export const IDLE_LINES = ['轮到你了。', '还在？', '该你出手了。'];
+export const IDLE_LINES = isEnglish()
+  ? ['Your move.', 'Still there?', 'Your move.']
+  : ['轮到你了。', '还在？', '该你出手了。'];
 
 // 托管席（零配置免费档）；服务端白名单须同名，见 infra/pages/_worker.js
 //
@@ -56,12 +60,16 @@ export function modelPersona(model, { hosted = false, official = false } = {}) {
     id: `model:${model}`, // 户头＝型号名：托管、暗号、自带钥匙用同一个型号时，本来就是同一个人
     name: model.slice(0, 24),
     seal: (model.replace(/[^a-zA-Z0-9]/g, '')[0] ?? '模').toUpperCase(),
-    tag: hosted ? '托管 · 一键可玩' : official ? '官方通道 · 需暗号' : '客席 · 自带钥匙',
-    blurb: hosted
-      ? `真身：${model}。这一席的账由官方通道出，你什么都不用配。`
+    tag: hosted
+      ? (isEnglish() ? 'HOSTED · PLAY NOW' : '托管 · 一键可玩')
       : official
-        ? `真身：${model}。走官方通道，需要暗号。`
-        : `真身：${model}。你的钥匙，浏览器直连，key 不出这台设备。`,
+        ? (isEnglish() ? 'OFFICIAL CHANNEL · CODE REQUIRED' : '官方通道 · 需暗号')
+        : (isEnglish() ? 'GUEST SEAT · BYOK' : '客席 · 自带钥匙'),
+    blurb: hosted
+      ? (isEnglish() ? `Model: ${model}. This hosted seat needs no setup.` : `真身：${model}。这一席的账由官方通道出，你什么都不用配。`)
+      : official
+        ? (isEnglish() ? `Model: ${model}. Uses the official channel and requires an access code.` : `真身：${model}。走官方通道，需要暗号。`)
+        : (isEnglish() ? `Model: ${model}. Uses your key in a direct browser connection; the key stays on this device.` : `真身：${model}。你的钥匙，浏览器直连，key 不出这台设备。`),
     bare: true,
     hosted,
     official: hosted || official,

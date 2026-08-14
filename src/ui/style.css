@@ -1657,6 +1657,9 @@ button.ghost {
   letter-spacing: 0.08em;
 }
 
+.lang-en #lobby .p-card.sel::after { content: "CONNECTED"; }
+.lang-en .card .verdict::before { content: var(--persona-verdict, 'VERDICT: '); }
+
 #lobby .p-card .seal {
   width: 2.5rem;
   height: 2.5rem;

@@ -41,6 +41,6 @@ test('大厅在旧样式前加载共享电子管令牌，离线壳同步升版',
   const worker = read('sw.js');
 
   assert.ok(html.indexOf('href="tokens.css"') < html.indexOf('href="src/ui/style.css"'));
-  assert.match(worker, /const CACHE = 'kai-shell-v11'/);
+  assert.match(worker, /const CACHE = 'kai-shell-v12'/);
   assert.match(worker, /'\.\/tokens\.css'/);
 });

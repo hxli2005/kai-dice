@@ -83,9 +83,9 @@ const rosterAll = () => {
 };
 const rosterMap = () => Object.fromEntries(rosterAll().map((p) => [p.id, p]));
 let SEAT_PERSONA = {}; // seat -> persona（newMatch 构建）
-let NAMES = { A: '客人' };
+let NAMES = { A: isEnglish() ? 'guest' : '客人' };
 const isTrio = () => seats.length > 2;
-const dispName = (s) => (s === 'A' ? '你' : NAMES[s]);
+const dispName = (s) => (s === 'A' ? (isEnglish() ? 'you' : '你') : NAMES[s]);
 // 桌型与阵容（选桌页写入；机位可增，缺位按序补齐）
 // F1（Q43②）：单挑是默认——1v1 读心核，三人桌是明确的副模式
 function loadTable() {
@@ -215,6 +215,7 @@ function speak(text, seat = 'B') {
   if (!text) return;
   tubeStage?.say(text, seat);
   const b = bubbleEl(seat);
+  b.setAttribute('data-raw', ''); // 真迹（DESIGN §3）：它自己的话，英文适配器不许碰
   b.classList.remove('hidden', 'silent');
   clearInterval(typeTimers[seat]);
   let i = 0;
@@ -396,7 +397,13 @@ function syncTubeHitLayer(view) {
   }
   set('tubeCountDownBtn', view.myTurn && view.legal.countDown);
   set('tubeCountUpBtn', view.myTurn && view.legal.countUp);
-  set('tubeBidBtn', view.myTurn && view.legal.bid, view.selectedBid ? `报 ${view.selectedBid.count} 个 ${view.selectedBid.face}` : '报数');
+  set(
+    'tubeBidBtn',
+    view.myTurn && view.legal.bid,
+    view.selectedBid
+      ? (isEnglish() ? `Bid ${view.selectedBid.count} × ${view.selectedBid.face}` : `报 ${view.selectedBid.count} 个 ${view.selectedBid.face}`)
+      : (isEnglish() ? 'Place bid' : '报数'),
+  );
   set('tubeOpenBtn', view.myTurn && view.legal.open);
   set('tubeBlindBtn', view.myTurn && view.legal.blind);
   set('tubeZhaiBtn', view.myTurn && view.legal.zhai);
@@ -655,7 +662,9 @@ async function onPeek() {
   myDiceByRound[o.round] = o.yourDice;
 }
 
-const stampText = (d) => (d === 'blind' ? '盲 ×2' : d === 'zhai' ? '斋 ×1.5' : '抬 ×2');
+const stampText = (d) => isEnglish()
+  ? (d === 'blind' ? 'BLIND ×2' : d === 'zhai' ? 'NO-WILDS ×1.5' : 'RAISE ×2')
+  : (d === 'blind' ? '盲 ×2' : d === 'zhai' ? '斋 ×1.5' : '抬 ×2');
 
 async function onDeclare(declaration) {
   await match.act('A', { type: 'declare', declaration }, { elapsedMs: performance.now() - turnStart });
@@ -1016,8 +1025,10 @@ async function presentShowdown(rv, re, by, sayText = '') {
   ov.classList.remove('hidden');
   // 摊牌行：其他人在上，你压轴
   const seatsIn = [...Object.keys(rv.dice).filter((s) => s !== 'A'), ...(rv.dice.A ? ['A'] : [])];
-  ov.innerHTML = `<div class="kai">${calza ? '掐！' : '开！'}</div>
-    <div class="row-label">${dispName(by)}拍了桌子，${calza ? `掐${dispName(rv.bid.player)} · 验「恰好 ${rv.bid.count} 个 ${rv.bid.face}」` : `开${dispName(rv.bid.player)} · 验「${rv.bid.count} 个 ${rv.bid.face}」`}</div>
+  ov.innerHTML = `<div class="kai">${isEnglish() ? (calza ? 'SPOT ON!' : 'CALL!') : (calza ? '掐！' : '开！')}</div>
+    <div class="row-label">${isEnglish()
+      ? `${dispName(by)} hit the table — ${calza ? `called Spot On against ${dispName(rv.bid.player)} · exactly ${rv.bid.count} × ${rv.bid.face}` : `called ${dispName(rv.bid.player)} · ${rv.bid.count} × ${rv.bid.face}`}`
+      : `${dispName(by)}拍了桌子，${calza ? `掐${dispName(rv.bid.player)} · 验「恰好 ${rv.bid.count} 个 ${rv.bid.face}」` : `开${dispName(rv.bid.player)} · 验「${rv.bid.count} 个 ${rv.bid.face}」`}`}</div>
     ${seatsIn
       .map(
         (s) =>
@@ -1053,14 +1064,24 @@ async function presentShowdown(rv, re, by, sayText = '') {
     }
   }
   await wsleep(350);
-  cnt.textContent = calza
-    ? `实有 ${rv.actual} 个 —— 掐「恰好 ${rv.bid.count}」，${rv.exact ? '掐中！' : '不恰'}`
-    : `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`;
-  ov.querySelector('#rvLine').innerHTML = calza
-    ? rv.exact
-      ? `${dispName(re.caller)}掐中——赢回一颗骰，收池`
-      : `${dispName(re.caller)}掐空，掉一颗骰`
-    : `${dispName(re.loser)}输了这局，掉一颗骰`;
+  cnt.textContent = isEnglish()
+    ? (calza
+        ? `Actual: ${rv.actual} — Spot On ${rv.bid.count}: ${rv.exact ? 'exact!' : 'not exact'}`
+        : `Actual: ${rv.actual} — bid ${rv.bid.count}: ${rv.stands ? 'stands' : 'false'}`)
+    : (calza
+        ? `实有 ${rv.actual} 个 —— 掐「恰好 ${rv.bid.count}」，${rv.exact ? '掐中！' : '不恰'}`
+        : `实有 ${rv.actual} 个 —— 报 ${rv.bid.count} 个，${rv.stands ? '成立' : '不成立'}`);
+  ov.querySelector('#rvLine').innerHTML = isEnglish()
+    ? (calza
+        ? rv.exact
+          ? `${dispName(re.caller)} hit Spot On — recovered one die and took the pot`
+          : `${dispName(re.caller)} missed Spot On and lost one die`
+        : `${dispName(re.loser)} lost the round and dropped one die`)
+    : (calza
+        ? rv.exact
+          ? `${dispName(re.caller)}掐中——赢回一颗骰，收池`
+          : `${dispName(re.caller)}掐空，掉一颗骰`
+        : `${dispName(re.loser)}输了这局，掉一颗骰`);
   sfx.verdict();
   if (calza && rv.exact) sfx.jackpot();
   if (sayText) speak(sayText, by !== 'A' ? by : 'B'); // 只有角色自己的话才上屏
@@ -1088,11 +1109,13 @@ function finishShowdown(re) {
 
 // 反思素材：本局公开事实一句话（骰面已摊牌公开，合宪）
 function roundFactText(rv, re, seat) {
-  const who = (p) => (p === seat ? '你' : p === 'A' ? '客人' : NAMES[p]);
+  const who = (p) => (p === seat ? (isEnglish() ? 'you' : '你') : p === 'A' ? (isEnglish() ? 'guest' : '客人') : NAMES[p]);
   const diceStr = Object.entries(rv.dice)
     .map(([q, d]) => `${who(q)}[${d.join(',')}]`)
-    .join('，');
-  return `第${re.round}局摊牌：${diceStr}。${who(rv.actor)}开${who(rv.target)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
+    .join(isEnglish() ? ', ' : '，');
+  return isEnglish()
+    ? `Round ${re.round} reveal: ${diceStr}. ${who(rv.actor)} called ${who(rv.target)}’s ${rv.bid.count} × ${rv.bid.face}; actual ${rv.actual}, so the bid ${rv.stands ? 'stood' : 'was false'}. ${who(re.loser)} lost and paid ${re.transfer}.`
+    : `第${re.round}局摊牌：${diceStr}。${who(rv.actor)}开${who(rv.target)}的「${rv.bid.count}个${rv.bid.face}」，实有${rv.actual}个，${rv.stands ? '成立' : '不成立'}——${who(re.loser)}输，付${re.transfer}注。`;
 }
 
 // 写死的结算话术已废（用户裁决"台词只能出自角色"）：AI 拍开时的台词来自它自己的决策；
@@ -1173,7 +1196,9 @@ async function showReport(end) {
 
   const ov = $('overlay');
   ov.classList.remove('hidden');
-  const renderCard = (verdict) => {
+  // raw=true 表示这段判词出自它自己（真迹，DESIGN §3：英文适配器不许改写）；
+  // 模板判词与"正在写"占位是我们的文案，照常本地化。
+  const renderCard = (verdict, raw = false) => {
     ov.innerHTML = `<div class="card fade-in">
       <h2>${sandbox ? '实验桌 · 沙盒对局' : `对局档案 · 第 ${profile.matches + 1} 场`}</h2>
       <div class="persona">${persona(stats)}</div>
@@ -1220,7 +1245,7 @@ async function showReport(end) {
         }</dd>
         <dt>平均思考</dt><dd>${(stats.avgTimeMs / 1000).toFixed(1)} 秒</dd>
       </dl>
-      <div class="verdict">${verdict}</div>
+      <div class="verdict"${raw ? ' data-raw' : ''}>${verdict}</div>
     </div>
     <div class="again-row">
       <button class="ghost" id="lobbyBtn">换桌</button>
@@ -1235,7 +1260,13 @@ async function showReport(end) {
     });
     ov.querySelector('#reviewBtn').addEventListener('click', () => openReview(o.events));
   };
-  renderCard(byok ? `${opponent.persona.name}在写你的档案……` : templateVerdict(stats, won));
+  renderCard(
+    byok
+      ? isEnglish()
+        ? `${opponent.persona.name} is writing your profile…`
+        : `${opponent.persona.name}在写你的档案……`
+      : templateVerdict(stats, won),
+  );
 
   let verdict = null;
   let note = '';
@@ -1253,7 +1284,7 @@ async function showReport(end) {
       // §3.3 触发②：场终全量复盘——修订后的规律假设入主观层（沙盒不喂）
       if (r.hypotheses && !sandbox) mergeHypotheses(mindB, r.hypotheses, profile.matches + 1);
     }
-    renderCard(verdict ?? templateVerdict(stats, won));
+    renderCard(verdict ?? templateVerdict(stats, won), !!verdict);
   }
   if (sandbox) return; // 沙盒到此为止：判词照说，档案一字不写
   // 每个在场 AI 把观察记进自己的本子（档案双层：主观层私有）＋本场的诈留档（F7）
@@ -1289,9 +1320,11 @@ function openReview(events) {
   const innerHtml = (r) => {
     if (!r.inner) return '<div class="tr-inner mine">（你的手，你自己知道）</div>';
     const bits = [];
-    if (r.inner.say) bits.push(`<b>说：</b>${r.inner.say}`);
-    if (r.inner.belief) bits.push(`<b>想：</b>${r.inner.belief}`);
-    else if (r.inner.note) bits.push(`<b>想：</b>${r.inner.note}`);
+    // 真迹（DESIGN §3）：say／belief／note 是它当时写下的，标签是我们的、内容不是
+    const raw = (s) => `<span data-raw>${s}</span>`;
+    if (r.inner.say) bits.push(`<b>说：</b>${raw(r.inner.say)}`);
+    if (r.inner.belief) bits.push(`<b>想：</b>${raw(r.inner.belief)}`);
+    else if (r.inner.note) bits.push(`<b>想：</b>${raw(r.inner.note)}`);
     if (r.inner.auto) bits.push('<i>（不用想：他不玩盲，上桌先掀盅）</i>');
     else if (r.inner.silent) bits.push('<i>（这一手没开口——通道断了，纯算数行棋）</i>');
     if (r.inner.reaction)
@@ -1330,7 +1363,7 @@ function openReview(events) {
   const lifeHtml = (per) => {
     const mind = mindOf(profile, per.id);
     const card = (h, dead) => `<div class="hyp-card${dead ? ' dead' : ''}">
-      <p class="hyp-text">「${h.text}」</p>
+      <p class="hyp-text" data-raw>「${h.text}」</p>
       <p class="hyp-life">立案：第 ${h.since ?? '?'} 场　证据 ${h.hits ?? 0}${
         h.misses?.length ? `　反例 ${h.misses.length}（${h.misses.join('、')}）` : ''
       }${dead ? `　<b>第 ${h.died} 场撤案</b>` : ''}</p>
@@ -1394,12 +1427,13 @@ const bookHtml = (per, extraBits = []) => {
   const hyps = (mind.hypotheses ?? [])
     .map(
       (h) =>
-        `<p class="hyp">「${h.text}」<span class="tally">${'✓'.repeat(Math.min(h.hits ?? 0, 5))}${
+        // 真迹（DESIGN §3）：假设与笔记是它写的字，✓✗ 计数是我们的
+        `<p class="hyp"><span data-raw>「${h.text}」</span><span class="tally">${'✓'.repeat(Math.min(h.hits ?? 0, 5))}${
           h.misses?.length ? ` <i>✗${h.misses.join(' ✗')}</i>` : ''
         }</span></p>`,
     )
     .join('');
-  const notes = mind.notes.slice(-4).map((n) => `<p class="note-item">${n}</p>`).join('');
+  const notes = mind.notes.slice(-4).map((n) => `<p class="note-item" data-raw>${n}</p>`).join('');
   return `<div class="book">
     <div class="book-head"><span class="seal mini">${per.seal}</span>${per.name}<span class="book-tag">${per.tag ?? ''}</span></div>
     ${dataBits.length ? `<p class="book-stats">${dataBits.join(' · ')}</p>` : ''}
@@ -1712,9 +1746,9 @@ function enterRoom({ roomId, hostKey = null }) {
   $('lobby').classList.add('hidden');
   seats = ['A', 'B', 'C'];
   const host = defaultAiPersona();
-  SEAT_PERSONA = { B: host, C: { seal: '客', name: '朋友' } };
-  NAMES = { A: '客人', B: host.name, C: '朋友' };
-  document.documentElement.style.setProperty('--persona-verdict', `'${host.name} 批：'`);
+  SEAT_PERSONA = { B: host, C: { seal: isEnglish() ? 'G' : '客', name: isEnglish() ? 'Friend' : '朋友' } };
+  NAMES = { A: isEnglish() ? 'guest' : '客人', B: host.name, C: isEnglish() ? 'Friend' : '朋友' };
+  document.documentElement.style.setProperty('--persona-verdict', `'${host.name} ${isEnglish() ? 'VERDICT:' : '批：'}'`);
   myDiceByRound = {};
   sel = null;
   busy = false;
@@ -2009,10 +2043,12 @@ function tryShowRoomReport() {
     <table class="stat-table duel"><tr><th></th><th>你「${me.seal}」</th><th>「${fr.seal}」</th></tr>
       ${rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}
     </table>
-    ${me.insight ? `<p class="insight">你的破绽：${me.insight}</p>` : ''}
-    ${fr.insight ? `<p class="insight">「${fr.seal}」的破绽：${fr.insight}</p>` : ''}
-    <p class="book-stats">一号机身家 ${m.ai.chips}</p>
-    ${m.verdict ? `<div class="verdict">${m.verdict}</div>` : ''}
+    ${/* 房间的破绽句由房服务端算好送来（room.js 跑在 Worker 里，只出中文），
+          客户端没法再本地化——整段标 data-raw，宁可原样中文，也别被子串替换啃成半截 */ ''}
+    ${me.insight ? `<p class="insight">${isEnglish() ? 'Your tell: ' : '你的破绽：'}<span data-raw>${me.insight}</span></p>` : ''}
+    ${fr.insight ? `<p class="insight">「${fr.seal}」${isEnglish() ? ' tell: ' : '的破绽：'}<span data-raw>${fr.insight}</span></p>` : ''}
+    <p class="book-stats">${isEnglish() ? 'Host balance' : '一号机身家'} ${m.ai.chips}</p>
+    ${m.verdict ? `<div class="verdict" data-raw>${m.verdict}</div>` : ''}
   </div>
   <div class="again-row">
     <button class="ghost" id="roomLeaveBtn">散伙</button>
@@ -2184,7 +2220,7 @@ function showLobby() {
   const rateOf = (wins, plays) => (plays ? `${Math.round((wins / plays) * 100)}%` : '—');
   const boardHtml = () => {
     const rows = [
-      { id: 'you', seal: '客', name: '你', bal: led.you, rate: rateOf(profile.wins, profile.matches), plays: profile.matches },
+      { id: 'you', seal: isEnglish() ? 'U' : '客', name: isEnglish() ? 'You' : '你', bal: led.you, rate: rateOf(profile.wins, profile.matches), plays: profile.matches },
       ...rosterAll().map((per) => {
         const rec = mindOf(profile, per.id).record;
         return { id: per.id, seal: per.seal, name: per.name, bal: balanceOf(led, per.id), rate: rateOf(rec.wins, rec.plays), plays: rec.plays };
@@ -2442,7 +2478,7 @@ async function newMatch() {
   tubeStage?.setThinking(false);
   tubeStage?.setActive(!isTrio());
   SEAT_PERSONA = {};
-  NAMES = { A: '客人' };
+  NAMES = { A: isEnglish() ? 'guest' : '客人' };
   const startChips = { A: ledger.you };
   const ros = rosterMap();
   lineup.forEach((pid, i) => {
@@ -2469,7 +2505,10 @@ async function newMatch() {
     });
   }
   opponent = opponents.B; // B 席＝主家：开场白与判词主笔（谁坐主位谁执笔）
-  document.documentElement.style.setProperty('--persona-verdict', `'${SEAT_PERSONA.B.name.replace(/['"\\]/g, '')}批：'`);
+  document.documentElement.style.setProperty(
+    '--persona-verdict',
+    `'${SEAT_PERSONA.B.name.replace(/['"\\]/g, '')}${isEnglish() ? ' VERDICT: ' : '批：'}'`,
+  );
   buildOppArea();
   buildModRow();
   buildPokeUI();

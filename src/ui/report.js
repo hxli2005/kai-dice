@@ -2,6 +2,7 @@
 // 统计口径（附:待定参数表）：虚报＝报数时刻 P(为真|自见骰面)<50%。
 
 import { probBidTrue } from '../probability.js';
+import { isEnglish } from './i18n.js';
 
 // 从摊牌事件回溯某席位每局骰面（公开信息）——行为统计复算的输入；
 // UI 侧给 AI 席用，好友房服务端给双人对比卡用
@@ -191,6 +192,26 @@ export function condBrief(st) {
   const c = st.conditional;
   if (!c) return '';
   const bits = [];
+  if (isEnglish()) {
+    if (c.afterLossBluffRate != null && st.bluffRate != null) {
+      const d = c.afterLossBluffRate - st.bluffRate;
+      if (d > 0.2) bits.push(`Bluffs rise sharply after a loss (${Math.round(st.bluffRate * 100)}%→${Math.round(c.afterLossBluffRate * 100)}%)`);
+      else if (d < -0.2) bits.push(`Becomes much more honest after a loss (${Math.round(st.bluffRate * 100)}%→${Math.round(c.afterLossBluffRate * 100)}%)`);
+    }
+    if (c.bigPotOpenRate != null && c.smallPotOpenRate != null && c.smallPotOpenRate > 0) {
+      if (c.bigPotOpenRate < c.smallPotOpenRate * 0.5) bits.push('Calls less than half as often in big pots');
+      else if (c.bigPotOpenRate > c.smallPotOpenRate * 1.8) bits.push('Calls much more often as the pot grows');
+    }
+    if (c.postChalFirstP != null && c.baseFirstP != null && c.postChalFirstP - c.baseFirstP > 0.18)
+      bits.push('Opening bids shrink noticeably after being called');
+    if (st.myKnowingBluffs >= 2)
+      bits.push(`${st.myKnowingBluffs} bids were made after peeking even though they were extremely unlikely to stand${st.knowingWildest ? ` (wildest: round ${st.knowingWildest.round}, ${st.knowingWildest.bid.count} × ${st.knowingWildest.bid.face})` : ''}`);
+    else if (st.myThinBluffs >= 3 && st.myKnowingBluffs === 0)
+      bits.push(`${st.myThinBluffs} failed bids were all marginal, suggesting miscalculation rather than deliberate deception`);
+    if (st.blindBids >= 2)
+      bits.push(`${st.blindBids} bids were made without seeing the dice${st.blindWildest ? ` (wildest: round ${st.blindWildest.round}, ${st.blindWildest.bid.count} × ${st.blindWildest.bid.face})` : ''}`);
+    return bits.join('; ');
+  }
   if (c.afterLossBluffRate != null && st.bluffRate != null) {
     const d = c.afterLossBluffRate - st.bluffRate;
     if (d > 0.2) bits.push(`输过一局后虚报明显变多（${Math.round(st.bluffRate * 100)}%→${Math.round(c.afterLossBluffRate * 100)}%，上头型）`);
@@ -299,6 +320,16 @@ export function reviewTracks(events, { logsBySeat = {}, nameOf = (s) => s, you =
 
 function publicText(e, nameOf) {
   const who = nameOf(e.actor);
+  if (isEnglish()) {
+    switch (e.type) {
+      case 'peek': return `${who} peeked at their dice`;
+      case 'bid': return `${who} bid ${e.count} × ${e.face}`;
+      case 'declare': return `${who} declared ${{ zhai: 'No-Wilds', blind: 'Blind', raise: 'Raise' }[e.declaration] ?? e.declaration}`;
+      case 'challenge': return `${who} called ${nameOf(e.target)}’s bid`;
+      case 'modAction': return `${who} used a mod${e.face ? ` · revealed ${e.face}` : ''}`;
+      default: return who;
+    }
+  }
   switch (e.type) {
     case 'peek':
       return `${who}掀盅看骰`;
@@ -319,20 +350,22 @@ function publicText(e, nameOf) {
 export function bigPotBrief(st) {
   const top = (st.bigPots ?? []).reduce((a, b) => (!a || b.mult > a.mult ? b : a), null);
   if (!top) return '';
-  return `第 ${top.round} 局那个 ×${top.mult} 的池：他${top.won ? `收走了 ${top.transfer}` : `赔了 ${top.transfer}`}`;
+  return isEnglish()
+    ? `Round ${top.round}, pot ×${top.mult}: ${top.won ? `took ${top.transfer}` : `paid ${top.transfer}`}`
+    : `第 ${top.round} 局那个 ×${top.mult} 的池：他${top.won ? `收走了 ${top.transfer}` : `赔了 ${top.transfer}`}`;
 }
 
 // 酒桌人格（§5.2，附:待定参数表）：按序优先匹配
 // F0c：宣言「盲」与"事实上没看骰"是两件事——前者是盲侠（下了注的），后者是蒙眼虎（连注都不下就敢喊）。
 // 「老实人」必须以看过骰为前提：闭着眼报到天上，不叫老实。
 export function persona(st) {
-  if (st.myBlinds >= 2) return '盲侠';
-  if (st.blindBids >= 3 && st.blindBidRate > 0.5) return '蒙眼虎';
-  if (st.bluffRate > 0.5) return '赌徒';
-  if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3) return '老实人';
-  if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3) return '缩头鹌鹑';
-  if (st.hitRate >= 0.7 && st.avgTimeMs > 8000) return '会计';
-  return '半张脸';
+  if (st.myBlinds >= 2) return isEnglish() ? 'Blind Rider' : '盲侠';
+  if (st.blindBids >= 3 && st.blindBidRate > 0.5) return isEnglish() ? 'Eyes-Closed Tiger' : '蒙眼虎';
+  if (st.bluffRate > 0.5) return isEnglish() ? 'Gambler' : '赌徒';
+  if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3) return isEnglish() ? 'Straight Shooter' : '老实人';
+  if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3) return isEnglish() ? 'Turtle' : '缩头鹌鹑';
+  if (st.hitRate >= 0.7 && st.avgTimeMs > 8000) return isEnglish() ? 'Accountant' : '会计';
+  return isEnglish() ? 'Poker Face' : '半张脸';
 }
 
 // 模板判词（无 LLM 通道时的降级；引用具体局面，素材来自真实事件流）
@@ -341,6 +374,31 @@ export function templateVerdict(st, won) {
   const r = (x) => Math.round(x * 100);
   const c = st.conditional ?? {};
   const bits = [];
+  if (isEnglish()) {
+    if (c.afterLossBluffRate != null && c.afterLossBluffRate - st.bluffRate > 0.2)
+      bits.push(`After a loss your bluff rate jumps from ${r(st.bluffRate)}% to ${r(c.afterLossBluffRate)}%`);
+    else if (c.afterLossBluffRate != null && st.bluffRate - c.afterLossBluffRate > 0.2)
+      bits.push(`After a loss your bluff rate falls from ${r(st.bluffRate)}% to ${r(c.afterLossBluffRate)}%`);
+    if (c.bigPotOpenRate != null && c.smallPotOpenRate > 0 && c.bigPotOpenRate < c.smallPotOpenRate * 0.5)
+      bits.push('You call small pots and swallow the big ones');
+    if (st.blindBids >= 2 && st.blindWildest)
+      bits.push(`${st.blindBids} bids were made without looking — including round ${st.blindWildest.round}, ${st.blindWildest.bid.count} × ${st.blindWildest.bid.face}`);
+    if (st.myKnowingBluffs >= 2 && st.knowingWildest)
+      bits.push(`You had seen your dice in round ${st.knowingWildest.round} and still pushed ${st.knowingWildest.bid.count} × ${st.knowingWildest.bid.face}`);
+    else if (st.bluffRate > 0.5 && st.myKnowingBluffs === 0)
+      bits.push('More than half your seen-dice bids failed, but they were all marginal — that looks like miscalculation, not deliberate deception');
+    else if (st.bluffRate < 0.15 && (st.seenBids ?? st.myBids) >= 3)
+      bits.push('Once you see your dice, you almost never bluff');
+    if (st.myChallenges > 0 && st.hitRate < 0.34)
+      bits.push(`You called ${st.myChallenges} times and missed ${st.myChallenges - st.myChallengeHits}`);
+    if (st.myChallenges === 0 && (st.roundsAlive ?? st.rounds) >= 3)
+      bits.push('You never called once');
+    if (bigPotBrief(st)) bits.push(bigPotBrief(st));
+    if (st.slowest && st.slowest.ms > 8000)
+      bits.push(`You paused a long time before bidding ${st.slowest.bid.count} × ${st.slowest.bid.face} in round ${st.slowest.round}`);
+    bits.push(won ? 'You take this match; the ledger is longer than one result' : 'Dice do not lie, but you can');
+    return bits.slice(0, 3).join('. ') + '.';
+  }
   if (c.afterLossBluffRate != null && c.afterLossBluffRate - st.bluffRate > 0.2)
     bits.push(`一输你就浮——虚报${r(st.bluffRate)}%变${r(c.afterLossBluffRate)}%，脾气全写在报价里`);
   else if (c.afterLossBluffRate != null && st.bluffRate - c.afterLossBluffRate > 0.2)

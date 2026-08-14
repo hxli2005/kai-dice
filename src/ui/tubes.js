@@ -3,6 +3,9 @@
 // 规则事实只从 observe() 的快照进入；本模块不拥有、不推断、也不修改任何引擎状态。
 
 import { allLegalBids } from '../rules.js';
+import { isEnglish } from './i18n.js';
+
+const L = (zh, en) => (isEnglish() ? en : zh);
 
 const W = 195;
 const H = 422;
@@ -72,7 +75,7 @@ function tracePoint(trace, progress) {
 const nowMs = () => performance.now();
 
 export function toTubeView(o, {
-  opponentName = '它',
+  opponentName = L('它', 'AI'),
   selectedBid = null,
   busy = false,
   connected = null,
@@ -242,7 +245,7 @@ export function createTubeStage(canvas, handlers = {}) {
   function say(text, seat = 'B') {
     if (!text || seat !== 'B') return;
     speech = { full: text, shown: '', n: 0, acc: 0, doneAt: 0 };
-    announce(`${view?.opponentName ?? '它'}：${text}`);
+    announce(`${view?.opponentName ?? L('它', 'AI')}: ${text}`);
   }
 
   // 真流式管线的接点：上游逐 token 调用；现有非流式通道仍可调用 say()。
@@ -292,7 +295,11 @@ export function createTubeStage(canvas, handlers = {}) {
       bidPop = 1;
       ledHitAt = time;
     }
-    const label = newBid ? `${newBid.player === 'A' ? '你' : next.opponentName}报 ${newBid.count} 个 ${newBid.face}` : `第 ${next.round} 局`;
+    const label = newBid
+      ? (isEnglish()
+          ? `${newBid.player === 'A' ? 'You' : next.opponentName} bids ${newBid.count} × ${newBid.face}`
+          : `${newBid.player === 'A' ? '你' : next.opponentName}报 ${newBid.count} 个 ${newBid.face}`)
+      : (isEnglish() ? `Round ${next.round}` : `第 ${next.round} 局`);
     announce(label);
   }
 
@@ -389,15 +396,19 @@ export function createTubeStage(canvas, handlers = {}) {
     }
     const success = rv.calza ? !!rv.exact : !!rv.stands;
     const actual = reveal.countN;
-    const winnerTag = re.winner === 'A' ? '你' : '它';
-    const loserTag = re.loser === 'A' ? '你' : '它';
+    const winnerTag = re.winner === 'A' ? L('你', 'you') : L('它', 'the AI');
+    const loserTag = re.loser === 'A' ? L('你', 'you') : L('它', 'the AI');
     verdict = {
-      title: rv.calza ? (rv.exact ? '掐  中' : '掐  空') : success ? '成  立' : '不 成 立',
+      title: rv.calza
+        ? (rv.exact ? L('掐  中', 'CALZA') : L('掐  空', 'MISSED'))
+        : success ? L('成  立', 'STANDS') : L('不 成 立', 'FALSE'),
       relation: `${actual} ${rv.calza ? (rv.exact ? '=' : '≠') : success ? '≥' : '<'} ${rv.bid.count}`,
     };
     judLed = 1;
     judHitAt = time;
-    announce(`${verdict.title}：实中 ${actual}，${rv.calza ? `掐 ${rv.bid.count}` : `报价 ${rv.bid.count}`}；${loserTag}输，托管池 ${Math.round(displayPot)} 全部归${winnerTag}`);
+    announce(isEnglish()
+      ? `${verdict.title}: actual ${actual}; ${rv.calza ? `calza ${rv.bid.count}` : `bid ${rv.bid.count}`}. ${loserTag} lose; ${winnerTag} take the ${Math.round(displayPot)} pot.`
+      : `${verdict.title}：实中 ${actual}，${rv.calza ? `掐 ${rv.bid.count}` : `报价 ${rv.bid.count}`}；${loserTag}输，托管池 ${Math.round(displayPot)} 全部归${winnerTag}`);
     flash = Math.max(flash, 0.25);
     if (!reduced) {
       shakeX = 3;
@@ -565,7 +576,7 @@ export function createTubeStage(canvas, handlers = {}) {
 
   function drawRoundCounter(pal, tube) {
     const y = tube.h - 16;
-    tx('局', 6, y - 1, 9, pal.mid, { bold: true });
+    tx(L('局', 'R'), 6, y - 1, 9, pal.mid, { bold: true });
     // 桌面机械计数器：三枚滚轮中末轮缓慢咬合，替代“计数器在桌”。
     ctx.strokeStyle = pal.lo;
     ctx.strokeRect(23.5, y - 1.5, 31, 12);
@@ -586,7 +597,7 @@ export function createTubeStage(canvas, handlers = {}) {
     ctx.lineTo(tube.w / 2 + 29, y + 17.5);
     ctx.stroke();
     tx(sel.count, tube.w / 2 - 20, y, 16, pal.hot, { bold: true, mono: true, align: 'center' });
-    tx('个', tube.w / 2 - 5, y + 7, 8, pal.mid, { bold: true, align: 'center' });
+    tx(L('个', '×'), tube.w / 2 - 5, y + 7, 8, pal.mid, { bold: true, align: 'center' });
     drawDie(tube.w / 2 + 7, y, 18, sel.face, pal);
     ctx.restore();
   }
@@ -731,14 +742,14 @@ export function createTubeStage(canvas, handlers = {}) {
   }
 
   function drawUpper(pal, tube) {
-    const opponentLabel = [...(view?.opponentName ?? '它')].length > 12
-      ? `${[...(view?.opponentName ?? '它')].slice(0, 12).join('')}…`
-      : view?.opponentName ?? '它';
+    const opponentLabel = [...(view?.opponentName ?? L('它', 'AI'))].length > 12
+      ? `${[...(view?.opponentName ?? L('它', 'AI'))].slice(0, 12).join('')}…`
+      : view?.opponentName ?? L('它', 'AI');
     tx(opponentLabel, 6, 5, 10, pal.mid, { bold: true });
     drawChipDock(tube.w - 52, 18, displayStacks.up, pal, potPop);
     ctx.fillStyle = view?.connected === false ? pal.lo : pal.hot;
     ctx.fillRect(tube.w - 30, 8, 3, 3);
-    tx(thinking ? '在动' : '在看', tube.w - 24, 6, 8, thinking ? pal.hot : pal.mid, { mono: true });
+    tx(thinking ? L('在动', 'ACT') : L('在看', 'WATCH'), tube.w - 24, 6, 8, thinking ? pal.hot : pal.mid, { mono: true });
     drawWave(pal);
     const count = reveal ? reveal.upper.length : view?.oppDiceCount ?? 0;
     for (let i = 0; i < count; i++) {
@@ -759,7 +770,7 @@ export function createTubeStage(canvas, handlers = {}) {
     }
     ctx.strokeStyle = pal.lo;
     ctx.strokeRect(5.5, 86.5, 29, 11);
-    tx('AI生成', 8, 89, 7, pal.mid, { mono: true });
+    tx(L('AI生成', 'AI TEXT'), 8, 89, 7, pal.mid, { mono: true });
     const page = terminalPage();
     page.lines.forEach((line, i) => tx(`${page.start + i === 0 ? '> ' : '  '}${line}${page.typing && i === page.lines.length - 1 && ((time / 450) | 0) % 2 ? '▌' : ''}`,
       38, 85 + i * 9, 8, pal.hot, { mono: true }));
@@ -768,8 +779,8 @@ export function createTubeStage(canvas, handlers = {}) {
 
   function drawCenter(pal, tube) {
     const bid = reveal?.rv.bid ?? view?.currentBid;
-    const bidder = bid?.player === 'A' ? '你' : [...(view?.opponentName ?? '它')].slice(0, 10).join('');
-    tx(verdict ? '· 判 定 ·' : reveal ? '· 点 清 ·' : bid ? `· ${bidder} 报 ·` : '· 待 报 ·',
+    const bidder = bid?.player === 'A' ? L('你', 'YOU') : [...(view?.opponentName ?? L('它', 'AI'))].slice(0, 10).join('');
+    tx(verdict ? L('· 判 定 ·', '· RULING ·') : reveal ? L('· 点 清 ·', '· COUNT ·') : bid ? (isEnglish() ? `· ${bidder} BID ·` : `· ${bidder} 报 ·`) : L('· 待 报 ·', '· AWAIT BID ·'),
       tube.w / 2, 6, 8, pal.lo, { mono: true, align: 'center' });
     if (bid && !reveal) {
       const scale = 1 + bidPop * 0.18;
@@ -777,7 +788,7 @@ export function createTubeStage(canvas, handlers = {}) {
       ctx.translate(tube.w / 2, 29);
       ctx.scale(scale, scale);
       tx(bid.count, -24, -14, 30, pal.hot, { bold: true, align: 'center' });
-      tx('个', 0, -1, 11, pal.mid, { bold: true, align: 'center' });
+      tx(L('个', '×'), 0, -1, 11, pal.mid, { bold: true, align: 'center' });
       tx(bid.face, 24, -14, 30, pal.hot, { bold: true, align: 'center' });
       ctx.restore();
     }
@@ -809,7 +820,7 @@ export function createTubeStage(canvas, handlers = {}) {
       drawDie(10 + i * 36, 28, 30, face, pal, hit, !faces);
     }
     if (!faces && view?.legal.peek) {
-      tx('触摸骰仓看骰', tube.w / 2, 61, 7, pal.mid, { mono: true, align: 'center' });
+      tx(L('触摸骰仓看骰', 'TAP DICE BAY TO PEEK'), tube.w / 2, 61, isEnglish() ? 5.2 : 7, pal.mid, { mono: true, align: 'center' });
       addButton('peek', TUBES.c.x + 6, TUBES.c.y + 22, TUBES.c.w - 12, 47, '', true);
     }
 
@@ -860,9 +871,9 @@ export function createTubeStage(canvas, handlers = {}) {
       const x = ledX(Math.min(9, fuse - 1)) + 5;
       shellBurst(x, LED.y + 9, fuse > 5 ? 2 : 1, fuse > 5 ? CH.red : CH.amber);
     }
-    tx('阶梯', LED.x + 4, LED.y + 2, 5.5, '#858e9b', { mono: true });
-    tx(fuse > 5 ? `深水×${view?.potMult ?? 2}` : '深水', LED.x + 76, LED.y + 2, 5.5, fuse > 5 ? '#e87855' : '#8a665f', { mono: true });
-    tx('判定', LED.x + 149, LED.y + 2, 5.5, judLed ? '#e87855' : '#858e9b', { mono: true });
+    tx(L('阶梯', 'LADDER'), LED.x + 4, LED.y + 2, isEnglish() ? 4.4 : 5.5, '#858e9b', { mono: true });
+    tx(fuse > 5 ? (isEnglish() ? `DEEP×${view?.potMult ?? 2}` : `深水×${view?.potMult ?? 2}`) : L('深水', 'DEEP'), LED.x + 76, LED.y + 2, isEnglish() ? 4.5 : 5.5, fuse > 5 ? '#e87855' : '#8a665f', { mono: true });
+    tx(L('判定', 'RULING'), LED.x + 149, LED.y + 2, isEnglish() ? 4.2 : 5.5, judLed ? '#e87855' : '#858e9b', { mono: true });
     const judPulse = judLed ? Math.max(0.35, Math.max(0, 1 - (time - judHitAt) / 600)) : 0;
     if (judPulse) {
       ctx.globalAlpha = 0.24 * judPulse;
@@ -937,7 +948,7 @@ export function createTubeStage(canvas, handlers = {}) {
       tx(message, x + 50.5, y + 7, 6.5, '#89919d', { mono: true, align: 'center' });
       return;
     }
-    tx('数量', x + 50.5, y + 8, 7, '#747d89', { mono: true, align: 'center' });
+    tx(L('数量', 'COUNT'), x + 50.5, y + 8, 7, '#747d89', { mono: true, align: 'center' });
   }
 
   function drawControls() {
@@ -953,12 +964,12 @@ export function createTubeStage(canvas, handlers = {}) {
     }
 
     if (pokeMenu) {
-      const labels = ['你记错了', '你在演', '慢着'];
+      const labels = isEnglish() ? ['Wrong', 'Bluffing', 'Hold on'] : ['你记错了', '你在演', '慢着'];
       labels.forEach((label, i) => addButton(`poke:${label}`, 9 + i * 59, COUNT_KEY_Y, 55, 22, label, !!canAct, 'dark', 6.5));
     } else if (moreMenu && view?.modActions?.length) {
       const items = [
         ...view.modActions.slice(0, 3).map((mod) => ({ id: `mod:${mod.type}`, label: mod.label, enabled: !!canAct })),
-        { id: 'poke', label: '戳', enabled: !!canAct },
+        { id: 'poke', label: L('戳', 'POKE'), enabled: !!canAct },
       ];
       items.forEach((item, i) => addButton(item.id, 8 + i * 45, COUNT_KEY_Y, 42, 22, item.label, item.enabled, 'dark', 6.5));
     } else {
@@ -973,19 +984,19 @@ export function createTubeStage(canvas, handlers = {}) {
       ctx.setLineDash([3, 3]);
       ctx.strokeRect(8.5, KEY_Y + 0.5, 178, 29);
       ctx.setLineDash([]);
-      tx('演出中 · 触摸加速', W / 2, KEY_Y + 13, 8, '#606873', { mono: true, align: 'center' });
+      tx(L('演出中 · 触摸加速', 'SEQUENCE · TAP TO SKIP'), W / 2, KEY_Y + 13, isEnglish() ? 6 : 8, '#606873', { mono: true, align: 'center' });
     } else {
-      addButton('bid', 8, KEY_Y, 86, 30, '报', !!(canAct && view?.legal.bid), 'light', 15);
-      addButton('open', 100, KEY_Y, 87, 30, '开', !!(canAct && view?.legal.open), 'red', 15);
+      addButton('bid', 8, KEY_Y, 86, 30, L('报', 'BID'), !!(canAct && view?.legal.bid), 'light', isEnglish() ? 11 : 15);
+      addButton('open', 100, KEY_Y, 87, 30, L('开', 'CALL'), !!(canAct && view?.legal.open), 'red', isEnglish() ? 11 : 15);
     }
     const hasMods = !!view?.modActions?.length;
     const declarations = [
-      ['blind', '盲', !!view?.legal.blind],
-      ['zhai', '斋', !!view?.legal.zhai],
-      ['raise', '抬', !!view?.legal.raise],
-      [hasMods ? 'more' : 'poke', hasMods ? '扩' : '戳', true],
+      ['blind', L('盲', 'BLIND'), !!view?.legal.blind],
+      ['zhai', L('斋', 'NO-WILD'), !!view?.legal.zhai],
+      ['raise', L('抬', 'RAISE'), !!view?.legal.raise],
+      [hasMods ? 'more' : 'poke', hasMods ? L('扩', 'MORE') : L('戳', 'POKE'), true],
     ];
-    declarations.forEach(([id, label, enabled], i) => addButton(id, 8 + i * 46, KEY_Y + 34, 42, 20, label, !!(canAct && enabled), 'dark', 10));
+    declarations.forEach(([id, label, enabled], i) => addButton(id, 8 + i * 46, KEY_Y + 34, 42, 20, label, !!(canAct && enabled), 'dark', isEnglish() ? 6.5 : 10));
     for (const button of buttons) if (button.id !== 'peek') bevel(button);
   }
 
@@ -1074,9 +1085,9 @@ export function createTubeStage(canvas, handlers = {}) {
     if (phase === 'boot') {
       for (const [key, index] of [['a', 0], ['b', 1], ['c', 2]]) drawTube(key, index, () => {});
       drawLedBar();
-      tx('开！', W / 2, H / 2 - 26, 28, '#fff', { bold: true, align: 'center' });
-      tx('三 管 机 · 正 在 通 电', W / 2, H / 2 + 8, 7, '#8c949f', { mono: true, align: 'center' });
-      tx('触 摸 跳 过', W / 2, H / 2 + 24, 6, '#535a65', { mono: true, align: 'center' });
+      tx(L('开！', 'KAI!'), W / 2, H / 2 - 26, 28, '#fff', { bold: true, align: 'center' });
+      tx(L('三 管 机 · 正 在 通 电', 'THREE-TUBE TABLE · POWER ON'), W / 2, H / 2 + 8, isEnglish() ? 5.5 : 7, '#8c949f', { mono: true, align: 'center' });
+      tx(L('触 摸 跳 过', 'TAP TO SKIP'), W / 2, H / 2 + 24, 6, '#535a65', { mono: true, align: 'center' });
       return;
     }
 
@@ -1227,7 +1238,7 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
     return [((event.clientX - box.left) / box.width) * W, ((event.clientY - box.top) / box.height) * H];
   }
 
-  function denyButton(id, message = '现在不能用') {
+  function denyButton(id, message = L('现在不能用', 'NOT AVAILABLE')) {
     deny = { id, message, at: time };
     handlers.sfx?.deny?.();
     navigator.vibrate?.(24);
@@ -1340,9 +1351,9 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
         ctx = main2d;
         ctx.fillStyle = CH.chassis;
         ctx.fillRect(0, 0, W, H);
-        tx('显示已降级', W / 2, H / 2 - 10, 11, CH.key, { bold: true, align: 'center' });
-        tx('规则与操作仍可继续', W / 2, H / 2 + 10, 7, '#7b838f', { mono: true, align: 'center' });
-        announce(`显示已降级：${error?.message ?? '未知错误'}`);
+        tx(L('显示已降级', 'DISPLAY FALLBACK'), W / 2, H / 2 - 10, isEnglish() ? 9 : 11, CH.key, { bold: true, align: 'center' });
+        tx(L('规则与操作仍可继续', 'RULES AND CONTROLS STILL WORK'), W / 2, H / 2 + 10, isEnglish() ? 5.2 : 7, '#7b838f', { mono: true, align: 'center' });
+        announce(isEnglish() ? `Display fallback: ${error?.message ?? 'unknown error'}` : `显示已降级：${error?.message ?? '未知错误'}`);
         present();
       }
     }
