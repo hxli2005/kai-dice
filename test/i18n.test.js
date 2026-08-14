@@ -44,6 +44,39 @@ test('每个渲染模型文字的地方都打了 data-raw', () => {
   assert.match(html, /id="tubeA11y"[^>]*data-raw/);
 });
 
+// PHRASES 是顺序子串替换：短片段会排在长片段前面，把后者的机会吃掉，
+// 还会啃穿本来不该动的句子。`['改','EDIT']` 就这么把「点此改为公开」变成
+// 「点此EDIT为公开」，并让两条完整句子的替换永远命中不了。
+test('短片段不许进 PHRASES（子串替换会啃穿句子）', () => {
+  const i18n = fs.readFileSync(new URL('../src/ui/i18n.js', import.meta.url), 'utf8');
+  const body = i18n.slice(i18n.indexOf('const PHRASES'), i18n.indexOf('const DYNAMIC'));
+  const keys = [...body.matchAll(/^\s*\['([^']+)',/gm)].map((m) => m[1]);
+  assert.ok(keys.length > 50, '没抽到 PHRASES 键，测试本身失效了');
+  // 守的是**裸单字**：没有空格之类的分隔符兜着，它能匹配到任何位置，`改` 就是这么闯的祸。
+  // 带分隔的片段（` 口`／` 秒`／` 场 `）危险性低一档，且模型留档那边已由 data-raw 兜底，
+  // 但它们仍会啃我们自己的拼接文案——那批的正解是改走 isEnglish() 分支，已记 Q105。
+  const bareSingles = keys.filter((k) => k === k.trim() && k.length < 2);
+  assert.deepEqual(bareSingles, [], `裸单字片段会啃穿别的句子：${bareSingles.join('／')}`);
+});
+
+test('界面文案整句翻译，不留半截', () => {
+  assert.equal(
+    translateUiText('翻小本子这件事：他知道（点此改为不告诉他）', 'en'),
+    'Opening the notebook: the AI knows (click to make it private)',
+  );
+  assert.equal(translateUiText('被戳 3 次 · 嘴硬 2 改口 1', 'en'), 'POKED 3 TIMES · HELD 2 FOLDED 1');
+  assert.equal(translateUiText('改天再说', 'en'), '改天再说'); // 不是界面文案的中文，一个字都不许动
+});
+
+test('字体不得阻塞渲染（大陆不可达时会白屏）', () => {
+  for (const page of ['index.html', 'docs/arena/live.html']) {
+    const html = fs.readFileSync(new URL(`../${page}`, import.meta.url), 'utf8');
+    const gf = html.match(/<link[^>]*fonts\.googleapis\.com\/css2[^>]*>/)?.[0] ?? '';
+    assert.ok(gf, `${page} 找不到字体 link`);
+    assert.match(gf, /media="print"/, `${page} 的字体 link 仍在阻塞渲染`);
+  }
+});
+
 test('English guide, manifest, prompt contract, and offline shell ship together', () => {
   const root = new URL('../', import.meta.url);
   const guide = fs.readFileSync(new URL('about.en.html', root), 'utf8');

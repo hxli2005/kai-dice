@@ -2311,7 +2311,7 @@ function showLobby() {
                     <span class="p-sub">${per.tag ?? ''}</span>
                     <span class="p-data">${dataOf(per)}</span>
                   </span>
-                  ${!per.official ? '<span class="card-edit" data-edit="1">改</span>' : ''} <!-- 只有客席能改：官方通道的型号是钉死的（Q28 两把钥匙互不越界） -->
+                  ${!per.official ? `<span class="card-edit" data-edit="1">${isEnglish() ? 'EDIT' : '改'}</span>` : ''} <!-- 只有客席能改：官方通道的型号是钉死的（Q28 两把钥匙互不越界） -->
                 </button>`,
               )
               .join('')}${

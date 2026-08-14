@@ -184,7 +184,11 @@ const PHRASES = [
   [' 席已接通', ' SEAT(S) CONNECTED'],
   ['接通', 'CONNECTED'],
   ['自带钥匙 · 你的模型以本名上桌', 'BYOK · Your model joins under its real model name'],
-  ['改', 'EDIT'],
+  // ⚠️ 这里曾有一条 `['改', 'EDIT']`。**单字片段不许进 PHRASES**——它排在
+  // `['改口 ', 'FOLDED ']` 前面，把我们自己的文案啃成了「点此EDIT为公开」
+  // 「用 −／＋ EDIT数量」「HELD 2 EDIT口 1」，还让下面两条完整句子的替换永远命中不了。
+  // 客席卡那颗「改」按钮已改走 isEnglish() 分支（main.js）。同理不许再加
+  // `接通`／` 秒`／` 口` 这类短词——要翻就在渲染处开分支，别往子串表里塞。
   ['许愿＋', 'WISH +'],
   ['勾上的新规矩全桌明牌。实验局不入榜、不记账、不进档案。', 'Selected rules are public to the whole table. Sandbox matches do not affect standings, balances, or profiles.'],
   ['本机存档 · 无账号 · 模型名仅作事实性标注 · 非官方 · 无关联', 'On-device saves · No account · Model names are factual labels only · Unofficial · No affiliation'],

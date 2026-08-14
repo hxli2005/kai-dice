@@ -8,9 +8,13 @@
 <title>《开！》大厅</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- 字体**不得阻塞渲染**：fonts.googleapis.com 在中国大陆不可达，而且是"挂住"不是"快速失败"——
+     作为 <link rel=stylesheet> 会把整页卡成白屏直到超时（实测就是"打不开"的病因）。
+     改成 media=print + onload 提级：拿不到就永远用 tokens.css 里的 PingFang SC 兜底，页面照常出。
+     离线壳同理——sw.js 只缓存同源资源，这条本来就进不了缓存。 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Tomorrow:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Tomorrow:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="src/ui/style.css">
 </head>
