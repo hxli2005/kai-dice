@@ -46,8 +46,20 @@ export const DECISION_TIMEOUT_MS = 60_000;
 // 每个型号自己的完成信封。**这是技术参数，不是性格**：
 // 不再强制关闭推理，只给推理型型号足够的 token 和时间把结果写完。
 const TECH = {
-  'deepseek-v4-flash': { maxTokens: DECISION_MAX_TOKENS, timeoutMs: DECISION_TIMEOUT_MS },
-  'deepseek-v4-pro': { maxTokens: DECISION_MAX_TOKENS, timeoutMs: DECISION_TIMEOUT_MS },
+  // DeepSeek V4 defaults to thinking mode. On this turn-based table that made
+  // an ordinary reply consume the full 60 s product timeout. The official API
+  // exposes an explicit non-thinking mode; use it for live play. Reasoning
+  // experiments remain available in the arena, where latency is itself data.
+  'deepseek-v4-flash': {
+    maxTokens: DECISION_MAX_TOKENS,
+    timeoutMs: DECISION_TIMEOUT_MS,
+    extra: { thinking: { type: 'disabled' } },
+  },
+  'deepseek-v4-pro': {
+    maxTokens: DECISION_MAX_TOKENS,
+    timeoutMs: DECISION_TIMEOUT_MS,
+    extra: { thinking: { type: 'disabled' } },
+  },
 };
 
 // 一个型号 ＝ 一张卡 ＝ 一个户头。

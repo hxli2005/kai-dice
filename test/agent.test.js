@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../src/engine.js';
 import { chat } from '../src/ai/llm.js';
-import { buildPrompts, buildPromptPayload, parseDecision, createOpponent, stateIdOf } from '../src/ai/agent.js';
+import { buildPrompts, buildPromptPayload, serializePrompt, parseDecision, createOpponent, stateIdOf } from '../src/ai/agent.js';
 import { PERSONAS } from '../src/ai/personas.js';
 
 const mockFetch = (handler) => async (url, init) => {
@@ -54,6 +54,17 @@ test('buildPrompts：注入真实骰面与本局叙事，不注入计算工具',
   assert.ok(!/(基本稳|五五开|悬|纯扯)/.test(user), '连粗档词都不许出现');
   assert.ok(!/=\s*\d+%/.test(user), '候选不许带任何概率标注');
   assert.match(user, /爱虚张/);
+});
+
+test('英文动态提示词使用英文数据协议，并在最后再次锁定输出语言', async () => {
+  const m = await createMatch({ seed: 5 });
+  await m.act('A', { type: 'peek' });
+  await m.act('A', { type: 'bid', count: 2, face: 4 });
+  const prompt = serializePrompt(buildPromptPayload(m.observe('B')), true);
+  assert.match(prompt, /^\[PUBLIC HISTORY \| COMPLETE MATCH \| SOURCE=ENGINE\]/);
+  assert.match(prompt, /\[CURRENT STATE \| AUTHORITATIVE \| SOURCE=ENGINE\]/);
+  assert.match(prompt, /\[OUTPUT LANGUAGE \| REQUIRED\][\s\S]*never answer in Chinese\.$/);
+  assert.doesNotMatch(prompt, /[\u3400-\u9fff]/, '首手的英文动态提示词不应夹带中文脚手架');
 });
 
 test('数据契约：当前快照由引擎给足，本场历史保留每个语义动作', async () => {
@@ -455,4 +466,9 @@ test('提示词二准入：全席 system 完全逐字相同，且只有规则/�
     '毛病', '记仇十年', '往死里嘲讽', '酒馆老板', '账房',
   ])
     assert.ok(!sysModel.includes(gone), `system 里不该还有「${gone}」`);
+});
+
+test('产品里的 DeepSeek V4 明确走非思考档，避免一手吃满 60 秒', () => {
+  for (const id of ['model:deepseek-v4-flash', 'model:deepseek-v4-pro'])
+    assert.deepEqual(PERSONAS[id].gear.extra, { thinking: { type: 'disabled' } });
 });
