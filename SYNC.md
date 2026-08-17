@@ -186,6 +186,7 @@ G1 已完工（2026-08-09）。**G2、G7 已完工（2026-08-12）**。**G4–G6
 
 ## 变更日志（双方追加，最新在上）
 
+- 2026-08-18（对外发布收尾，用户「两个都发」＋报障「gif 不会动」）：**三线全通。** ①r/ClaudeAI 文字帖经版主放行已恢复公开（被禁域名为 dev.to，教训：Reddit 帖不再放 dev.to 链接）；②r/aigamedev 帖 GIF 修复——病根是 «class GIFf» 剪贴板多格式数据被 Chrome 取了 PNG 层，改为 POSIX file 文件引用粘贴后媒体从 .png 变 .gif，隔 5 秒双帧截图确认动画在播；③按 r/ClaudeAI 版主邀请发布 r/ClaudeGameDev：https://www.reddit.com/r/ClaudeGameDev/comments/1vqycoo/ （Browser Game flair，带 GIF＋GitHub 链接，该版规则四"Must Use Claude"完全对口）。
 - 2026-08-18（对外发布，用户「录那 20 秒短片……录完发」「有英文界面，可以切换」）：**r/aigamedev 续集帖已发布并公开可见**：https://www.reddit.com/r/aigamedev/comments/1vqxyni/ 。短片制法：观战页资产在 scratchpad 做源头英文化（live.js 35 处＋index.html，产品代码未动），门控重放导演逐拍推进 E2 第 2 场第 5 局（2×5→2×6 绕开→3×5"not an accident"台词→开牌掉骰），四帧 GIF（620KB，节奏 3.2/2.8/5.2/5.2s）经系统剪贴板粘贴入帖。帖子零外链（克制原则＋防过滤），flair Demo|Project|Workflow，结尾带 AI 翻译声明。同账号 r/ClaudeAI 帖仍在等版主复核（modmail 已发）。附注：观战页原生英文化可考虑正式做成 ?lang=en（本次为录屏临时版，未入库）。
 - 2026-08-17（对外发布，用户「发到 dev.to」）：**英文文章已在 dev.to 发布**：https://dev.to/haoxiang_li_a709204042e6b/codex-vs-claude-code-at-liars-dice-the-winning-bluff-was-the-truth-203l 。标题《Codex vs. Claude Code at Liar's Dice: the Winning Bluff Was the Truth》，标签 ai/llm/mcp/agents，正文与 `docs/showdown/article-claude-codex-liars-dice-match-en.md` 一致（仅去 H1、副题转斜体），发布前 Preview 核验表格/代码块/ASCII 图渲染，发布后线上复核通过。
 - 2026-08-17（开源发布，用户「重写历史，我建好仓库了」）：**仓库公开上线 https://github.com/hxli2005/kai-dice 。** filter-branch 全历史 258 提交作者由占位符改写为 Haoxiang Li（邮箱不变，HEAD 树哈希逐字未变，改写前 bundle 备份留存）；三篇文章脚注与 README 换真实仓库链接＋离线复算命令；覆盖远程初始化提交（仅 GitHub 自动生成的同款 AGPL LICENSE）后强推，远程 main 与本地一致。
