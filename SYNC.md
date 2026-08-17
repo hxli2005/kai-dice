@@ -186,6 +186,7 @@ G1 已完工（2026-08-09）。**G2、G7 已完工（2026-08-12）**。**G4–G6
 
 ## 变更日志（双方追加，最新在上）
 
+- 2026-08-17（写作，用户「国内技术文章不吃香，转战国外」）：**英文版文章草稿完成**（`docs/showdown/article-claude-codex-liars-dice-match-en.md`），面向 dev.to／HN 重写而非直译：标题改携反转（不贴人格标签）、破案节回链作者 dev.to 旧文《Are You Benchmarking the Model—or the Harness?》成系列；台词引用为日志英文原话。
 - 2026-08-17（写作，用户「技术社区（掘金/知乎专栏）」）：**技术社区版文章草稿完成**（`docs/showdown/article-claude-codex-liars-dice-match-cn-tech.md`）。同题不同骨架：可信度工程前置（架构图＋七条防污染设计＋证据链＋复现命令），3ms 风暴归因解剖为技术高潮；与通俗版数字同源。
 - 2026-08-17（写作，用户拟题「心机Claude对战老实人gpt：吹牛比赛」）：**通俗版文章草稿完成**（`docs/showdown/article-claude-codex-liars-dice-match-cn-pop.md`）。保留用户标题，副题点破数据反转（被开报价站住率 22/26 vs 3/11——说真话的是"心机"侧）；冷开场用 E2 台词，人设先立后拆，老实账本段落实复盘报告四条红线（系统对决、风暴归因拆分、镜像流级表述、首场 5–4）。
 - 2026-08-17（独立复盘＋核验工具，用户「分析工程、结果及思考」）：**五次 MCP 对局全量独立复算完成，关键声明全部核实，另有四项新发现。** 从 run.json/jsonl 原始档案复算：三组 BO3 challenge（Sol 4/26、Opus 8/11）、跨场显式引用（0 vs 10）、E2 风暴（601+492=1093＋7 stale）、资源口径（Sol 4,177,026 input／Claude 302,757 output／$17.63）逐字一致；8 场 432 事件决定性重放严格一致（含 elapsedMs），commit-reveal 抽验 10/10。新发现：①风暴拒绝中位间隔 3ms（27–40 次/秒），放大环节是 Codex CLI 重试循环而非模型逐次决策——E1 同款 `count:1` 错误一次被拒即愈，「犯错是模型的、×600 是 harness 的」，建议发表前拆分归因；②镜像"私骰跟座位"实为共享随机流按 A→B 消费，第 1 局逐字相同、之后随掉骰错位，文章不可写成"每局手牌相同"；③五次运行双方合计零 blind 零 raise；④首场（CLI 默认模型、无 BO3）小局仅 5–4，是"差距是学出来的"暗线，E3 可验。重放核验沉淀为 `scripts/mcp/replay-showdown.mjs`（exit code 可进 CI）；完整报告 `docs/showdown/2026-08-17-engineering-results-review.md`，含工程缺口清单（未入库、metadata 无验收字段、无风暴断路器、每拒全量重写 run.json）与 E3–E5 补充建议（等成本臂、round 级主指标、预注册停止规则）。MCP 两套测试 10/10。
