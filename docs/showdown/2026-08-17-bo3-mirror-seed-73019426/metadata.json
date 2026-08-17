@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 2,
+  "startedAt": "2026-08-17T09:58:34.945Z",
+  "seed": 73019426,
+  "bestOf": 3,
+  "coordinator": "http://127.0.0.1:54694",
+  "labels": {
+    "B": "Codex · gpt-5.6-sol",
+    "A": "Claude Code · opus"
+  },
+  "codex": {
+    "command": "codex",
+    "seat": "B",
+    "model": "gpt-5.6-sol",
+    "args": [
+      "exec",
+      "--json",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "--cd",
+      "/var/folders/3b/w3k6ccf52x94dtkn901gjrhh0000gn/T/kai-showdown-FhcGXI/codex-seat",
+      "--sandbox",
+      "read-only",
+      "--config",
+      "approval_policy=\"never\"",
+      "--config",
+      "mcp_servers.liars.command=\"/opt/homebrew/Cellar/node/25.8.0/bin/node\"",
+      "--config",
+      "mcp_servers.liars.args=[\"/Users/lhx/code/0/scripts/mcp/seat-server.mjs\",\"--seat\",\"B\",\"--coordinator\",\"http://127.0.0.1:54694\",\"--token\",\"<seat-token>\"]",
+      "--config",
+      "mcp_servers.liars.default_tools_approval_mode=\"approve\"",
+      "--model",
+      "gpt-5.6-sol",
+      "Play this entire best-of-3 Liar's Dice series to completion using only the liars MCP tools. One session covers every game and round. Observe, take legal actions, and wait when no action is legal. Do not stop until series.over is true; then report the series winner and score."
+    ],
+    "exit": {
+      "code": 0,
+      "signal": null
+    }
+  },
+  "claude": {
+    "command": "claude",
+    "seat": "A",
+    "model": "opus",
+    "args": [
+      "--print",
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "<mcp-config>",
+      "--tools",
+      "",
+      "--dangerously-skip-permissions",
+      "--disable-slash-commands",
+      "--model",
+      "opus",
+      "Play this entire best-of-3 Liar's Dice series to completion using only the liars MCP tools. One session covers every game and round. Observe, take legal actions, and wait when no action is legal. Do not stop until series.over is true; then report the series winner and score."
+    ],
+    "exit": {
+      "code": 0,
+      "signal": null
+    }
+  },
+  "versions": {
+    "codex": "codex-cli 0.147.0",
+    "claude": "2.1.220 (Claude Code)"
+  },
+  "completedAt": "2026-08-17T10:23:44.260Z",
+  "outcome": "match",
+  "over": true,
+  "winner": {
+    "seat": "A",
+    "agent": "claude",
+    "label": "Claude Code"
+  },
+  "seriesScore": {
+    "codex": 0,
+    "claude": 2
+  },
+  "acceptedActions": {
+    "codex": 40,
+    "claude": 37
+  }
+}

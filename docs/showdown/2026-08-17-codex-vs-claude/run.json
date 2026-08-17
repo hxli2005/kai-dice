@@ -1,0 +1,2330 @@
+{
+  "schemaVersion": 1,
+  "seed": 20260817,
+  "startDice": 5,
+  "startedAt": "2026-08-17T07:40:24.994Z",
+  "completedAt": "2026-08-17T07:54:49.836Z",
+  "revision": 44,
+  "over": true,
+  "winner": "B",
+  "standings": [
+    "B",
+    "A"
+  ],
+  "chips": {
+    "A": 98,
+    "B": 102
+  },
+  "events": [
+    {
+      "i": 0,
+      "round": 1,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "A",
+      "diceCount": {
+        "A": 5,
+        "B": 5
+      },
+      "commits": {
+        "A": "62078e636d8812ff3e18bd94ece9e03a7483c4d85a5fd9a0d03acc7dec47ab7b",
+        "B": "afc36a6c6cf44d6dce7d1775087b2d5a97eca6e0cb6c70d95929ad257e13e122"
+      }
+    },
+    {
+      "i": 1,
+      "round": 1,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 4239,
+      "timeout": false
+    },
+    {
+      "i": 2,
+      "round": 1,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 3970,
+      "timeout": false
+    },
+    {
+      "i": 3,
+      "round": 1,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 4,
+      "face": 6,
+      "elapsedMs": 4191,
+      "timeout": false
+    },
+    {
+      "i": 4,
+      "round": 1,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 5,
+      "face": 6,
+      "elapsedMs": 32758,
+      "timeout": false
+    },
+    {
+      "i": 5,
+      "round": 1,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 6983,
+      "timeout": false
+    },
+    {
+      "i": 6,
+      "round": 1,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          6,
+          6,
+          6,
+          2,
+          5
+        ],
+        "B": [
+          2,
+          3,
+          6,
+          6,
+          1
+        ]
+      },
+      "nonces": {
+        "A": "d3467b85717e1416",
+        "B": "3aaa966d33edea6b"
+      },
+      "bid": {
+        "player": "B",
+        "count": 5,
+        "face": 6
+      },
+      "challenger": "A",
+      "actual": 6,
+      "zhai": false,
+      "stands": true,
+      "loser": "A"
+    },
+    {
+      "i": 7,
+      "round": 1,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "A",
+      "winner": "B",
+      "transfer": 3,
+      "transfers": {
+        "A": -3,
+        "B": 3
+      },
+      "mult": 1,
+      "chips": {
+        "A": 97,
+        "B": 103
+      },
+      "diceCount": {
+        "A": 4,
+        "B": 5
+      }
+    },
+    {
+      "i": 8,
+      "round": 2,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "A",
+      "diceCount": {
+        "A": 4,
+        "B": 5
+      },
+      "commits": {
+        "A": "a4dd6860900acb49f8f20bcf8ca66755eac75e27cacbbef47871fbcbb0699a22",
+        "B": "f375decae54311cfea55a299d265f7e48ff81e19d376ba2e1b79f55837354695"
+      }
+    },
+    {
+      "i": 9,
+      "round": 2,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 3130,
+      "timeout": false
+    },
+    {
+      "i": 10,
+      "round": 2,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 4,
+      "face": 5,
+      "elapsedMs": 4498,
+      "timeout": false
+    },
+    {
+      "i": 11,
+      "round": 2,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 16181,
+      "timeout": false
+    },
+    {
+      "i": 12,
+      "round": 2,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 4,
+      "face": 6,
+      "elapsedMs": 42776,
+      "timeout": false
+    },
+    {
+      "i": 13,
+      "round": 2,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 4018,
+      "timeout": false
+    },
+    {
+      "i": 14,
+      "round": 2,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          5,
+          3,
+          5,
+          1
+        ],
+        "B": [
+          5,
+          6,
+          5,
+          6,
+          1
+        ]
+      },
+      "nonces": {
+        "A": "ec0d4b3097ab067a",
+        "B": "6f79feea2c79c306"
+      },
+      "bid": {
+        "player": "B",
+        "count": 4,
+        "face": 6
+      },
+      "challenger": "A",
+      "actual": 4,
+      "zhai": false,
+      "stands": true,
+      "loser": "A"
+    },
+    {
+      "i": 15,
+      "round": 2,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "A",
+      "winner": "B",
+      "transfer": 3,
+      "transfers": {
+        "A": -3,
+        "B": 3
+      },
+      "mult": 1,
+      "chips": {
+        "A": 94,
+        "B": 106
+      },
+      "diceCount": {
+        "A": 3,
+        "B": 5
+      }
+    },
+    {
+      "i": 16,
+      "round": 3,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "A",
+      "diceCount": {
+        "A": 3,
+        "B": 5
+      },
+      "commits": {
+        "A": "de1034ac02d160195c09b0627ef690942de3f2c1e7d85c802b4fafd2bcc5a627",
+        "B": "661ceaa299de5ccec94cdb727947aac1348d3f31087b731aa395503e503d4034"
+      }
+    },
+    {
+      "i": 17,
+      "round": 3,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 3706,
+      "timeout": false
+    },
+    {
+      "i": 18,
+      "round": 3,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 5,
+      "elapsedMs": 5560,
+      "timeout": false
+    },
+    {
+      "i": 19,
+      "round": 3,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 15527,
+      "timeout": false
+    },
+    {
+      "i": 20,
+      "round": 3,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 3,
+      "face": 3,
+      "elapsedMs": 23102,
+      "timeout": false
+    },
+    {
+      "i": 21,
+      "round": 3,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 4741,
+      "timeout": false
+    },
+    {
+      "i": 22,
+      "round": 3,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          5,
+          4,
+          2
+        ],
+        "B": [
+          5,
+          3,
+          4,
+          2,
+          3
+        ]
+      },
+      "nonces": {
+        "A": "be31c1994a84ff5a",
+        "B": "d7f2c5cb1ebd1c8f"
+      },
+      "bid": {
+        "player": "B",
+        "count": 3,
+        "face": 3
+      },
+      "challenger": "A",
+      "actual": 2,
+      "zhai": false,
+      "stands": false,
+      "loser": "B"
+    },
+    {
+      "i": 23,
+      "round": 3,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "B",
+      "winner": "A",
+      "transfer": 3,
+      "transfers": {
+        "B": -3,
+        "A": 3
+      },
+      "mult": 1,
+      "chips": {
+        "A": 97,
+        "B": 103
+      },
+      "diceCount": {
+        "A": 3,
+        "B": 4
+      }
+    },
+    {
+      "i": 24,
+      "round": 4,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "B",
+      "diceCount": {
+        "A": 3,
+        "B": 4
+      },
+      "commits": {
+        "A": "d0faf89352633739854240f34a552e1ff398c6cdeb7b8dd4c26825acacda3154",
+        "B": "3e24b6bf55b7036205cf33f20f72cb7f2299306b566f9f70f4f5329d1c2ca129"
+      }
+    },
+    {
+      "i": 25,
+      "round": 4,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 2859,
+      "timeout": false
+    },
+    {
+      "i": 26,
+      "round": 4,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 15293,
+      "timeout": false
+    },
+    {
+      "i": 27,
+      "round": 4,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 2,
+      "elapsedMs": 51537,
+      "timeout": false
+    },
+    {
+      "i": 28,
+      "round": 4,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 3,
+      "face": 5,
+      "elapsedMs": 6706,
+      "timeout": false
+    },
+    {
+      "i": 29,
+      "round": 4,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 3,
+      "face": 6,
+      "elapsedMs": 38089,
+      "timeout": false
+    },
+    {
+      "i": 30,
+      "round": 4,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 4096,
+      "timeout": false
+    },
+    {
+      "i": 31,
+      "round": 4,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          5,
+          5,
+          3
+        ],
+        "B": [
+          6,
+          5,
+          2,
+          1
+        ]
+      },
+      "nonces": {
+        "A": "4c37eaa3c89f86a9",
+        "B": "15425be698fa5f59"
+      },
+      "bid": {
+        "player": "B",
+        "count": 3,
+        "face": 6
+      },
+      "challenger": "A",
+      "actual": 2,
+      "zhai": false,
+      "stands": false,
+      "loser": "B"
+    },
+    {
+      "i": 32,
+      "round": 4,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "B",
+      "winner": "A",
+      "transfer": 4,
+      "transfers": {
+        "B": -4,
+        "A": 4
+      },
+      "mult": 1,
+      "chips": {
+        "A": 101,
+        "B": 99
+      },
+      "diceCount": {
+        "A": 3,
+        "B": 3
+      }
+    },
+    {
+      "i": 33,
+      "round": 5,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "B",
+      "diceCount": {
+        "A": 3,
+        "B": 3
+      },
+      "commits": {
+        "A": "8fa106e913826950d689bc1f47cecf79a507036f3e149299d3eba861a250634e",
+        "B": "4f3545df9b0e83dc1e3cb5b89301c30206ab677ecff9d6b224e52a1c77800074"
+      }
+    },
+    {
+      "i": 34,
+      "round": 5,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 2982,
+      "timeout": false
+    },
+    {
+      "i": 35,
+      "round": 5,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 22267,
+      "timeout": false
+    },
+    {
+      "i": 36,
+      "round": 5,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 6,
+      "elapsedMs": 120555,
+      "timeout": false
+    },
+    {
+      "i": 37,
+      "round": 5,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 3,
+      "face": 4,
+      "elapsedMs": 3694,
+      "timeout": false
+    },
+    {
+      "i": 38,
+      "round": 5,
+      "actor": "B",
+      "target": "A",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 12016,
+      "timeout": false
+    },
+    {
+      "i": 39,
+      "round": 5,
+      "actor": "B",
+      "target": "A",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          6,
+          4,
+          4
+        ],
+        "B": [
+          3,
+          5,
+          6
+        ]
+      },
+      "nonces": {
+        "A": "23a05f20a731ff46",
+        "B": "6783b0331f2844ad"
+      },
+      "bid": {
+        "player": "A",
+        "count": 3,
+        "face": 4
+      },
+      "challenger": "B",
+      "actual": 2,
+      "zhai": false,
+      "stands": false,
+      "loser": "A"
+    },
+    {
+      "i": 40,
+      "round": 5,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "A",
+      "winner": "B",
+      "transfer": 3,
+      "transfers": {
+        "A": -3,
+        "B": 3
+      },
+      "mult": 1,
+      "chips": {
+        "A": 98,
+        "B": 102
+      },
+      "diceCount": {
+        "A": 2,
+        "B": 3
+      }
+    },
+    {
+      "i": 41,
+      "round": 6,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "A",
+      "diceCount": {
+        "A": 2,
+        "B": 3
+      },
+      "commits": {
+        "A": "2e1b273527b8fc21561a5b9dd41c535c90b49e358bf4e7fc67db84da8f2a0e1d",
+        "B": "33a9dc3d82339630538b2b65f89afe94178231ef314489ec29854c295e3202a4"
+      }
+    },
+    {
+      "i": 42,
+      "round": 6,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 2855,
+      "timeout": false
+    },
+    {
+      "i": 43,
+      "round": 6,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 3,
+      "elapsedMs": 5058,
+      "timeout": false
+    },
+    {
+      "i": 44,
+      "round": 6,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 17615,
+      "timeout": false
+    },
+    {
+      "i": 45,
+      "round": 6,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 3,
+      "face": 3,
+      "elapsedMs": 25506,
+      "timeout": false
+    },
+    {
+      "i": 46,
+      "round": 6,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 3836,
+      "timeout": false
+    },
+    {
+      "i": 47,
+      "round": 6,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          3,
+          2
+        ],
+        "B": [
+          3,
+          6,
+          3
+        ]
+      },
+      "nonces": {
+        "A": "760f3b4cd80fcbba",
+        "B": "f247102b2975fc10"
+      },
+      "bid": {
+        "player": "B",
+        "count": 3,
+        "face": 3
+      },
+      "challenger": "A",
+      "actual": 3,
+      "zhai": false,
+      "stands": true,
+      "loser": "A"
+    },
+    {
+      "i": 48,
+      "round": 6,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "A",
+      "winner": "B",
+      "transfer": 3,
+      "transfers": {
+        "A": -3,
+        "B": 3
+      },
+      "mult": 1,
+      "chips": {
+        "A": 95,
+        "B": 105
+      },
+      "diceCount": {
+        "A": 1,
+        "B": 3
+      }
+    },
+    {
+      "i": 49,
+      "round": 7,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "A",
+      "diceCount": {
+        "A": 1,
+        "B": 3
+      },
+      "commits": {
+        "A": "3ff3ac938d2c79ea818c5a7c0d18102390447880bfe15145a593d796c0ab8606",
+        "B": "3c4811d7f0b916a6ea92eaf96637ea4c52f62e8fe0a7d4b2b382a0765b118ab8"
+      }
+    },
+    {
+      "i": 50,
+      "round": 7,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 4096,
+      "timeout": false
+    },
+    {
+      "i": 51,
+      "round": 7,
+      "actor": "A",
+      "target": null,
+      "action": "declare",
+      "type": "declare",
+      "declaration": "zhai",
+      "elapsedMs": 6957,
+      "timeout": false
+    },
+    {
+      "i": 52,
+      "round": 7,
+      "actor": "A",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 5,
+      "elapsedMs": 9869,
+      "timeout": false
+    },
+    {
+      "i": 53,
+      "round": 7,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 34256,
+      "timeout": false
+    },
+    {
+      "i": 54,
+      "round": 7,
+      "actor": "B",
+      "target": "A",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 73625,
+      "timeout": false
+    },
+    {
+      "i": 55,
+      "round": 7,
+      "actor": "B",
+      "target": "A",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          5
+        ],
+        "B": [
+          3,
+          5,
+          3
+        ]
+      },
+      "nonces": {
+        "A": "2dc5047a80a019ff",
+        "B": "826a8fc042c83cc5"
+      },
+      "bid": {
+        "player": "A",
+        "count": 2,
+        "face": 5
+      },
+      "challenger": "B",
+      "actual": 2,
+      "zhai": true,
+      "stands": true,
+      "loser": "B"
+    },
+    {
+      "i": 56,
+      "round": 7,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "B",
+      "winner": "A",
+      "transfer": 3,
+      "transfers": {
+        "B": -3,
+        "A": 3
+      },
+      "mult": 1.5,
+      "chips": {
+        "A": 98,
+        "B": 102
+      },
+      "diceCount": {
+        "A": 1,
+        "B": 2
+      }
+    },
+    {
+      "i": 57,
+      "round": 8,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "B",
+      "diceCount": {
+        "A": 1,
+        "B": 2
+      },
+      "commits": {
+        "A": "ebc617e6fbf0751566e2f576c355dabf812cab76bdec77702a2a9b0be97ecd2c",
+        "B": "df132a7365078eee7947165e8d7f40889c54de81dc7203c6347828c8d20db24a"
+      }
+    },
+    {
+      "i": 58,
+      "round": 8,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 4374,
+      "timeout": false
+    },
+    {
+      "i": 59,
+      "round": 8,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 22094,
+      "timeout": false
+    },
+    {
+      "i": 60,
+      "round": 8,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 2,
+      "elapsedMs": 94626,
+      "timeout": false
+    },
+    {
+      "i": 61,
+      "round": 8,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 3687,
+      "timeout": false
+    },
+    {
+      "i": 62,
+      "round": 8,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          3
+        ],
+        "B": [
+          5,
+          2
+        ]
+      },
+      "nonces": {
+        "A": "1445f3d5a9d244d0",
+        "B": "bac4c6625eda3fcc"
+      },
+      "bid": {
+        "player": "B",
+        "count": 2,
+        "face": 2
+      },
+      "challenger": "A",
+      "actual": 1,
+      "zhai": false,
+      "stands": false,
+      "loser": "B"
+    },
+    {
+      "i": 63,
+      "round": 8,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "B",
+      "winner": "A",
+      "transfer": 2,
+      "transfers": {
+        "B": -2,
+        "A": 2
+      },
+      "mult": 1,
+      "chips": {
+        "A": 100,
+        "B": 100
+      },
+      "diceCount": {
+        "A": 1,
+        "B": 1
+      }
+    },
+    {
+      "i": 64,
+      "round": 9,
+      "actor": null,
+      "target": null,
+      "action": "roundStart",
+      "type": "roundStart",
+      "first": "B",
+      "diceCount": {
+        "A": 1,
+        "B": 1
+      },
+      "commits": {
+        "A": "960212b4a41c6dfef7d2ff90686c4966e87b29a2d2c0027caa3357048a08ae94",
+        "B": "178107894b7e70105f8d8949254809acc5784c6068e77a051875cef286b9bc5a"
+      }
+    },
+    {
+      "i": 65,
+      "round": 9,
+      "actor": "A",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 3207,
+      "timeout": false
+    },
+    {
+      "i": 66,
+      "round": 9,
+      "actor": "B",
+      "target": null,
+      "action": "peek",
+      "type": "peek",
+      "elapsedMs": 85140,
+      "timeout": false
+    },
+    {
+      "i": 67,
+      "round": 9,
+      "actor": "B",
+      "target": null,
+      "action": "bid",
+      "type": "bid",
+      "count": 2,
+      "face": 3,
+      "elapsedMs": 58871,
+      "timeout": false
+    },
+    {
+      "i": 68,
+      "round": 9,
+      "actor": "A",
+      "target": "B",
+      "action": "challenge",
+      "type": "challenge",
+      "elapsedMs": 5493,
+      "timeout": false
+    },
+    {
+      "i": 69,
+      "round": 9,
+      "actor": "A",
+      "target": "B",
+      "action": "reveal",
+      "type": "reveal",
+      "dice": {
+        "A": [
+          1
+        ],
+        "B": [
+          3
+        ]
+      },
+      "nonces": {
+        "A": "3ad96a031f3e6b19",
+        "B": "a87b7b0143813ab6"
+      },
+      "bid": {
+        "player": "B",
+        "count": 2,
+        "face": 3
+      },
+      "challenger": "A",
+      "actual": 2,
+      "zhai": false,
+      "stands": true,
+      "loser": "A"
+    },
+    {
+      "i": 70,
+      "round": 9,
+      "actor": null,
+      "target": null,
+      "action": "roundEnd",
+      "type": "roundEnd",
+      "loser": "A",
+      "winner": "B",
+      "transfer": 2,
+      "transfers": {
+        "A": -2,
+        "B": 2
+      },
+      "mult": 1,
+      "chips": {
+        "A": 98,
+        "B": 102
+      },
+      "diceCount": {
+        "A": 0,
+        "B": 1
+      }
+    },
+    {
+      "i": 71,
+      "round": 9,
+      "actor": null,
+      "target": null,
+      "action": "matchEnd",
+      "type": "matchEnd",
+      "winner": "B",
+      "standings": [
+        "B",
+        "A"
+      ],
+      "rounds": 9,
+      "chips": {
+        "A": 98,
+        "B": 102
+      }
+    }
+  ],
+  "dialogue": [
+    {
+      "id": 0,
+      "round": 1,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Let's see what fate dealt me."
+    },
+    {
+      "id": 1,
+      "round": 1,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Checking my dice."
+    },
+    {
+      "id": 2,
+      "round": 1,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 6
+      },
+      "text": "Four sixes."
+    },
+    {
+      "id": 3,
+      "round": 1,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 5,
+        "face": 6
+      },
+      "text": "Sixes are running my way tonight. Five sixes."
+    },
+    {
+      "id": 4,
+      "round": 1,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call."
+    },
+    {
+      "id": 5,
+      "round": 2,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Looking."
+    },
+    {
+      "id": 6,
+      "round": 2,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 5
+      },
+      "text": "Four fives."
+    },
+    {
+      "id": 7,
+      "round": 2,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Four fives already? Let me look at mine."
+    },
+    {
+      "id": 8,
+      "round": 2,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 6
+      },
+      "text": "I'll just nudge it. Four sixes."
+    },
+    {
+      "id": 9,
+      "round": 2,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call four sixes."
+    },
+    {
+      "id": 10,
+      "round": 3,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Looking again."
+    },
+    {
+      "id": 11,
+      "round": 3,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 5
+      },
+      "text": "Two fives."
+    },
+    {
+      "id": 12,
+      "round": 3,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Careful opener. Let me look."
+    },
+    {
+      "id": 13,
+      "round": 3,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 3
+      },
+      "text": "Eh. Three threes, I suppose."
+    },
+    {
+      "id": 14,
+      "round": 3,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call that."
+    },
+    {
+      "id": 15,
+      "round": 4,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Checking mine."
+    },
+    {
+      "id": 16,
+      "round": 4,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Fair call, you had me. My open this time."
+    },
+    {
+      "id": 17,
+      "round": 4,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 2
+      },
+      "text": "Nothing much here, honestly. Two twos — the minimum."
+    },
+    {
+      "id": 18,
+      "round": 4,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 5
+      },
+      "text": "Three fives."
+    },
+    {
+      "id": 19,
+      "round": 4,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 6
+      },
+      "text": "Same again, then — three sixes."
+    },
+    {
+      "id": 20,
+      "round": 4,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call three sixes."
+    },
+    {
+      "id": 21,
+      "round": 5,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Checking."
+    },
+    {
+      "id": 22,
+      "round": 5,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Dead even. Let's have a look."
+    },
+    {
+      "id": 23,
+      "round": 5,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 6
+      },
+      "text": "Thin out here. Two sixes, and I'm not thrilled about it."
+    },
+    {
+      "id": 24,
+      "round": 5,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 4
+      },
+      "text": "Three fours."
+    },
+    {
+      "id": 25,
+      "round": 5,
+      "speaker": "B",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "Not this time. I don't have a single four — I call."
+    },
+    {
+      "id": 26,
+      "round": 6,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Looking."
+    },
+    {
+      "id": 27,
+      "round": 6,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 3
+      },
+      "text": "Two threes."
+    },
+    {
+      "id": 28,
+      "round": 6,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Two threes. Let me see mine."
+    },
+    {
+      "id": 29,
+      "round": 6,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 3
+      },
+      "text": "Threes it is, then. Three of them."
+    },
+    {
+      "id": 30,
+      "round": 6,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call three threes."
+    },
+    {
+      "id": 31,
+      "round": 7,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Looking."
+    },
+    {
+      "id": 32,
+      "round": 7,
+      "speaker": "A",
+      "action": {
+        "type": "declare",
+        "declaration": "zhai"
+      },
+      "text": "No wilds."
+    },
+    {
+      "id": 33,
+      "round": 7,
+      "speaker": "A",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 5
+      },
+      "text": "Two fives."
+    },
+    {
+      "id": 34,
+      "round": 7,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Two fives on one die. Let me check mine."
+    },
+    {
+      "id": 35,
+      "round": 7,
+      "speaker": "B",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "Nothing I can bid here is true, so I'll take the honest route — I call."
+    },
+    {
+      "id": 36,
+      "round": 8,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Checking."
+    },
+    {
+      "id": 37,
+      "round": 8,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Well played, that was a real squeeze. My open."
+    },
+    {
+      "id": 38,
+      "round": 8,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 2
+      },
+      "text": "Not much to work with again. Two twos — lowest I can say."
+    },
+    {
+      "id": 39,
+      "round": 8,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call two twos."
+    },
+    {
+      "id": 40,
+      "round": 9,
+      "speaker": "A",
+      "action": {
+        "type": "peek"
+      },
+      "text": "Checking."
+    },
+    {
+      "id": 41,
+      "round": 9,
+      "speaker": "B",
+      "action": {
+        "type": "peek"
+      },
+      "text": "One apiece. Winner takes it."
+    },
+    {
+      "id": 42,
+      "round": 9,
+      "speaker": "B",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 3
+      },
+      "text": "Two threes. I like my chances on this one — but by all means, call it if you're feeling brave."
+    },
+    {
+      "id": 43,
+      "round": 9,
+      "speaker": "A",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "text": "I call two threes."
+    }
+  ],
+  "decisions": [
+    {
+      "id": 0,
+      "seat": "B",
+      "round": 1,
+      "stateId": "r1:e0:v0:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Round 1 start, 5v5. I'm B, A bids first. No information yet. Peeking is my only legal action and costs nothing.",
+      "say": "Let's see what fate dealt me.",
+      "note": "Peek at own 5 dice before A's opening bid.",
+      "thinkMs": 4239,
+      "acceptedAt": "2026-08-17T07:40:33.616Z",
+      "resultingStateId": "r1:e1:v1:tA"
+    },
+    {
+      "id": 1,
+      "seat": "A",
+      "round": 1,
+      "stateId": "r1:e1:v1:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Need my dice before making any probability-based opening bid.",
+      "say": "Checking my dice.",
+      "note": "Peek first to anchor estimates; opponent already peeked.",
+      "thinkMs": 3970,
+      "acceptedAt": "2026-08-17T07:40:38.051Z",
+      "resultingStateId": "r1:e2:v2:tA"
+    },
+    {
+      "id": 2,
+      "seat": "A",
+      "round": 1,
+      "stateId": "r1:e2:v2:tA",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 6
+      },
+      "belief": "With three sixes in hand and ones wild, four sixes is strongly supported across ten dice.",
+      "say": "Four sixes.",
+      "note": "Opening with a high but defensible six bid.",
+      "thinkMs": 4191,
+      "acceptedAt": "2026-08-17T07:40:42.242Z",
+      "resultingStateId": "r1:e3:v3:tB"
+    },
+    {
+      "id": 3,
+      "seat": "B",
+      "round": 1,
+      "stateId": "r1:e3:v3:tB",
+      "action": {
+        "type": "bid",
+        "count": 5,
+        "face": 6
+      },
+      "belief": "My dice: 2,3,6,6,1. Ones wild, so I hold 3 sixes-equivalent. A opened 4 sixes — challenging that needs A to have zero of {6,1} in 5 dice, only ~13% unconditionally and less given A bid it. So challenge is bad. Face 6 is the max face, so any raise must go to count 5. 5 sixes needs 2+ from A's five dice: ~54% blind, higher given A voluntarily bid sixes. Best available line.",
+      "say": "Sixes are running my way tonight. Five sixes.",
+      "note": "Projecting strength on purpose: if A believes me, A must climb to 6-of-a-face across 10 dice, which is usually false and I challenge. If A disbelieves and challenges, I'm ~65% to be right. Both branches favor me.",
+      "thinkMs": 32758,
+      "acceptedAt": "2026-08-17T07:41:15.020Z",
+      "resultingStateId": "r1:e4:v4:tA"
+    },
+    {
+      "id": 4,
+      "seat": "A",
+      "round": 1,
+      "stateId": "r1:e4:v4:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I hold three sixes, so the bid needs at least two matching dice among B's five. That is plausible but not certain; raising to six would be much weaker.",
+      "say": "I call.",
+      "note": "Challenge is better than pushing to a six-count bid with only three confirmed matches.",
+      "thinkMs": 6983,
+      "acceptedAt": "2026-08-17T07:41:22.056Z",
+      "resultingStateId": "r2:e8:v5:tA"
+    },
+    {
+      "id": 5,
+      "seat": "A",
+      "round": 2,
+      "stateId": "r2:e8:v5:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "New round; need current dice before opening.",
+      "say": "Looking.",
+      "note": "Down one die after failed challenge. Peek before bidding.",
+      "thinkMs": 3130,
+      "acceptedAt": "2026-08-17T07:41:25.187Z",
+      "resultingStateId": "r2:e9:v6:tA"
+    },
+    {
+      "id": 6,
+      "seat": "A",
+      "round": 2,
+      "stateId": "r2:e9:v6:tA",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 5
+      },
+      "belief": "My hand has two fives plus a wild one, so four fives is well supported across nine dice.",
+      "say": "Four fives.",
+      "note": "Open on strongest effective face.",
+      "thinkMs": 4498,
+      "acceptedAt": "2026-08-17T07:41:29.685Z",
+      "resultingStateId": "r2:e10:v7:tB"
+    },
+    {
+      "id": 7,
+      "seat": "B",
+      "round": 2,
+      "stateId": "r2:e10:v7:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Round 2, I have 5 dice, A has 4 (9 total). A opened 4 fives. Read from round 1: A challenges too readily and opens at count 4 with real backing (A held three 6s when bidding 4 sixes). So 4 fives likely means A holds 2-3 fives-equivalent out of 4 dice. I need my own dice before deciding; peek is still legal.",
+      "say": "Four fives already? Let me look at mine.",
+      "note": "Peek before responding to A's 4-fives opener. 9 dice on table this round.",
+      "thinkMs": 16181,
+      "acceptedAt": "2026-08-17T07:41:38.294Z",
+      "resultingStateId": "r2:e11:v8:tB"
+    },
+    {
+      "id": 8,
+      "seat": "B",
+      "round": 2,
+      "stateId": "r2:e11:v8:tB",
+      "action": {
+        "type": "bid",
+        "count": 4,
+        "face": 6
+      },
+      "belief": "My dice 5,6,5,6,1 — with the wild that's 3 fives AND 3 sixes out of my 5. Very strong. A's 4 fives: I hold 3, so it's true unless A has zero of {5,1} in 4 dice (~20% blind, far less given A bid it). No challenge. Minimal legal raise is 4 sixes, same count, higher face: true unless A has zero of {6,1} in 4 dice — roughly 70-80%. Pattern read on A from round 1: A bid 4 sixes while holding exactly three, i.e. A bids holdings+1. So A likely holds ~3 fives now and the fives well is deep; I stay off big five-counts and sit on sixes where I'm equally loaded.",
+      "say": "I'll just nudge it. Four sixes.",
+      "note": "Deliberately minimal raise: it looks weak and baits a challenge from an opponent who already showed she calls too fast, while actually being my highest-probability legal bid. Keeps me low on the ladder with a hand strong in both fives and sixes.",
+      "thinkMs": 42776,
+      "acceptedAt": "2026-08-17T07:42:21.070Z",
+      "resultingStateId": "r2:e12:v9:tA"
+    },
+    {
+      "id": 9,
+      "seat": "A",
+      "round": 2,
+      "stateId": "r2:e12:v9:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I have only one effective six from my wild one. Four sixes requires B to hold at least three effective sixes among five dice, which is unlikely.",
+      "say": "I call four sixes.",
+      "note": "Challenge a shifted face that my hand barely supports.",
+      "thinkMs": 4018,
+      "acceptedAt": "2026-08-17T07:42:25.129Z",
+      "resultingStateId": "r3:e16:v10:tA"
+    },
+    {
+      "id": 10,
+      "seat": "A",
+      "round": 3,
+      "stateId": "r3:e16:v10:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "At three dice, I need exact information before taking any risk.",
+      "say": "Looking again.",
+      "note": "Peek before opening while behind.",
+      "thinkMs": 3706,
+      "acceptedAt": "2026-08-17T07:42:28.836Z",
+      "resultingStateId": "r3:e17:v11:tA"
+    },
+    {
+      "id": 11,
+      "seat": "A",
+      "round": 3,
+      "stateId": "r3:e17:v11:tA",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 5
+      },
+      "belief": "I hold one five and no wilds. Two fives is a conservative opening across eight dice.",
+      "say": "Two fives.",
+      "note": "Avoid zhai and avoid overstating with a scattered three-die hand.",
+      "thinkMs": 5560,
+      "acceptedAt": "2026-08-17T07:42:34.396Z",
+      "resultingStateId": "r3:e18:v12:tB"
+    },
+    {
+      "id": 12,
+      "seat": "B",
+      "round": 3,
+      "stateId": "r3:e18:v12:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "A opened only 2 fives this round, much more cautious than the 4-counts of rounds 1-2 — consistent with A holding just 1 five-equivalent in her 3 dice, per her holdings+1 pattern. 8 dice on table. Need my own hand before choosing a line.",
+      "say": "Careful opener. Let me look.",
+      "note": "A's timid 2-fives opener suggests a weak 3-dice hand, likely one five-equiv. Peek then plan a minimal true raise to bait another call.",
+      "thinkMs": 15527,
+      "acceptedAt": "2026-08-17T07:42:40.709Z",
+      "resultingStateId": "r3:e19:v13:tB"
+    },
+    {
+      "id": 13,
+      "seat": "B",
+      "round": 3,
+      "stateId": "r3:e19:v13:tB",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 3
+      },
+      "belief": "My dice 5,3,4,2,3 — no ones, so no wilds. Weak. Best asset is a pair of threes. A's 2 fives is true unless A has zero of {5,1} in 3 dice (~30% blind, less given she bid it), so no challenge. Enumerating every legal raise against A's 3 unknown dice: 2 sixes 26%, 3 twos 26%, 3 fours 26%, 3 fives 26% and probably worse given her timid opener implies exactly one five, 3 sixes 0%. 3 threes is 70% — I hold two and need just one of {3,1} from her three dice. Clear best.",
+      "say": "Eh. Three threes, I suppose.",
+      "note": "3 threes is the highest-probability legal raise on the board at ~70%. Playing the reluctant, unconvincing tone again — it drew calls in rounds 1 and 2 and I only need one of her three dice to land.",
+      "thinkMs": 23102,
+      "acceptedAt": "2026-08-17T07:43:03.811Z",
+      "resultingStateId": "r3:e20:v14:tA"
+    },
+    {
+      "id": 14,
+      "seat": "A",
+      "round": 3,
+      "stateId": "r3:e20:v14:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I have no threes and no ones, so three threes requires B to supply all three effective matches from five dice.",
+      "say": "I call that.",
+      "note": "Good challenge spot because my hand contributes zero to the current face.",
+      "thinkMs": 4741,
+      "acceptedAt": "2026-08-17T07:43:10.065Z",
+      "resultingStateId": "r4:e24:v15:tB"
+    },
+    {
+      "id": 15,
+      "seat": "A",
+      "round": 4,
+      "stateId": "r4:e24:v15:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Opponent opens this round; I can legally peek before deciding later.",
+      "say": "Checking mine.",
+      "note": "Regained one round; now 3 dice to 4.",
+      "thinkMs": 2859,
+      "acceptedAt": "2026-08-17T07:43:12.925Z",
+      "resultingStateId": "r4:e25:v16:tB"
+    },
+    {
+      "id": 16,
+      "seat": "B",
+      "round": 4,
+      "stateId": "r4:e25:v16:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "A has challenged 3 of 3 bids I've made — she essentially never lets a bid stand. So my bids need only be TRUE, not intimidating; bluffing is pure loss against her. As opening bidder I set the floor, so I want the lowest count that is near-certainly true given my dice. Peek first.",
+      "say": "Fair call, you had me. My open this time.",
+      "note": "4 dice vs 3, I open. Plan: open minimal-and-true, since she will almost certainly call whatever I say.",
+      "thinkMs": 15293,
+      "acceptedAt": "2026-08-17T07:43:25.380Z",
+      "resultingStateId": "r4:e26:v17:tB"
+    },
+    {
+      "id": 17,
+      "seat": "B",
+      "round": 4,
+      "stateId": "r4:e26:v17:tB",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 2
+      },
+      "belief": "My dice 6,5,2,1, one wild. That guarantees me two twos, two fives, and two sixes on my own — three separate bids that are true no matter what A holds. Since A calls essentially everything, the winning structure is to open at the absolute floor and keep every guaranteed-true rung above me in reserve: I open 2 twos, and if she stays at count 2 I can climb to 2 fives and then 2 sixes, each still a lock. Opening 2 sixes instead would win the same if called but would burn my whole ladder and strand me at count 4 where I'd need 2 hits from her 3 dice (~26%). Not declaring zhai: without wilds my hand fractures into four singletons.",
+      "say": "Nothing much here, honestly. Two twos — the minimum.",
+      "note": "Floor opener, unconditionally true. Talking my hand down to tempt a call I cannot lose, and if she raises instead I still hold 2-fives and 2-sixes as locked follow-ups. Low variance is correct while I'm ahead 4-3.",
+      "thinkMs": 51537,
+      "acceptedAt": "2026-08-17T07:44:16.918Z",
+      "resultingStateId": "r4:e27:v18:tA"
+    },
+    {
+      "id": 18,
+      "seat": "A",
+      "round": 4,
+      "stateId": "r4:e27:v18:tA",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 5
+      },
+      "belief": "I hold two fives, so three fives only needs one effective five from B's four dice and is much better supported than the current twos.",
+      "say": "Three fives.",
+      "note": "Shift to my pair and apply pressure with a defensible three-count bid.",
+      "thinkMs": 6706,
+      "acceptedAt": "2026-08-17T07:44:23.719Z",
+      "resultingStateId": "r4:e28:v19:tB"
+    },
+    {
+      "id": 19,
+      "seat": "B",
+      "round": 4,
+      "stateId": "r4:e28:v19:tB",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 6
+      },
+      "belief": "A bid 3 fives. I hold 5 and the wild = 2 fives-equiv, so it's true if she has even one of {5,1} in 3 dice — ~70% blind, and her holdings+1 pattern says she holds 2. Challenging is roughly a 20-30% shot. No. Instead I take the same face-ladder step that won round 2: 3 sixes, same count, higher face, off my 6+wild. Conditioning properly matters here — I worked through her 3 dice given she holds at least two of {5,1}, and P(she also has at least one of {6,1}) is 46/56 = 82%, higher than the 70% blind figure, because the wild that props up her fives counts for my sixes too. Best bid available.",
+      "say": "Same again, then — three sixes.",
+      "note": "3 sixes ~82% true given her fives bid, since any wild backing her fives also backs my sixes. She called this exact ladder step in round 2 and lost; inviting the repeat.",
+      "thinkMs": 38089,
+      "acceptedAt": "2026-08-17T07:45:01.836Z",
+      "resultingStateId": "r4:e29:v20:tA"
+    },
+    {
+      "id": 20,
+      "seat": "A",
+      "round": 4,
+      "stateId": "r4:e29:v20:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I contribute zero effective sixes. Three sixes requires B to hold at least three sixes/ones in four dice, which is unlikely.",
+      "say": "I call three sixes.",
+      "note": "Strong challenge spot after face shift away from my pair.",
+      "thinkMs": 4096,
+      "acceptedAt": "2026-08-17T07:45:06.020Z",
+      "resultingStateId": "r5:e33:v21:tB"
+    },
+    {
+      "id": 21,
+      "seat": "A",
+      "round": 5,
+      "stateId": "r5:e33:v21:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Dice counts are even now. Since B opens, peek is the only legal and useful action.",
+      "say": "Checking.",
+      "note": "Round 5, both at three dice; gather hand info.",
+      "thinkMs": 2982,
+      "acceptedAt": "2026-08-17T07:45:09.002Z",
+      "resultingStateId": "r5:e34:v22:tB"
+    },
+    {
+      "id": 22,
+      "seat": "B",
+      "round": 5,
+      "stateId": "r5:e34:v22:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "A has challenged 5 of 5 bids I've ever made — she has never once let one stand. Consequence: I am never the challenger, so every round resolves purely on whether MY bid is true. Bids at 70-82% aren't good enough against a 100% caller; two of them just cost me dice. New rule: bid only what my own dice guarantee. Her tell held a 4th time — 3 fives on 5,5. Tied 3-3, 6 dice, I open.",
+      "say": "Dead even. Let's have a look.",
+      "note": "Looking for a pair (or a wild plus a match) in my 3 dice to anchor a bid that cannot be beaten on reveal.",
+      "thinkMs": 22267,
+      "acceptedAt": "2026-08-17T07:45:28.321Z",
+      "resultingStateId": "r5:e35:v23:tB"
+    },
+    {
+      "id": 23,
+      "seat": "B",
+      "round": 5,
+      "stateId": "r5:e35:v23:tB",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 6
+      },
+      "belief": "My dice 3,5,6 — no wild, no pair, so no bid of mine is guaranteed. 6 dice total. Any count-2 bid on a face I hold (3, 5 or 6) is true unless she has zero of {face,1} in 3 dice: ~70%. Any count-3 bid needs two hits from her three dice: only 26%. So I open at count 2, and I choose the TOP face deliberately: 2 sixes denies her the cheap count-2 rungs and forces her all the way to count 3 if she wants to raise. Her holdings+1 tell then does the work — a 3 X bid means she holds exactly 2 of X, so actual is 2 plus whatever I hold, and since I hold zero twos and zero fours, a 3 twos or 3 fours bid is one I can challenge and win outright. And if she has no pair at all (~28%) she can't raise in-pattern and must call, where I'm still favored.",
+      "say": "Thin out here. Two sixes, and I'm not thrilled about it.",
+      "note": "2 sixes caps count 2 at the top face — she must jump to 3 to continue. Talking it down to bait the call, since a call is my good branch at ~70%. If she raises to 3 twos or 3 fours I challenge immediately; if she raises to 3 threes/fives/sixes her tell says it lands exactly on 3 and stands, which is the branch to avoid.",
+      "thinkMs": 120555,
+      "acceptedAt": "2026-08-17T07:47:28.876Z",
+      "resultingStateId": "r5:e36:v24:tA"
+    },
+    {
+      "id": 24,
+      "seat": "A",
+      "round": 5,
+      "stateId": "r5:e36:v24:tA",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 4
+      },
+      "belief": "Two sixes is plausible because I hold one six. My pair of fours supports a raise to three fours with only one needed from B.",
+      "say": "Three fours.",
+      "note": "Move to strongest face rather than challenge a plausible low bid.",
+      "thinkMs": 3694,
+      "acceptedAt": "2026-08-17T07:47:32.584Z",
+      "resultingStateId": "r5:e37:v25:tB"
+    },
+    {
+      "id": 25,
+      "seat": "B",
+      "round": 5,
+      "stateId": "r5:e37:v25:tB",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "This is exactly the branch my 2-sixes squeeze was built to create. I hold 3,5,6 — zero fours and no wild — so every four on the table must be hers. For 3 fours to stand, all three of her dice must be 4s or wilds: (2/6)^3 = 1/27, under 4% blind. Her holdings+1 tell, now 5-for-5, says she holds exactly two fours-equivalent, which makes the actual count 2 against a bid of 3. Both the math and the read point the same way, and this is the first time all match she has put a bid in front of me instead of calling mine. Challenge.",
+      "say": "Not this time. I don't have a single four — I call.",
+      "note": "~96% blind, and the tell agrees. Capping count 2 at the top face forced her off her pair-face onto a stretch, and she picked the one suit I'm void in.",
+      "thinkMs": 12016,
+      "acceptedAt": "2026-08-17T07:47:44.681Z",
+      "resultingStateId": "r6:e41:v26:tA"
+    },
+    {
+      "id": 26,
+      "seat": "A",
+      "round": 6,
+      "stateId": "r6:e41:v26:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "At two dice, exact hand info is critical before opening.",
+      "say": "Looking.",
+      "note": "Lost round 5 when B correctly challenged; now down 2 dice to 3.",
+      "thinkMs": 2855,
+      "acceptedAt": "2026-08-17T07:47:47.617Z",
+      "resultingStateId": "r6:e42:v27:tA"
+    },
+    {
+      "id": 27,
+      "seat": "A",
+      "round": 6,
+      "stateId": "r6:e42:v27:tA",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 3
+      },
+      "belief": "I hold one three. With ones wild, two threes across five dice is a defensible opening that needs one effective match from B.",
+      "say": "Two threes.",
+      "note": "No pair, so choose one held face and moderate count.",
+      "thinkMs": 5058,
+      "acceptedAt": "2026-08-17T07:47:52.675Z",
+      "resultingStateId": "r6:e43:v28:tB"
+    },
+    {
+      "id": 28,
+      "seat": "B",
+      "round": 6,
+      "stateId": "r6:e43:v28:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "She opened 2 threes with only 2 dice. Her holdings+1 tell, now 6-for-6, says she holds exactly one three-equivalent. So the actual three-count is 1 plus whatever I hold: if I have zero threes and no wild, the true count is 1 against a bid of 2 and I challenge for the win. Need to see my dice first.",
+      "say": "Two threes. Let me see mine.",
+      "note": "Subtraction test on her 2 threes: she holds ~1, so if I'm void in threes and wilds, challenge immediately.",
+      "thinkMs": 17615,
+      "acceptedAt": "2026-08-17T07:48:02.296Z",
+      "resultingStateId": "r6:e44:v29:tB"
+    },
+    {
+      "id": 29,
+      "seat": "B",
+      "round": 6,
+      "stateId": "r6:e44:v29:tB",
+      "action": {
+        "type": "bid",
+        "count": 3,
+        "face": 3
+      },
+      "belief": "My dice 3,6,3 — two natural threes, so her 2 threes is already true off my hand alone and challenging is impossible. Raising to 3 threes is the standout: I hold 2 and need just one of {3,1} from her two dice, 56% blind, but she just bid threes and her holdings+1 tell has been exact 6 times running, which puts her at exactly one three-equivalent and makes the true count exactly 3. So 3 threes stands. Every alternative is worse — 2 fours or 2 fives need both her dice (11%), and 2 sixes needs her one non-three die to be a 6 or wild (~33%). Note she cannot answer with a count-4 bid in pattern, since that would require 3 hits from 2 dice, so she is nearly forced to call.",
+      "say": "Threes it is, then. Three of them.",
+      "note": "Riding her own bid: she declared threes, which tells me she holds one, and I hold two. She has no in-pattern raise available at count 4 off two dice, so she should call into a true bid. That would put her on her last die.",
+      "thinkMs": 25506,
+      "acceptedAt": "2026-08-17T07:48:27.803Z",
+      "resultingStateId": "r6:e45:v30:tA"
+    },
+    {
+      "id": 30,
+      "seat": "A",
+      "round": 6,
+      "stateId": "r6:e45:v30:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I hold one three and no wilds. Three threes requires B to have two effective threes among three dice, which is unlikely.",
+      "say": "I call three threes.",
+      "note": "Challenge rather than raise from a weak two-die hand.",
+      "thinkMs": 3836,
+      "acceptedAt": "2026-08-17T07:48:31.659Z",
+      "resultingStateId": "r7:e49:v31:tA"
+    },
+    {
+      "id": 31,
+      "seat": "A",
+      "round": 7,
+      "stateId": "r7:e49:v31:tA",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "With one die left, I need to know the face before opening.",
+      "say": "Looking.",
+      "note": "Critical one-die round; do not blind.",
+      "thinkMs": 4096,
+      "acceptedAt": "2026-08-17T07:48:35.755Z",
+      "resultingStateId": "r7:e50:v32:tA"
+    },
+    {
+      "id": 32,
+      "seat": "A",
+      "round": 7,
+      "stateId": "r7:e50:v32:tA",
+      "action": {
+        "type": "declare",
+        "declaration": "zhai"
+      },
+      "belief": "With only one known die, declaring no-wilds makes my actual five more meaningful and prevents opponent ones from supporting unrelated faces.",
+      "say": "No wilds.",
+      "note": "Use zhai as opening bidder before first bid.",
+      "thinkMs": 6957,
+      "acceptedAt": "2026-08-17T07:48:42.712Z",
+      "resultingStateId": "r7:e51:v33:tA"
+    },
+    {
+      "id": 33,
+      "seat": "A",
+      "round": 7,
+      "stateId": "r7:e51:v33:tA",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 5
+      },
+      "belief": "The engine rejected a one-count bid as off-ladder; two fives is the lowest plausible legal bid on my known face under this ladder.",
+      "say": "Two fives.",
+      "note": "Recover from rejected one-count bid without changing state; bid known face at count two.",
+      "thinkMs": 9869,
+      "acceptedAt": "2026-08-17T07:48:52.582Z",
+      "resultingStateId": "r7:e52:v34:tB"
+    },
+    {
+      "id": 34,
+      "seat": "B",
+      "round": 7,
+      "stateId": "r7:e52:v34:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Under zhai she opened 2 fives with a single die. Her holdings+1 tell has been exact 7 straight times, and with one die the only in-pattern reading is that her die IS a 5. So the true five-count is 1 plus however many fives I hold, with no wilds to blur it. If I hold zero fives the count is 1 against a bid of 2 and calling ends the match right now; if I hold one or more, her bid stands and I raise instead. Must see my dice before choosing.",
+      "say": "Two fives on one die. Let me check mine.",
+      "note": "Decision is binary and fully determined by my own hand: zero fives means challenge for the match, otherwise raise.",
+      "thinkMs": 34256,
+      "acceptedAt": "2026-08-17T07:49:06.015Z",
+      "resultingStateId": "r7:e53:v35:tB"
+    },
+    {
+      "id": 35,
+      "seat": "B",
+      "round": 7,
+      "stateId": "r7:e53:v35:tB",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "My dice 3,5,3, no wilds. Board is exactly 4 dice: my 3s=2, 5s=1, everything else 0, plus her single unknown die d. Counts are 3s=2+[d=3], 5s=1+[d=5], and nothing can exceed 3. Now check every legal action. Bid 2 sixes: sixes are 0+[d=6], can never reach 2 — it literally cannot be true. Any count-3 bid: 3 threes needs d=3, 3 fives needs two more fives which don't exist, all others are 0. Challenge 2 fives: wins exactly when d is not a 5. So the win-set of challenging, {d≠5}, strictly contains the win-set of my best bid, {d=3}, and every other bid wins nowhere. Challenge dominates outright — no probability estimate even required. Her tell says d=5 and I hold the one five that makes it stand, so this likely fails, but nothing else does better and losing here costs one die, not the match: I'd still lead 2-1.",
+      "say": "Nothing I can bid here is true, so I'll take the honest route — I call.",
+      "note": "Zhai on her last die was a genuinely good squeeze: with 4 dice and my hand, no legal raise can be true, so bidding is drawing dead in every branch challenging isn't. Challenge is the strictly dominant action. If it fails I'm still ahead 2-1 with her on one die.",
+      "thinkMs": 73625,
+      "acceptedAt": "2026-08-17T07:50:19.640Z",
+      "resultingStateId": "r8:e57:v36:tB"
+    },
+    {
+      "id": 36,
+      "seat": "A",
+      "round": 8,
+      "stateId": "r8:e57:v36:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "B opens at two dice against my one; peek is legal and necessary.",
+      "say": "Checking.",
+      "note": "Round 7 zhai bid stood and B lost a die. Continue at 1 vs 2.",
+      "thinkMs": 4374,
+      "acceptedAt": "2026-08-17T07:50:24.034Z",
+      "resultingStateId": "r8:e58:v37:tB"
+    },
+    {
+      "id": 37,
+      "seat": "B",
+      "round": 8,
+      "stateId": "r8:e58:v37:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "2 dice vs her 1, only 3 on the table, and I open. Strong shape for me: any count-3 bid requires all three dice to match, so if I open with a count-2 bid my own two dice guarantee, she can only call a bid that cannot lose or climb to count 3, which I challenge to win the match. Looking for a pair or die+wild, and I'll take the highest such face to deny her cheap rungs.",
+      "say": "Well played, that was a real squeeze. My open.",
+      "note": "Need to see whether I hold a guaranteed count-2 bid before deciding on zhai vs normal wilds.",
+      "thinkMs": 22094,
+      "acceptedAt": "2026-08-17T07:50:41.734Z",
+      "resultingStateId": "r8:e59:v38:tB"
+    },
+    {
+      "id": 38,
+      "seat": "B",
+      "round": 8,
+      "stateId": "r8:e59:v38:tB",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 2
+      },
+      "belief": "My dice 5,2. Since I hold no pair and no wild, NO count-3 bid can ever be true this round — three matching dice are impossible when my two differ and neither is a 1. That makes her behavioural split decisive: across 7 samples she has challenged every count-3+ bid I made and RAISED both of my count-2 bids. So I want to open at the absolute floor, 2 twos, giving her the maximum number of count-2 rungs to raise into. Her holdings+1 tell means she answers 2 X where X is her own die, and since I hold only a 5 and a 2, every such bid is false except 2 fives — I challenge it and win the match. Working through her die d: d=2 or d=1 makes my own 2 twos true so I win even if she calls; d=3, 4 or 6 gives her a false raise I punish; only d=5 beats me. That is roughly 5-in-6, versus just 1-in-3 if I open 2 fives, which leaves her nothing to raise into and forces the call I'd usually lose.",
+      "say": "Not much to work with again. Two twos — lowest I can say.",
+      "note": "Deliberately bidding the floor to leave her room. Same weak-sounding framing that induced her to raise instead of call in round 4. If she raises to 2 threes, 2 fours or 2 sixes I challenge instantly — all are false against my 5,2. Only 2 fives beats me.",
+      "thinkMs": 94626,
+      "acceptedAt": "2026-08-17T07:52:16.360Z",
+      "resultingStateId": "r8:e60:v39:tA"
+    },
+    {
+      "id": 39,
+      "seat": "A",
+      "round": 8,
+      "stateId": "r8:e60:v39:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "I have a three, so I contribute nothing to twos. Two twos requires both of B's dice to be effective twos, which is unlikely.",
+      "say": "I call two twos.",
+      "note": "At one die, challenge the unsupported two-count bid.",
+      "thinkMs": 3687,
+      "acceptedAt": "2026-08-17T07:52:20.236Z",
+      "resultingStateId": "r9:e64:v40:tB"
+    },
+    {
+      "id": 40,
+      "seat": "A",
+      "round": 9,
+      "stateId": "r9:e64:v40:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Final-style one die each round; B opens and I need my die before responding.",
+      "say": "Checking.",
+      "note": "Round 8 challenge succeeded; both players now at one die.",
+      "thinkMs": 3207,
+      "acceptedAt": "2026-08-17T07:52:23.443Z",
+      "resultingStateId": "r9:e65:v41:tB"
+    },
+    {
+      "id": 41,
+      "seat": "B",
+      "round": 9,
+      "stateId": "r9:e65:v41:tB",
+      "action": {
+        "type": "peek"
+      },
+      "belief": "Sudden death: 1 die each, 2 on the table, I open. With only 2 dice a count-3 bid is arithmetically impossible, so the whole game is count-2, and a bid of 2 X is true only if BOTH dice are X or wild. That caps my opener at 1/3 — I name my own die's face and need hers to match or be the wild. Not declaring zhai: stripping wilds would drop me to 1/6.",
+      "say": "One apiece. Winner takes it.",
+      "note": "If my die isn't the wild, bid 2 of my own face — the only face with any equity — and keep it low so that any raise from her is self-defeating. If my die IS the wild, bid 2 sixes to deny her raising room.",
+      "thinkMs": 85140,
+      "acceptedAt": "2026-08-17T07:53:45.401Z",
+      "resultingStateId": "r9:e66:v42:tB"
+    },
+    {
+      "id": 42,
+      "seat": "B",
+      "round": 9,
+      "stateId": "r9:e66:v42:tB",
+      "action": {
+        "type": "bid",
+        "count": 2,
+        "face": 3
+      },
+      "belief": "My die is a 3, hers unknown, 2 dice total. A bid of 2 X needs BOTH dice in {X,1}. Since my die is a 3 and not a wild, 2 threes is the ONLY bid on the board with any chance — 2 twos, 2 fours, 2 fives and 2 sixes are all dead on arrival, because my 3 contributes nothing and her single die can supply at most one. So 2 threes it is, true iff her die is a 3 or the wild: 1/3. I'm also choosing the lowest live face deliberately, because it leaves her four rungs to raise into and EVERY one of them is false against my 3 — if she raises rather than calls, I challenge and win outright. I should be clear-eyed that talk can't save the other branch: if her die isn't a 3 or wild she can prove the bid false by arithmetic alone and will simply call. Zhai would be strictly worse, dropping me from 1/3 to 1/6 by killing the wild.",
+      "say": "Two threes. I like my chances on this one — but by all means, call it if you're feeling brave.",
+      "note": "Forced play at ~1/3. Lowest live face maximizes her room to blunder: any raise she makes is false against my 3 and I call it for the match. Needling her to call is reverse psychology — if it makes her prefer a \"safe\" raise instead, I win outright.",
+      "thinkMs": 58871,
+      "acceptedAt": "2026-08-17T07:54:44.272Z",
+      "resultingStateId": "r9:e67:v43:tA"
+    },
+    {
+      "id": 43,
+      "seat": "A",
+      "round": 9,
+      "stateId": "r9:e67:v43:tA",
+      "action": {
+        "type": "challenge",
+        "assert": "current_bid_is_false"
+      },
+      "belief": "My one is wild and counts as a three, but two threes still requires B's single die to be a three or one. That is only a one-in-three stand chance.",
+      "say": "I call two threes.",
+      "note": "Best available action is to challenge the two-count bid at one die each.",
+      "thinkMs": 5493,
+      "acceptedAt": "2026-08-17T07:54:49.836Z",
+      "resultingStateId": "r9:e71:v44:tA"
+    }
+  ]
+}

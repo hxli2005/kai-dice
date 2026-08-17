@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-08-17T08:44:50.446Z",
+  "seed": 41782963,
+  "coordinator": "http://127.0.0.1:50691",
+  "codex": {
+    "command": "codex",
+    "model": "gpt-5.6-sol",
+    "args": [
+      "exec",
+      "--json",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "--cd",
+      "/var/folders/3b/w3k6ccf52x94dtkn901gjrhh0000gn/T/kai-showdown-Q1yfQv/codex-seat",
+      "--sandbox",
+      "read-only",
+      "--config",
+      "approval_policy=\"never\"",
+      "--config",
+      "mcp_servers.liars.command=\"/opt/homebrew/Cellar/node/25.8.0/bin/node\"",
+      "--config",
+      "mcp_servers.liars.args=[\"/Users/lhx/code/0/scripts/mcp/seat-server.mjs\",\"--seat\",\"A\",\"--coordinator\",\"http://127.0.0.1:50691\",\"--token\",\"<seat-token>\"]",
+      "--config",
+      "mcp_servers.liars.default_tools_approval_mode=\"approve\"",
+      "--model",
+      "gpt-5.6-sol",
+      "Play this entire Liar's Dice match to completion using only the liars MCP tools. One session covers every round. Observe, take legal actions, and wait when no action is legal. Do not stop until current.over is true; then report the winner."
+    ],
+    "exit": {
+      "code": 0,
+      "signal": null
+    }
+  },
+  "claude": {
+    "command": "claude",
+    "model": "opus",
+    "args": [
+      "--print",
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "<mcp-config>",
+      "--tools",
+      "",
+      "--dangerously-skip-permissions",
+      "--disable-slash-commands",
+      "--model",
+      "opus",
+      "Play this entire Liar's Dice match to completion using only the liars MCP tools. One session covers every round. Observe, take legal actions, and wait when no action is legal. Do not stop until current.over is true; then report the winner."
+    ],
+    "exit": {
+      "code": 0,
+      "signal": null
+    }
+  },
+  "versions": {
+    "codex": "codex-cli 0.147.0",
+    "claude": "2.1.220 (Claude Code)"
+  },
+  "completedAt": "2026-08-17T08:49:40.216Z",
+  "outcome": "match",
+  "over": true,
+  "winner": "B"
+}

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "experiment": "gpt-5.6-sol-vs-claude-opus-5-continuous-session-bo3",
+  "baseSeed": 73019426,
+  "result": {
+    "winner": "B",
+    "seriesScore": { "A": 0, "B": 2 },
+    "roundScore": { "A": 2, "B": 10 },
+    "games": [
+      { "game": 1, "seed": 73019426, "firstSeat": "A", "winner": "B", "rounds": 6, "finalDice": { "A": 0, "B": 4 } },
+      { "game": 2, "seed": 73019427, "firstSeat": "B", "winner": "B", "rounds": 6, "finalDice": { "A": 0, "B": 4 } }
+    ]
+  },
+  "integrity": {
+    "acceptedActions": 59,
+    "rejectedActions": 4,
+    "rejectionCodes": { "STALE_STATE": 4 },
+    "fallbackActions": 0,
+    "codexExitCode": 0,
+    "claudeExitCode": 0,
+    "deterministicReplay": "pass-both-games"
+  },
+  "seatMetrics": {
+    "A": {
+      "agent": "Codex",
+      "model": "gpt-5.6-sol",
+      "decisions": 32,
+      "bids": 12,
+      "challenges": 8,
+      "challengeHits": 0,
+      "peeks": 12,
+      "declarations": 0,
+      "publicSpeechActions": 0,
+      "explicitCrossGameReferencesInActionLogs": 0,
+      "usage": { "inputTokens": 900822, "cachedInputTokens": 859136, "outputTokens": 5217, "reasoningOutputTokens": 988 }
+    },
+    "B": {
+      "agent": "Claude Code",
+      "model": "claude-opus-5",
+      "decisions": 27,
+      "bids": 11,
+      "challenges": 4,
+      "challengeHits": 2,
+      "peeks": 12,
+      "declarations": 0,
+      "publicSpeechActions": 27,
+      "explicitCrossGameReferencesInActionLogs": 5,
+      "usage": { "inputTokens": 92, "cacheCreationInputTokens": 149148, "cacheReadInputTokens": 3157323, "outputTokens": 111897, "reportedCostUsd": 5.8687205 }
+    }
+  },
+  "solChallengeAudit": [
+    { "game": 1, "round": 1, "naiveBidStandProbability": 0.2099, "result": "miss" },
+    { "game": 1, "round": 2, "naiveBidStandProbability": 0.5391, "result": "miss" },
+    { "game": 1, "round": 4, "naiveBidStandProbability": 0.1111, "result": "miss" },
+    { "game": 1, "round": 5, "naiveBidStandProbability": 0.4074, "result": "miss" },
+    { "game": 2, "round": 1, "naiveBidStandProbability": 0.2099, "result": "miss" },
+    { "game": 2, "round": 4, "naiveBidStandProbability": 0.4074, "result": "miss" },
+    { "game": 2, "round": 5, "naiveBidStandProbability": 0.4074, "result": "miss" },
+    { "game": 2, "round": 6, "naiveBidStandProbability": 0.1111, "result": "miss" }
+  ],
+  "measurementWarnings": [
+    "Agent harnesses, default system prompts, context management and compute budgets differ.",
+    "Only two full games and two seeds were observed; there is no mirrored-seat run on the same seeds.",
+    "Coordinator thinkMs measures time after the latest tool result, not total model compute; it is not comparable across the two clients.",
+    "Claude selected bids conditional on strong private hands, so Sol's unconditional binomial truth estimates are not calibrated to the opponent policy.",
+    "Public speech is asymmetric: Claude spoke on every accepted action while Sol never spoke in this run."
+  ]
+}
+

@@ -1,0 +1,489 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-17T10:23:53.542Z",
+  "source": {
+    "runFile": "/Users/lhx/code/0/docs/showdown/2026-08-17-bo3-mirror-seed-73019426/run.json",
+    "runDirectory": "/Users/lhx/code/0/docs/showdown/2026-08-17-bo3-mirror-seed-73019426",
+    "snapshotSchemaVersion": 1,
+    "metadataFile": "/Users/lhx/code/0/docs/showdown/2026-08-17-bo3-mirror-seed-73019426/metadata.json",
+    "metadataPresent": true
+  },
+  "participants": {
+    "seats": {
+      "A": {
+        "label": "Claude Code · opus",
+        "agent": "claude"
+      },
+      "B": {
+        "label": "Codex · gpt-5.6-sol",
+        "agent": "codex"
+      }
+    },
+    "agents": {
+      "codex": {
+        "seat": "B",
+        "model": "gpt-5.6-sol"
+      },
+      "claude": {
+        "seat": "A",
+        "model": "opus"
+      }
+    }
+  },
+  "series": {
+    "seed": 73019426,
+    "bestOf": 3,
+    "winsNeeded": 2,
+    "over": true,
+    "winner": "A",
+    "wins": {
+      "A": 2,
+      "B": 0
+    },
+    "gamesCompleted": 2,
+    "gamesObserved": 2
+  },
+  "totals": {
+    "acceptedActions": 77,
+    "rejections": 1100,
+    "rejectionCodes": {
+      "STALE_STATE": 7,
+      "ILLEGAL_ACTION": 1093
+    },
+    "dialogue": 27,
+    "rounds": 13,
+    "actionTypes": {
+      "peek": 26,
+      "declare": 1,
+      "bid": 37,
+      "challenge": 13
+    },
+    "challengesResolved": 13,
+    "challengeHits": 6
+  },
+  "seats": {
+    "A": {
+      "acceptedActions": 37,
+      "rejections": 6,
+      "actionTypes": {
+        "peek": 13,
+        "declare": 1,
+        "bid": 18,
+        "challenge": 5
+      },
+      "bids": 18,
+      "challenges": 5,
+      "challengeResolved": 5,
+      "challengeHits": 4,
+      "challengeMisses": 1,
+      "challengeUnresolved": 0,
+      "challengeAccuracy": 0.8
+    },
+    "B": {
+      "acceptedActions": 40,
+      "rejections": 1094,
+      "actionTypes": {
+        "peek": 13,
+        "declare": 0,
+        "bid": 19,
+        "challenge": 8
+      },
+      "bids": 19,
+      "challenges": 8,
+      "challengeResolved": 8,
+      "challengeHits": 2,
+      "challengeMisses": 6,
+      "challengeUnresolved": 0,
+      "challengeAccuracy": 0.25
+    }
+  },
+  "games": [
+    {
+      "game": 1,
+      "seed": 73019426,
+      "firstSeat": "A",
+      "winner": "A",
+      "completed": true,
+      "rounds": 5,
+      "acceptedActions": 28,
+      "rejections": 1098,
+      "actionsBySeat": {
+        "A": 14,
+        "B": 14
+      },
+      "actionTypes": {
+        "peek": 10,
+        "declare": 0,
+        "bid": 13,
+        "challenge": 5
+      },
+      "challenges": 5,
+      "challengeHits": 4
+    },
+    {
+      "game": 2,
+      "seed": 73019427,
+      "firstSeat": "B",
+      "winner": "A",
+      "completed": true,
+      "rounds": 8,
+      "acceptedActions": 49,
+      "rejections": 2,
+      "actionsBySeat": {
+        "A": 23,
+        "B": 26
+      },
+      "actionTypes": {
+        "peek": 16,
+        "declare": 1,
+        "bid": 24,
+        "challenge": 8
+      },
+      "challenges": 8,
+      "challengeHits": 2
+    }
+  ],
+  "challengeOutcomes": [
+    {
+      "game": 1,
+      "round": 1,
+      "challenger": "A",
+      "bidder": "B",
+      "bid": {
+        "count": 6,
+        "face": 4
+      },
+      "actual": 4,
+      "stands": false,
+      "hit": true,
+      "loser": "B"
+    },
+    {
+      "game": 1,
+      "round": 2,
+      "challenger": "A",
+      "bidder": "B",
+      "bid": {
+        "count": 4,
+        "face": 4
+      },
+      "actual": 2,
+      "stands": false,
+      "hit": true,
+      "loser": "B"
+    },
+    {
+      "game": 1,
+      "round": 3,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 6,
+        "face": 4
+      },
+      "actual": 6,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    },
+    {
+      "game": 1,
+      "round": 4,
+      "challenger": "A",
+      "bidder": "B",
+      "bid": {
+        "count": 4,
+        "face": 5
+      },
+      "actual": 3,
+      "stands": false,
+      "hit": true,
+      "loser": "B"
+    },
+    {
+      "game": 1,
+      "round": 5,
+      "challenger": "A",
+      "bidder": "B",
+      "bid": {
+        "count": 2,
+        "face": 6
+      },
+      "actual": 1,
+      "stands": false,
+      "hit": true,
+      "loser": "B"
+    },
+    {
+      "game": 2,
+      "round": 1,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 4,
+        "face": 4
+      },
+      "actual": 3,
+      "stands": false,
+      "hit": true,
+      "loser": "A"
+    },
+    {
+      "game": 2,
+      "round": 2,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 2,
+        "face": 6
+      },
+      "actual": 1,
+      "stands": false,
+      "hit": true,
+      "loser": "A"
+    },
+    {
+      "game": 2,
+      "round": 3,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 4,
+        "face": 3
+      },
+      "actual": 4,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    },
+    {
+      "game": 2,
+      "round": 4,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 3,
+        "face": 5
+      },
+      "actual": 3,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    },
+    {
+      "game": 2,
+      "round": 5,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 3,
+        "face": 5
+      },
+      "actual": 3,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    },
+    {
+      "game": 2,
+      "round": 6,
+      "challenger": "A",
+      "bidder": "B",
+      "bid": {
+        "count": 3,
+        "face": 3
+      },
+      "actual": 3,
+      "stands": true,
+      "hit": false,
+      "loser": "A"
+    },
+    {
+      "game": 2,
+      "round": 7,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 3,
+        "face": 3
+      },
+      "actual": 3,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    },
+    {
+      "game": 2,
+      "round": 8,
+      "challenger": "B",
+      "bidder": "A",
+      "bid": {
+        "count": 2,
+        "face": 5
+      },
+      "actual": 2,
+      "stands": true,
+      "hit": false,
+      "loser": "B"
+    }
+  ],
+  "crossGameExplicitReferences": {
+    "heuristic": {
+      "name": "explicit-prior-game-markers-v1",
+      "scope": "belief/say/note on accepted decisions in game 2 or later",
+      "markers": [
+        {
+          "label": "game N",
+          "pattern": "\\bgame\\s+(?:1|one|i)\\b"
+        },
+        {
+          "label": "prior-game phrase",
+          "pattern": "\\b(?:previous|prior|last|earlier|first)\\s+(?:game|match)\\b"
+        },
+        {
+          "label": "Chinese prior-game phrase",
+          "pattern": "(?:上一|前一|第一)(?:场|局)"
+        }
+      ],
+      "interpretation": "Counts explicit textual mentions only; it cannot prove memory use or detect implicit adaptation."
+    },
+    "total": 3,
+    "bySeat": {
+      "A": 3,
+      "B": 0
+    },
+    "matches": [
+      {
+        "decisionId": 30,
+        "seat": "A",
+        "game": 2,
+        "round": 1,
+        "markers": [
+          "game N"
+        ],
+        "fields": [
+          {
+            "field": "belief",
+            "excerpt": "Series is 1-0 to me after a 5-0 sweep of game 1. Game 2 round 1: B declined zhai, so ones remain wild and bid faces are 2-6. B opened 2 twos, a low feeler bid — with 10 dice on the table the expected count for any face is 3.33, so 2 twos is"
+          }
+        ]
+      },
+      {
+        "decisionId": 31,
+        "seat": "A",
+        "game": 2,
+        "round": 1,
+        "markers": [
+          "game N"
+        ],
+        "fields": [
+          {
+            "field": "belief",
+            "excerpt": "I hold three 4s and two 5s, no wilds. B's 2 twos is likely true (I have zero {1,2}, so it needs 2 of B's 5 dice — 53.9%), so challenging at 46% is not worth it this early. 4 fours needs just one {1,4} among B's five dice: P=1-(4/6)^5=86.8%."
+          }
+        ]
+      },
+      {
+        "decisionId": 34,
+        "seat": "A",
+        "game": 2,
+        "round": 2,
+        "markers": [
+          "game N"
+        ],
+        "fields": [
+          {
+            "field": "belief",
+            "excerpt": "I lost round 1 to the 13.2% branch: B held [5,2,2,2,3] — zero 4s AND zero ones — so the total was exactly my 3 against my bid of 4. The bid was correct on EV; the outcome was variance. Important read update though: B challenged fast and acc"
+          }
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "codex": {
+      "present": true,
+      "file": "/Users/lhx/code/0/docs/showdown/2026-08-17-bo3-mirror-seed-73019426/codex.jsonl",
+      "lines": 3800,
+      "parseErrors": 0,
+      "extracted": true,
+      "configuredSeat": "B",
+      "configuredModel": "gpt-5.6-sol",
+      "recordType": "turn.completed",
+      "usage": {
+        "input_tokens": 1577034,
+        "cached_input_tokens": 1502208,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 6571,
+        "reasoning_output_tokens": 1456
+      }
+    },
+    "claude": {
+      "present": true,
+      "file": "/Users/lhx/code/0/docs/showdown/2026-08-17-bo3-mirror-seed-73019426/claude.jsonl",
+      "lines": 864,
+      "parseErrors": 0,
+      "extracted": true,
+      "configuredSeat": "A",
+      "configuredModel": "opus",
+      "recordType": "result",
+      "usage": {
+        "input_tokens": 130,
+        "cache_creation_input_tokens": 154734,
+        "cache_read_input_tokens": 4576902,
+        "output_tokens": 106572,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 154734,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1518,
+            "cache_read_input_tokens": 155021,
+            "cache_creation_input_tokens": 1098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1098
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 6.501439999999997,
+      "modelUsage": {
+        "claude-haiku-4-5-20251001": {
+          "inputTokens": 584,
+          "outputTokens": 23,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "webSearchRequests": 0,
+          "costUSD": 0.000699,
+          "contextWindow": 200000,
+          "maxOutputTokens": 32000,
+          "canonicalModel": "claude-haiku-4-5",
+          "provider": "firstParty"
+        },
+        "claude-opus-5": {
+          "inputTokens": 130,
+          "outputTokens": 106572,
+          "cacheReadInputTokens": 4576902,
+          "cacheCreationInputTokens": 154734,
+          "webSearchRequests": 0,
+          "costUSD": 6.500740999999998,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "canonicalModel": "claude-opus-5",
+          "provider": "firstParty"
+        }
+      }
+    }
+  }
+}

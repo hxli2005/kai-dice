@@ -1,0 +1,3 @@
+Reading additional input from stdin...
+2026-08-17T09:39:33.566817Z  WARN codex_core::responses_retry: stream disconnected - retrying sampling request (1/5 in 195ms)... turn_id=01a00f13-ab3e-78b0-bdb7-68f9ef853cd6 retries=1 max_retries=5 sampling_error=stream disconnected before completion: failed to send websocket request: Connection closed normally
+2026-08-17T09:43:37.867059Z  WARN rmcp::service: Error sending response id=52

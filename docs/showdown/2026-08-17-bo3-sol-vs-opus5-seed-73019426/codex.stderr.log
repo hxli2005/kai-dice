@@ -1,0 +1,3 @@
+Reading additional input from stdin...
+2026-08-17T09:02:41.359469Z  WARN rmcp::service: Error sending response id=102
+2026-08-17T09:14:04.519314Z  WARN rmcp::service: Error sending response id=160
