@@ -12,3 +12,8 @@ docs/arena/**/run.json
 
 # 逐场增量落盘（跑批中途翻牌用，正式产物是同目录的 board/lines/series）
 docs/arena/.live-*/
+
+# 本地调试产物（不入库）
+output/
+.playwright-cli/
+kai-liars-records/
