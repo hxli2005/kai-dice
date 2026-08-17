@@ -187,12 +187,15 @@ export const CATALOG = [
   {
     id: 'liang',
     name: '亮一颗',
+    nameEn: 'Reveal One',
     origin: 'official',
     card: '看过骰后，轮到你时可先拍「亮」（每人每局一次）：翻开自己选定的一颗骰给全桌看，然后照常行动。亮出的骰算数、收不回——是饵还是实话，对面自己猜。',
+    cardEn: 'After peeking, on your turn you may press REVEAL once per player per round: reveal one chosen die to the whole table, then take your normal action. The revealed die still counts and cannot be hidden again. Your opponents decide whether it is bait or truth.',
     actions: [
       {
         type: 'liang',
         label: '亮',
+        labelEn: 'REVEAL',
         window: { turn: true, requiresPeeked: true, oncePer: 'round' },
         params: 'face',
         keepTurn: true,
@@ -203,14 +206,17 @@ export const CATALOG = [
   {
     id: 'qia',
     name: '掐',
+    nameEn: 'Calza',
     origin: 'official',
     // 文案纪律（2026-08-12 用户裁决）：与 v3 世界语义同一口径——平实的桌面话，只写规则事实，
     // 不画重点（"第三条路"这类框架句删除：实验测的是谁自发用掐，卡不许替它做广告）。
     card: '轮到你、面对不是你报的价时可拍「掐」：宣布这口价恰好为真——桌上实有的恰好就是报的数——并当场开牌。若掐对：你收池，并拿回一颗骰（最多回到起始的 5 颗，满骰时只收池）；下一局报价者先报。若掐错：你掉一颗骰，池归报价者；下一局你先报。被掐的报价者不掉骰。骰子没有别的途径拿回来。',
+    cardEn: 'On your turn, when facing another player’s bid, you may press CALZA to declare that the bid is exactly true, then reveal immediately. If exact, you take the pot and regain one die up to the starting five; the bidder opens the next round. If wrong, you lose one die, the bidder takes the pot, and you open the next round. The bidder never loses a die to Calza. There is no other way to regain dice.',
     actions: [
       {
         type: 'qia',
         label: '掐',
+        labelEn: 'CALZA',
         window: { turn: true, needBid: true, notOwnBid: true },
         params: null,
         terminal: true,
@@ -221,12 +227,15 @@ export const CATALOG = [
   {
     id: 'rang',
     name: '让报',
+    nameEn: 'Return Bid',
     origin: 'official',
     card: '轮到你面对报价时，可拍「让」（每人每场一次）：把这口价原样推回给报价者，他必须自己继续抬——你不接，也不开，让他自己把话说下去。',
+    cardEn: 'On your turn when facing a bid, you may press RETURN once per player per match: send the unchanged bid back to its bidder, who must raise it. You neither accept nor call the bid; the bidder must keep it going.',
     actions: [
       {
         type: 'rang',
         label: '让',
+        labelEn: 'RETURN',
         window: { turn: true, needBid: true, notOwnBid: true, oncePer: 'match', needRaisableByBidder: true },
         params: null,
         effect: [{ op: 'returnBid' }],

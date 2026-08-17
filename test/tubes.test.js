@@ -1,7 +1,41 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createMatch } from '../src/engine.js';
-import { toTubeView } from '../src/ui/tubes.js';
+import { SETTLEMENT_HOLD_MS, toTubeView } from '../src/ui/tubes.js';
+
+test('三管机开牌结算保留足够阅读时间，且不受动画加速影响', () => {
+  const tubes = fs.readFileSync(new URL('../src/ui/tubes.js', import.meta.url), 'utf8');
+
+  assert.equal(SETTLEMENT_HOLD_MS, 3000);
+  assert.match(tubes, /phase = 'settle';\s*timeScale = 1;\s*\/\/[^\n]*\n\s*await new Promise\(\(resolve\) => setTimeout\(resolve, SETTLEMENT_HOLD_MS\)\)/);
+  assert.doesNotMatch(tubes, /await scaledWait\(700\);\s*phase = 'settle'/);
+});
+
+test('三管机 AI 台词使用完整可滚动 DOM 层，不再塞进两行 Canvas 分页', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/ui/style.css', import.meta.url), 'utf8');
+  const tubes = fs.readFileSync(new URL('../src/ui/tubes.js', import.meta.url), 'utf8');
+
+  assert.match(html, /id="tubeSpeech"[^>]*data-raw/);
+  assert.match(css, /\.tube-speech\s*\{[\s\S]*?overflow-y:\s*auto/);
+  assert.match(css, /\.tube-speech\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+  assert.match(tubes, /speechEl\.textContent = speech\.shown/);
+  assert.match(tubes, /speechEl\.scrollTop = speechEl\.scrollHeight/);
+  assert.doesNotMatch(tubes, /all\.slice\(-2\)/);
+  assert.doesNotMatch(tubes, /terminalPage\(\)/);
+});
+
+test('普通与三人气泡限制高度、允许滚动和任意换行', () => {
+  const css = fs.readFileSync(new URL('../src/ui/style.css', import.meta.url), 'utf8');
+  for (const selector of ['.bubble', '.strip-bubble']) {
+    const body = css.match(new RegExp(`\\${selector}\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? '';
+    assert.match(body, /max-height:/, selector);
+    assert.match(body, /overflow-y:\s*auto/, selector);
+    assert.match(body, /overflow-wrap:\s*anywhere/, selector);
+    assert.match(body, /white-space:\s*pre-wrap/, selector);
+  }
+});
 
 test('三管机视图只映射 observe 公开事实，不泄露对手暗骰', async () => {
   const match = await createMatch({ seed: 17 });

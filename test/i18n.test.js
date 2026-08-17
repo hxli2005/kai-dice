@@ -2,11 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { language, translateUiText } from '../src/ui/i18n.js';
+import { language, outputLanguageRule, translateUiText } from '../src/ui/i18n.js';
 
 test('English adaptation keeps Chinese as the non-browser default', () => {
   assert.equal(language(), 'zh');
   assert.equal(translateUiText('开局'), '开局');
+});
+
+test('英文输出规则明确要求翻译中文素材且不得用中文回答', () => {
+  assert.match(outputLanguageRule('en'), /Translate any Chinese source material/);
+  assert.match(outputLanguageRule('en'), /never answer in Chinese/);
+  assert.equal(outputLanguageRule('zh'), '');
 });
 
 test('English UI copy covers core controls and dynamic round labels', () => {
@@ -42,6 +48,7 @@ test('每个渲染模型文字的地方都打了 data-raw', () => {
   // a11y 播报区含模型台词，内容由 tubes.js 预先本地化
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /id="tubeA11y"[^>]*data-raw/);
+  assert.match(html, /id="tubeSpeech"[^>]*data-raw/);
 });
 
 // PHRASES 是顺序子串替换：短片段会排在长片段前面，把后者的机会吃掉，
@@ -91,8 +98,17 @@ test('English guide, manifest, prompt contract, and offline shell ship together'
   assert.equal(manifest.start_url, './?lang=en');
   assert.match(agent, /LIAR'S DICE · RULES/);
   assert.match(i18n, /Write every natural-language value/);
+  assert.match(agent, /'v10-en'/);
   assert.match(pkg.scripts.dist, /about\.en\.html/);
   assert.match(pkg.scripts.dist, /manifest\.en\.webmanifest/);
   assert.match(sw, /about\.en\.html/);
   assert.match(sw, /src\/ui\/i18n\.js/);
+});
+
+test('英文 DOM 适配器不监听自己写回的文字', () => {
+  const source = fs.readFileSync(new URL('../src/ui/i18n.js', import.meta.url), 'utf8');
+  const options = source.match(/observer\.observe\(document\.body,\s*\{([^}]+)\}\)/)?.[1] ?? '';
+  assert.match(options, /childList:\s*true/);
+  assert.match(options, /subtree:\s*true/);
+  assert.doesNotMatch(options, /characterData/);
 });

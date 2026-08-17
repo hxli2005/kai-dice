@@ -42,9 +42,9 @@ export function languageUrl(next = isEnglish() ? 'zh' : 'en') {
   return `${url.pathname.split('/').pop() || 'index.html'}${url.search}${url.hash}`;
 }
 
-export const outputLanguageRule = () =>
-  isEnglish()
-    ? 'Write every natural-language value in the JSON output (belief, say, note, reaction text, verdict, hypotheses, and misses) in English.'
+export const outputLanguageRule = (lang = language()) =>
+  lang === 'en'
+    ? 'Write every natural-language value in the JSON output (belief, say, note, reaction text, verdict, hypotheses, and misses) in English. Translate any Chinese source material before summarizing or replying; never answer in Chinese.'
     : '';
 
 const EXACT = new Map([
@@ -415,8 +415,12 @@ export function installEnglishUi() {
   observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) localizeTree(node);
-      if (record.type === 'characterData') localizeTree(record.target);
     }
   });
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  // `innerHTML` and `textContent` both add or replace text nodes, so child-list
+  // observation covers every dynamic UI update in this app. Do not observe
+  // characterData here: localizeTree rewrites characterData itself, and feeding
+  // those writes back into the observer can grow the microtask queue until
+  // Chromium kills the English page before showLobby() gets to run.
+  observer.observe(document.body, { childList: true, subtree: true });
 }

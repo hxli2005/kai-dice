@@ -42,6 +42,7 @@ const LED = { x: 6, y: 202, w: 183, h: 16 };
 const FACE_KEY_Y = 316;
 const COUNT_KEY_Y = 340;
 const KEY_Y = 366;
+export const SETTLEMENT_HOLD_MS = 3000;
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const easeOut = (p) => 1 - (1 - p) ** 3;
 const CHIP_TRACES = {
@@ -154,6 +155,7 @@ export function toTubeView(o, {
 export function createTubeStage(canvas, handlers = {}) {
   const viewport = canvas.closest('.tube-viewport');
   const a11y = document.getElementById('tubeA11y');
+  const speechEl = document.getElementById('tubeSpeech');
   const off = document.createElement('canvas');
   off.width = W * RS;
   off.height = H * RS;
@@ -209,6 +211,7 @@ export function createTubeStage(canvas, handlers = {}) {
   let pokeMenu = false;
   let moreMenu = false;
   let speech = { full: '', shown: '', n: 0, acc: 0, doneAt: 0 };
+  let followSpeech = true;
   let thinking = false;
   let wave = { ph: 0, voice: 0, flat: 0, chaos: 0 };
   let reveal = null;
@@ -233,18 +236,39 @@ export function createTubeStage(canvas, handlers = {}) {
     if (active && phase === 'boot' && bootAt === 0) bootAt = nowMs();
   }
 
+  const onSpeechScroll = () => {
+    if (!speechEl) return;
+    followSpeech = speechEl.scrollHeight - speechEl.scrollTop - speechEl.clientHeight < 8;
+  };
+  const stopSpeechPointer = (event) => event.stopPropagation();
+  speechEl?.addEventListener('scroll', onSpeechScroll);
+  speechEl?.addEventListener('pointerdown', stopSpeechPointer);
+
+  function syncSpeech() {
+    if (!speechEl) return;
+    speechEl.textContent = speech.shown;
+    speechEl.classList.toggle('hidden', !speech.full);
+    speechEl.dataset.typing = speech.n < speech.full.length ? 'true' : 'false';
+    if (followSpeech) speechEl.scrollTop = speechEl.scrollHeight;
+  }
+
   function announce(text) {
     if (a11y && text) a11y.textContent = text;
   }
 
   function setThinking(next) {
     thinking = !!next;
-    if (thinking) wave.chaos = Math.max(wave.chaos, 0.18);
+    if (thinking) {
+      wave.chaos = Math.max(wave.chaos, 0.18);
+      announce(isEnglish() ? 'AI is thinking.' : '对手正在思考。');
+    }
   }
 
   function say(text, seat = 'B') {
     if (!text || seat !== 'B') return;
     speech = { full: text, shown: '', n: 0, acc: 0, doneAt: 0 };
+    followSpeech = true;
+    syncSpeech();
     announce(`${view?.opponentName ?? L('它', 'AI')}: ${text}`);
   }
 
@@ -253,6 +277,13 @@ export function createTubeStage(canvas, handlers = {}) {
     if (!token || seat !== 'B') return;
     if (speech.n >= speech.full.length) speech.doneAt = 0;
     speech.full += token;
+    syncSpeech();
+  }
+
+  function clearSpeech() {
+    speech = { full: '', shown: '', n: 0, acc: 0, doneAt: 0 };
+    followSpeech = true;
+    syncSpeech();
   }
 
   function update(next) {
@@ -441,9 +472,10 @@ export function createTubeStage(canvas, handlers = {}) {
       burstTube(key, key === 'c' ? 150 : 24, key === 'c' ? 18 : 94, 8, [PH[key].hot, PH[key].mid]);
       handlers.sfx?.jackpot?.();
     }
-    await scaledWait(700);
     phase = 'settle';
     timeScale = 1;
+    // 结算是需要阅读的静态信息，不应被点按加速或“减少动态效果”压缩。
+    await new Promise((resolve) => setTimeout(resolve, SETTLEMENT_HOLD_MS));
     return true;
   }
 
@@ -713,34 +745,6 @@ export function createTubeStage(canvas, handlers = {}) {
     ctx.globalAlpha = 1;
   }
 
-  function wrapTerminal(text, maxWidth = 137, size = 8) {
-    ctx.save();
-    ctx.font = `600 ${size}px "SFMono-Regular","PingFang SC",Menlo,ui-monospace,monospace`;
-    const lines = [''];
-    for (const ch of [...text]) {
-      if (ch === '\n') {
-        lines.push('');
-        continue;
-      }
-      const i = lines.length - 1;
-      const next = lines[i] + ch;
-      if (lines[i] && ctx.measureText(next).width > maxWidth) lines.push(ch);
-      else lines[i] = next;
-    }
-    ctx.restore();
-    return lines;
-  }
-
-  function terminalPage() {
-    const all = wrapTerminal(speech.shown);
-    if (speech.n < speech.full.length) {
-      return { lines: all.slice(-2), start: Math.max(0, all.length - 2), typing: true };
-    }
-    const pages = Math.max(1, Math.ceil(all.length / 2));
-    const page = pages > 1 ? Math.floor(Math.max(0, time - speech.doneAt - 800) / 2400) % pages : 0;
-    return { lines: all.slice(page * 2, page * 2 + 2), start: page * 2, typing: false };
-  }
-
   function drawUpper(pal, tube) {
     const opponentLabel = [...(view?.opponentName ?? L('它', 'AI'))].length > 12
       ? `${[...(view?.opponentName ?? L('它', 'AI'))].slice(0, 12).join('')}…`
@@ -749,7 +753,7 @@ export function createTubeStage(canvas, handlers = {}) {
     drawChipDock(tube.w - 52, 18, displayStacks.up, pal, potPop);
     ctx.fillStyle = view?.connected === false ? pal.lo : pal.hot;
     ctx.fillRect(tube.w - 30, 8, 3, 3);
-    tx(thinking ? L('在动', 'ACT') : L('在看', 'WATCH'), tube.w - 24, 6, 8, thinking ? pal.hot : pal.mid, { mono: true });
+    tx(thinking ? L('在想', 'THINKING') : L('在看', 'WATCH'), tube.w - 24, 6, thinking && isEnglish() ? 6 : 8, thinking ? pal.hot : pal.mid, { mono: true });
     drawWave(pal);
     const count = reveal ? reveal.upper.length : view?.oppDiceCount ?? 0;
     for (let i = 0; i < count; i++) {
@@ -764,6 +768,7 @@ export function createTubeStage(canvas, handlers = {}) {
         speech.n++;
         speech.shown = speech.full.slice(0, speech.n);
         if (speech.n >= speech.full.length) speech.doneAt = time;
+        syncSpeech();
         wave.voice = 1;
         if (speech.n % 3 === 0) handlers.sfx?.type?.();
       }
@@ -771,16 +776,13 @@ export function createTubeStage(canvas, handlers = {}) {
     ctx.strokeStyle = pal.lo;
     ctx.strokeRect(5.5, 86.5, 29, 11);
     tx(L('AI生成', 'AI TEXT'), 8, 89, 7, pal.mid, { mono: true });
-    const page = terminalPage();
-    page.lines.forEach((line, i) => tx(`${page.start + i === 0 ? '> ' : '  '}${line}${page.typing && i === page.lines.length - 1 && ((time / 450) | 0) % 2 ? '▌' : ''}`,
-      38, 85 + i * 9, 8, pal.hot, { mono: true }));
     stepTubeParticles('a');
   }
 
   function drawCenter(pal, tube) {
     const bid = reveal?.rv.bid ?? view?.currentBid;
     const bidder = bid?.player === 'A' ? L('你', 'YOU') : [...(view?.opponentName ?? L('它', 'AI'))].slice(0, 10).join('');
-    tx(verdict ? L('· 判 定 ·', '· RULING ·') : reveal ? L('· 点 清 ·', '· COUNT ·') : bid ? (isEnglish() ? `· ${bidder} BID ·` : `· ${bidder} 报 ·`) : L('· 待 报 ·', '· AWAIT BID ·'),
+    tx(verdict ? L('· 判 定 ·', '· RULING ·') : reveal ? L('· 点 清 ·', '· COUNT ·') : thinking ? L('· 对手在想 ·', '· AI THINKING ·') : bid ? (isEnglish() ? `· ${bidder} BID ·` : `· ${bidder} 报 ·`) : L('· 待 报 ·', '· AWAIT BID ·'),
       tube.w / 2, 6, 8, pal.lo, { mono: true, align: 'center' });
     if (bid && !reveal) {
       const scale = 1 + bidPop * 0.18;
@@ -1367,6 +1369,7 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
     update,
     say,
     appendSpeech,
+    clearSpeech,
     showShowdown,
     clearShowdown,
     isActive: () => active,
@@ -1376,6 +1379,8 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
       viewport?.removeEventListener('pointermove', pointerMove);
       viewport?.removeEventListener('pointerup', pointerUp);
       reducedMq.removeEventListener?.('change', onReduced);
+      speechEl?.removeEventListener('scroll', onSpeechScroll);
+      speechEl?.removeEventListener('pointerdown', stopSpeechPointer);
       fallbackCanvas?.remove();
     },
   };
