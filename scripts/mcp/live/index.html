@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>《开！》私有直播</title>
+  <link rel="stylesheet" href="/spectate/tokens.css">
+  <link rel="stylesheet" href="/spectate/live.css">
+</head>
+<body>
+  <a class="skip-link" href="#liveMain">跳到牌桌</a>
+
+  <header class="live-nav">
+    <div class="live-brand">
+      <strong>开！</strong>
+      <span id="matchLabel">私有直播</span>
+    </div>
+
+    <div class="live-controls" role="group" aria-label="思考显示">
+      <label class="thought-toggle" data-seat="A">
+        <input id="showThoughtA" type="checkbox">
+        <span id="thoughtToggleA">A 席判断</span>
+      </label>
+      <label class="thought-toggle" data-seat="B">
+        <input id="showThoughtB" type="checkbox">
+        <span id="thoughtToggleB">B 席判断</span>
+      </label>
+    </div>
+
+    <div id="connection" class="connection" role="status" aria-live="polite" data-tone="loading">
+      <span class="connection__mark" aria-hidden="true"></span>
+      <span class="connection__text">连接中</span>
+    </div>
+  </header>
+
+  <main id="liveMain" class="live-main">
+    <section class="duel-map" aria-label="实时牌桌">
+      <article class="seat seat--a" aria-labelledby="seatAName">
+        <header class="seat__head">
+          <div>
+            <span class="seat__tag">A 席</span>
+            <h1 id="seatAName">Codex</h1>
+          </div>
+          <span id="seatAState" class="seat__state">等待</span>
+        </header>
+        <div id="diceA" class="dice" aria-label="A 席骰子"></div>
+        <p id="metaA" class="seat__meta">5 颗 · 未看骰</p>
+        <blockquote id="sayA" class="seat__say">尚未发言</blockquote>
+        <section id="thoughtA" class="thought" aria-labelledby="thoughtATitle" hidden>
+          <h2 id="thoughtATitle">当手留档</h2>
+          <p id="beliefA" class="thought__belief">等待第一手判断。</p>
+          <p id="noteA" class="thought__note"></p>
+        </section>
+      </article>
+
+      <section class="table" aria-labelledby="tableTitle">
+        <header class="table__head">
+          <span id="roundLabel">第 1 局</span>
+          <span id="ruleLabel">飞局</span>
+        </header>
+        <div class="table__bid">
+          <span id="tableTitle">当前报价</span>
+          <strong id="currentBid">无报价</strong>
+          <span id="bidder">等待首报</span>
+        </div>
+        <dl class="table__facts">
+          <div><dt>骰数</dt><dd id="diceScore">5–5</dd></div>
+          <div><dt>池</dt><dd id="potScore">1 × 1</dd></div>
+          <div><dt>动作</dt><dd id="actionCount">0</dd></div>
+        </dl>
+        <p id="lastResult" class="table__result">比赛尚未开始。</p>
+      </section>
+
+      <article class="seat seat--b" aria-labelledby="seatBName">
+        <header class="seat__head">
+          <div>
+            <span class="seat__tag">B 席</span>
+            <h1 id="seatBName">Claude Code</h1>
+          </div>
+          <span id="seatBState" class="seat__state">等待</span>
+        </header>
+        <div id="diceB" class="dice" aria-label="B 席骰子"></div>
+        <p id="metaB" class="seat__meta">5 颗 · 未看骰</p>
+        <blockquote id="sayB" class="seat__say">尚未发言</blockquote>
+        <section id="thoughtB" class="thought" aria-labelledby="thoughtBTitle" hidden>
+          <h2 id="thoughtBTitle">当手留档</h2>
+          <p id="beliefB" class="thought__belief">等待第一手判断。</p>
+          <p id="noteB" class="thought__note"></p>
+        </section>
+      </article>
+    </section>
+
+    <section class="timeline" aria-labelledby="timelineTitle">
+      <header class="timeline__head">
+        <h2 id="timelineTitle">逐手记录</h2>
+        <span id="timelineMeta">0 个动作</span>
+      </header>
+      <div id="timelineRows" class="timeline__rows" tabindex="0">
+        <p class="empty">等待第一个合法动作。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="live-footer">
+    <span id="seedLabel">seed —</span>
+    <span>仅限本机 · 只读观战 · 判断来自行动当时留档</span>
+  </footer>
+
+  <script type="module" src="/spectate/live.js"></script>
+</body>
+</html>

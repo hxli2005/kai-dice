@@ -1,0 +1,143 @@
+* { box-sizing: border-box; }
+
+:root {
+  --line: var(--rule-hair) solid var(--color-rule);
+  --gutter: clamp(var(--space-sm), 2vw, var(--space-lg));
+}
+
+html { background: var(--color-paper); }
+body {
+  min-width: 20rem;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+button, input, select { color: inherit; font: inherit; }
+button, select, input { min-height: 2.75rem; }
+button { border: var(--line); border-radius: var(--radius-sm); background: var(--color-paper-3); cursor: pointer; }
+button:hover:not(:disabled) { background: var(--color-paper-4); }
+button:active:not(:disabled) { transform: translateY(var(--rule-hair)); }
+button:disabled { cursor: not-allowed; opacity: .38; }
+button.primary { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-paper); font-weight: 700; }
+button.danger { border-color: var(--color-error); color: var(--color-error); font-weight: 700; }
+button.danger:not(:disabled):hover { background: var(--color-error); color: var(--color-paper); }
+
+h1, h2, p, blockquote { margin: 0; }
+h1, h2 { font-family: var(--font-display); }
+h1 { font-size: var(--text-lg); }
+h2 { font-size: var(--text-md); }
+
+:focus-visible { outline: .1875rem solid var(--color-focus); outline-offset: var(--space-3xs); }
+.skip-link { position: fixed; inset: .5rem auto auto .5rem; z-index: 20; padding: .7rem 1rem; background: var(--color-paper-4); transform: translateY(-180%); }
+.skip-link:focus { transform: none; }
+
+.play-nav {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 3.75rem;
+  padding: var(--space-xs) var(--gutter);
+  border-bottom: var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: var(--space-sm); }
+.brand strong { font: 700 var(--text-md)/1 var(--font-display); }
+.brand span, .muted, footer, .eyebrow, #actionStatus, .log-card header span { color: var(--color-muted); }
+.connection { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-muted); }
+.connection span { width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-neutral); }
+.connection[data-tone="live"] span { background: var(--color-success); }
+.connection[data-tone="error"] { color: var(--color-error); }
+.connection[data-tone="error"] span { background: var(--color-error); }
+.language-toggle { min-width: 3.25rem; padding-inline: var(--space-sm); }
+
+.play-main {
+  display: grid;
+  gap: var(--space-md);
+  width: min(100%, 82rem);
+  margin: 0 auto;
+  padding: var(--gutter);
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper-2);
+}
+.scoreboard div { display: grid; gap: var(--space-3xs); padding: var(--space-sm) var(--space-md); border-right: var(--line); border-bottom: var(--line); }
+.scoreboard div:nth-child(2n) { border-right: 0; }
+.scoreboard div:nth-last-child(-n+2) { border-bottom: 0; }
+.scoreboard span { color: var(--color-muted); font-size: var(--text-xs); }
+.scoreboard strong { font-family: var(--font-display); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+
+.arena { display: grid; gap: var(--space-md); }
+.hand-card, .bid-card, .opponent-card, .control-card, .talk-card, .log-card {
+  min-width: 0;
+  border: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper-2);
+}
+.hand-card, .opponent-card, .control-card { padding: var(--space-md); }
+.hand-card { border-top-color: var(--color-accent); }
+.opponent-card { border-top-color: var(--color-accent-2); }
+.hand-card header, .opponent-card header, .control-card > header, .talk-card header, .log-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-md); }
+.eyebrow { display: block; margin-bottom: var(--space-3xs); font-size: var(--text-xs); }
+.seat-state { flex: 0 0 auto; padding: var(--space-2xs) var(--space-sm); border: var(--line); border-radius: var(--radius-sm); color: var(--color-muted); }
+.hand-card .seat-state.is-active { border-color: var(--color-accent); color: var(--color-accent); }
+.opponent-card .seat-state.is-active { border-color: var(--color-accent-2); color: var(--color-accent-2); }
+.dice { display: flex; flex-wrap: wrap; gap: var(--space-xs); min-height: 3rem; margin: var(--space-md) 0 var(--space-sm); }
+.die { display: grid; place-items: center; width: 3rem; height: 3rem; border: var(--line); border-radius: var(--radius-sm); background: var(--color-paper-4); font: 700 var(--text-lg)/1 var(--font-display); }
+.die.is-back { color: var(--color-neutral); }
+
+.bid-card { display: grid; place-items: center; align-content: center; gap: var(--space-xs); min-height: 12rem; padding: var(--space-lg); text-align: center; }
+.bid-card > strong { font: 700 clamp(2rem, 7vw, 4.5rem)/1 var(--font-display); }
+.last-result { width: 100%; margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: var(--line); color: var(--color-ink-2); }
+.opponent-card { display: grid; align-content: start; gap: var(--space-xs); }
+.opponent-card blockquote { min-height: 4.5rem; margin-top: var(--space-md); padding-top: var(--space-md); border-top: var(--line); color: var(--color-ink-2); overflow-wrap: anywhere; }
+
+.control-card { display: grid; gap: var(--space-md); border-top-color: var(--color-accent); }
+.quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+.bid-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+.bid-controls label, .say-field { display: grid; gap: var(--space-3xs); color: var(--color-muted); font-size: var(--text-xs); }
+select, input { width: 100%; border: var(--line); border-radius: var(--radius-sm); background: var(--color-paper-3); padding: 0 var(--space-sm); }
+.bid-controls button { grid-column: span 1; }
+
+.talk-card, .log-card { overflow: hidden; }
+.talk-card header, .log-card header { align-items: center; padding: var(--space-sm) var(--space-md); border-bottom: var(--line); }
+.talk-card header span { color: var(--color-muted); font-size: var(--text-xs); }
+.talk-log { display: grid; gap: var(--space-sm); max-height: 18rem; overflow: auto; padding: var(--space-md); }
+.talk-row { display: grid; justify-items: start; gap: var(--space-3xs); max-width: min(86%, 44rem); }
+.talk-row[data-self="true"] { justify-self: end; justify-items: end; }
+.talk-row span { color: var(--color-muted); font-size: var(--text-xs); }
+.talk-row p { padding: var(--space-sm) var(--space-md); border: var(--line); border-radius: var(--radius-sm); background: var(--color-paper-3); color: var(--color-ink-2); overflow-wrap: anywhere; }
+.talk-row[data-self="true"] p { border-color: var(--color-accent); }
+.log { max-height: 20rem; overflow: auto; }
+.log-row { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: var(--line); }
+.log-row:last-child { border-bottom: 0; }
+.log-row span { color: var(--color-muted); font-size: var(--text-xs); }
+.log-row strong { font-weight: 500; overflow-wrap: anywhere; }
+.log > .muted { padding: var(--space-md); }
+
+footer { padding: var(--space-sm) var(--gutter); border-top: var(--line); text-align: center; font-size: var(--text-xs); }
+
+@media (min-width: 48rem) {
+  .scoreboard { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .scoreboard div { border-bottom: 0; }
+  .scoreboard div:nth-child(2n) { border-right: var(--line); }
+  .scoreboard div:last-child { border-right: 0; }
+  .arena { grid-template-columns: minmax(0, 1fr) minmax(15rem, .75fr) minmax(0, 1fr); }
+  .quick-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bid-controls { grid-template-columns: minmax(8rem, .7fr) minmax(8rem, .7fr) 1fr 1fr; align-items: end; }
+}
+
+@media (max-width: 34rem) {
+  .play-nav { grid-template-columns: minmax(0, 1fr) auto; }
+  .connection { grid-column: 1 / -1; }
+}

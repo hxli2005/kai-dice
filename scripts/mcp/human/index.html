@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>你 vs 本地 Agent · 大话骰</title>
+  <link rel="stylesheet" href="/play/tokens.css">
+  <link rel="stylesheet" href="/play/play.css">
+</head>
+<body>
+  <a id="skipLink" class="skip-link" href="#playMain">跳到操作区</a>
+
+  <header class="play-nav">
+    <div class="brand"><strong>开！</strong><span id="brandSubtitle">你 vs 本地 Agent</span></div>
+    <button id="languageToggle" class="language-toggle" type="button" aria-label="Switch to English">EN</button>
+    <div id="connection" class="connection" data-tone="loading" role="status" aria-live="polite">
+      <span aria-hidden="true"></span>连接中
+    </div>
+  </header>
+
+  <main id="playMain" class="play-main">
+    <section class="scoreboard" aria-label="比赛状态">
+      <div><span id="seriesCaption">系列</span><strong id="seriesLabel">BO1 · 0–0</strong></div>
+      <div><span id="roundCaption">场 / 局</span><strong id="roundLabel">1 / 1</strong></div>
+      <div><span id="diceCaption">骰数</span><strong id="diceCount">5–5</strong></div>
+      <div><span id="ruleCaption">规则</span><strong id="ruleLabel">飞局</strong></div>
+    </section>
+
+    <section class="arena">
+      <article class="hand-card">
+        <header>
+          <div><span class="eyebrow" id="seatLabel">你的席位</span><h1 id="handTitle">你的骰子</h1></div>
+          <span id="humanState" class="seat-state">等待</span>
+        </header>
+        <div id="dice" class="dice" aria-live="polite" aria-label="你的骰子"></div>
+        <p id="handMeta" class="muted">还没有看骰</p>
+      </article>
+
+      <article class="bid-card">
+        <span id="currentBidCaption" class="eyebrow">当前报价</span>
+        <strong id="currentBid">无报价</strong>
+        <p id="bidder" class="muted">等待首报</p>
+        <p id="lastResult" class="last-result">尚未开牌</p>
+      </article>
+
+      <article class="opponent-card">
+        <header>
+          <div><span class="eyebrow" id="opponentSeat">对手席位</span><h2 id="opponentName">本地 Agent</h2></div>
+          <span id="opponentState" class="seat-state">等待</span>
+        </header>
+        <blockquote id="opponentSay">尚未发言</blockquote>
+      </article>
+    </section>
+
+    <section class="control-card" aria-labelledby="controlTitle">
+      <header>
+        <div><span id="controlEyebrow" class="eyebrow">轮到你时</span><h2 id="controlTitle">选择动作</h2></div>
+        <span id="actionStatus" role="status" aria-live="polite">等待牌桌</span>
+      </header>
+
+      <div id="quickActions" class="quick-actions">
+        <button id="peekBtn" type="button">看骰</button>
+        <button id="blindBtn" type="button">宣盲</button>
+        <button id="zhaiBtn" type="button">宣斋</button>
+        <button id="raiseBtn" type="button">抬</button>
+      </div>
+
+      <div class="bid-controls">
+        <label><span id="bidCountCaption">数量</span><select id="bidCount"></select></label>
+        <label><span id="bidFaceCaption">点数</span><select id="bidFace"></select></label>
+        <button id="bidBtn" class="primary" type="button">报价</button>
+        <button id="challengeBtn" class="danger" type="button">开！</button>
+      </div>
+
+      <label class="say-field"><span id="sayCaption">桌上说一句（可不填）</span>
+        <input id="sayInput" type="text" maxlength="300" autocomplete="off" placeholder="这口你敢不敢开？">
+      </label>
+    </section>
+
+    <section class="talk-card" aria-labelledby="talkTitle">
+      <header><h2 id="talkTitle">桌上对话</h2><span id="talkMeta">0 句</span></header>
+      <div id="talkLog" class="talk-log" tabindex="0"><p class="muted">还没有人说话</p></div>
+    </section>
+
+    <section class="log-card" aria-labelledby="logTitle">
+      <header><h2 id="logTitle">牌桌记录</h2><span id="logMeta">0 条</span></header>
+      <div id="log" class="log" tabindex="0"><p class="muted">等待开局</p></div>
+    </section>
+  </main>
+
+  <footer id="privacyFooter">仅限本机 · 你只能看到自己的暗骰 · 对手的判断不会在赛中展示</footer>
+  <script type="module" src="/play/play.js"></script>
+</body>
+</html>
