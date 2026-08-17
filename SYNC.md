@@ -186,6 +186,7 @@ G1 已完工（2026-08-09）。**G2、G7 已完工（2026-08-12）**。**G4–G6
 
 ## 变更日志（双方追加，最新在上）
 
+- 2026-08-17（开源发布，用户「重写历史，我建好仓库了」）：**仓库公开上线 https://github.com/hxli2005/kai-dice 。** filter-branch 全历史 258 提交作者由占位符改写为 Haoxiang Li（邮箱不变，HEAD 树哈希逐字未变，改写前 bundle 备份留存）；三篇文章脚注与 README 换真实仓库链接＋离线复算命令；覆盖远程初始化提交（仅 GitHub 自动生成的同款 AGPL LICENSE）后强推，远程 main 与本地一致。
 - 2026-08-17（开源整理，用户「决定开源，先整理仓库」）：**仓库达到可公开状态。** 安全体检：工作区＋git 全历史无 API key 模式、对局日志无席位 token 泄漏（metadata 脱敏经复核有效）、codex.jsonl 未回显 MCP 配置；证据文件含 `/Users/lhx` 绝对路径，为保 SHA256 冻结不改动。四个积压里程碑补提交入库（Q104 v10-en、Q105 英文覆盖、本地 Agent 入口＋分发、Arena 文集），工作区清零；.gitignore 补 output/、.playwright-cli/、kai-liars-records/。用户裁定 AGPL-3.0：LICENSE 官方全文＋README（英文为主，showdown 复现与离线核验命令）＋三处 package.json license 字段。全库 194/194。待用户：修 git user.name 占位符（现为"Your Nameçç"，可选择首推前重写历史）、建远程仓库、文章补仓库链接。
 - 2026-08-17（写作，用户「国内技术文章不吃香，转战国外」）：**英文版文章草稿完成**（`docs/showdown/article-claude-codex-liars-dice-match-en.md`），面向 dev.to／HN 重写而非直译：标题改携反转（不贴人格标签）、破案节回链作者 dev.to 旧文《Are You Benchmarking the Model—or the Harness?》成系列；台词引用为日志英文原话。
 - 2026-08-17（写作，用户「技术社区（掘金/知乎专栏）」）：**技术社区版文章草稿完成**（`docs/showdown/article-claude-codex-liars-dice-match-cn-tech.md`）。同题不同骨架：可信度工程前置（架构图＋七条防污染设计＋证据链＋复现命令），3ms 风暴归因解剖为技术高潮；与通俗版数字同源。
