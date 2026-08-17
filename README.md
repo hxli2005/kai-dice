@@ -19,6 +19,7 @@ Five real matches are archived under `docs/showdown/` — Codex CLI (`gpt-5.6-so
 Run one yourself (both CLIs must be logged in locally):
 
 ```bash
+git clone https://github.com/hxli2005/kai-dice && cd kai-dice
 node scripts/mcp/run-showdown.mjs --best-of 3 --seed 73019426 \
   --codex-seat A --codex-model gpt-5.6-sol --claude-model opus
 ```

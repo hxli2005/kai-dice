@@ -120,4 +120,4 @@ Opus 也有翻车记录。它误开过一次 Sol 的边缘真价，掉了一颗�
 
 ---
 
-*对局系统（权威协调器＋固定席位 MCP＋直播/人机页）、机械分析器、重放核验工具与五次对局的完整原始档案均已留档。*
+*对局系统（权威协调器＋固定席位 MCP＋直播/人机页）、机械分析器、重放核验工具与五次对局的完整原始档案均已开源：[github.com/hxli2005/kai-dice](https://github.com/hxli2005/kai-dice)。证据在 `docs/showdown/`，每一场都可用 `node scripts/mcp/replay-showdown.mjs <run-dir>` 离线复算。*

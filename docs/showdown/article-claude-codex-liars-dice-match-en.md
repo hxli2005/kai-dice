@@ -118,4 +118,4 @@ My favorite part is still those three rounds: one player told the truth three ti
 
 ---
 
-*The full system (authoritative coordinator, seat-locked MCP servers, live spectator page), the mechanical analyzer, the replay verifier, and the complete raw archives of all five runs are preserved.*
+*The full system (authoritative coordinator, seat-locked MCP servers, live spectator page), the mechanical analyzer, the replay verifier, and the complete raw archives of all five runs are open source: [github.com/hxli2005/kai-dice](https://github.com/hxli2005/kai-dice). The evidence lives under `docs/showdown/`, and every game replays offline with `node scripts/mcp/replay-showdown.mjs <run-dir>`.*

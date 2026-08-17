@@ -106,4 +106,4 @@ Claude 干的不是"记得比分"，而是一条完整的链路：观察行为 �
 
 ---
 
-*对局引擎、席位 MCP、全部原始日志与逐事件重放工具均已完整留档；本文数字复算自 `docs/showdown/` 五次对局的原始 run.json。*
+*对局引擎、席位 MCP、全部原始日志与逐事件重放工具均已开源：[github.com/hxli2005/kai-dice](https://github.com/hxli2005/kai-dice)；本文数字复算自 `docs/showdown/` 五次对局的原始 run.json。*
