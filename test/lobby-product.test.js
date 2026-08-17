@@ -19,6 +19,8 @@ test('大厅采用桌型／裁判／对手的纵向三管工作台', () => {
   assert.match(main, /id="lobbySettings"/);
   assert.match(main, /id="roomBtn"/);
   assert.match(main, /href="docs\/arena\/live\.html"/);
+  assert.match(main, /lobby-portal--codex/);
+  assert.match(main, /href="agent\.html/);
 });
 
 test('大厅电子管样式占满窗口、桌面分架、窄屏先单列', () => {
@@ -41,6 +43,8 @@ test('大厅在旧样式前加载共享电子管令牌，离线壳同步升版',
   const worker = read('sw.js');
 
   assert.ok(html.indexOf('href="tokens.css"') < html.indexOf('href="src/ui/style.css"'));
-  assert.match(worker, /const CACHE = 'kai-shell-v12'/);
+  assert.match(worker, /const CACHE = 'kai-shell-v16'/);
   assert.match(worker, /'\.\/tokens\.css'/);
+  assert.match(worker, /'\.\/codex\.html'/);
+  assert.match(worker, /'\.\/agent\.html'/);
 });

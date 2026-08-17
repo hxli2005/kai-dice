@@ -21,6 +21,7 @@ import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, 
 import { sfx, unlockAudio } from './audio.js';
 import { createTubeStage, toTubeView } from './tubes.js';
 import { installEnglishUi, isEnglish, languageUrl } from './i18n.js';
+import { archiveTableCopy, drawerCoreCopy, matchReportCopy, modActionLabel, modDisplay } from './copy.js';
 
 installEnglishUi();
 
@@ -55,15 +56,25 @@ let labMods = [];
 let sandbox = false;
 let pickPending = null; // 词条参数拾取（亮一颗：先拍章再点自己一颗骰）
 const modMetaOf = (o, type) => o.mods?.flatMap((m) => m.actions).find((a) => a.type === type);
+const modSourceOf = (type) => {
+  const mod = labMods.find((m) => m.actions.some((a) => a.type === type));
+  return { mod, action: mod?.actions.find((a) => a.type === type) };
+};
+const modTextHtml = (mod, field) => {
+  const view = modDisplay(mod, isEnglish());
+  return view.raw ? `<span data-raw>${view[field]}</span>` : view[field];
+};
 // 好友房（Q29）：room 非空即远程模式——本地不驱动 AI，一切演出由事件重放驱动
 let room = null;
 // 词条盖章内容查原子注册表（裁判层视觉说真话；许愿词条同权）
 const modStamp = (meta, action) => {
+  const source = modSourceOf(meta.type);
+  const label = source.action ? modActionLabel(source.action, source.mod, isEnglish()) : meta.label;
   for (const op of meta.ops) {
-    const s = OPS[op]?.stamp?.(action, meta.label);
+    const s = OPS[op]?.stamp?.(action, label);
     if (s) return s;
   }
-  return meta.label;
+  return label;
 };
 let seats = ['A', 'B'];
 let opponents = {}; // seat -> AI 客户端
@@ -220,13 +231,17 @@ function speak(text, seat = 'B') {
   clearInterval(typeTimers[seat]);
   let i = 0;
   b.textContent = '';
+  b.scrollTop = 0;
   typeTimers[seat] = setInterval(() => {
+    const follow = b.scrollHeight - b.scrollTop - b.clientHeight < 12;
     b.textContent = text.slice(0, ++i);
+    if (follow) b.scrollTop = b.scrollHeight;
     if (i >= text.length) clearInterval(typeTimers[seat]);
   }, Math.max(4, 28 / watchSpeed));
 }
 function muteBubble() {
   for (const k of Object.keys(typeTimers)) clearInterval(typeTimers[k]);
+  tubeStage?.clearSpeech();
   $('bubble').classList.add('hidden');
   document.querySelectorAll('.strip-bubble').forEach((el) => el.classList.add('hidden'));
 }
@@ -755,22 +770,25 @@ function buildModRow() {
   const row = $('modRow');
   row.innerHTML = '';
   pickPending = null;
-  for (const a of labMods.flatMap((m) => m.actions)) {
-    // 归一化成 observe 同款元数据形态（ops 由 effect 派生）——按钮语义只认原子
-    const meta = {
-      type: a.type,
-      label: a.label,
-      params: a.params ?? null,
-      keepTurn: !!a.keepTurn,
-      terminal: !!a.terminal,
-      ops: a.effect.map((e) => e.op),
-    };
-    const btn = document.createElement('button');
-    btn.className = 'stamp mod';
-    btn.id = `modbtn-${a.type}`;
-    btn.textContent = a.label;
-    btn.addEventListener('click', () => onModButton(meta));
-    row.appendChild(btn);
+  for (const mod of labMods) {
+    for (const a of mod.actions) {
+      // 归一化成 observe 同款元数据形态（ops 由 effect 派生）——按钮语义只认原子
+      const meta = {
+        type: a.type,
+        label: modActionLabel(a, mod, isEnglish()),
+        params: a.params ?? null,
+        keepTurn: !!a.keepTurn,
+        terminal: !!a.terminal,
+        ops: a.effect.map((e) => e.op),
+      };
+      const btn = document.createElement('button');
+      btn.className = 'stamp mod';
+      btn.id = `modbtn-${a.type}`;
+      btn.textContent = meta.label;
+      if (mod.origin === 'wish') btn.setAttribute('data-raw', '');
+      btn.addEventListener('click', () => onModButton(meta));
+      row.appendChild(btn);
+    }
   }
 }
 
@@ -1199,60 +1217,54 @@ async function showReport(end) {
   // raw=true 表示这段判词出自它自己（真迹，DESIGN §3：英文适配器不许改写）；
   // 模板判词与"正在写"占位是我们的文案，照常本地化。
   const renderCard = (verdict, raw = false) => {
+    const report = matchReportCopy(
+      {
+        sandbox,
+        matchNo: profile.matches + 1,
+        mods: labMods.map((m) => modTextHtml(m, 'name')),
+        trio: isTrio(),
+        standings: standingsLine,
+        won,
+        roundsAlive: stats.roundsAlive,
+        rounds: end.rounds,
+        chips: end.chips.A,
+        bluffRate: stats.bluffRate,
+        seenBids: stats.seenBids,
+        myBluffs: stats.myBluffs,
+        knowingBluffs: stats.myKnowingBluffs,
+        thinBluffs: stats.myThinBluffs,
+        knowingWildest: stats.knowingWildest?.bid ?? null,
+        blindBids: stats.blindBids,
+        blindWildest: stats.blindWildest?.bid ?? null,
+        callsByOpponent: seats.slice(1).map((s) => ({
+          name: NAMES[s],
+          calls: vsMe(s).iOpened,
+          hits: vsMe(s).iOpenedHit,
+          calledYou: vsMe(s).theyOpenedMe,
+        })),
+        challengeHits: stats.myChallengeHits,
+        challenges: stats.myChallenges,
+        calzaHits: stats.myCalzaHits,
+        calzas: stats.myCalzas,
+        timesChallenged: stats.timesChallenged,
+        avgTimeSeconds: (stats.avgTimeMs / 1000).toFixed(1),
+      },
+      isEnglish(),
+    );
     ov.innerHTML = `<div class="card fade-in">
-      <h2>${sandbox ? '实验桌 · 沙盒对局' : `对局档案 · 第 ${profile.matches + 1} 场`}</h2>
+      <h2>${report.heading}</h2>
       <div class="persona">${persona(stats)}</div>
       <dl>
-        ${sandbox ? `<dt>词条</dt><dd>${labMods.map((m) => `「${m.name}」`).join('')}</dd>` : ''}
-        ${isTrio() && end.standings ? `<dt>名次</dt><dd>${standingsLine}</dd>` : ''}
-        <dt>胜负</dt><dd>${won ? '赢' : '输'}</dd>
-        ${
-          // F0：参战局数与全桌局数拆行——出局后桌子还在打，两个数不是一回事
-          stats.roundsAlive === end.rounds
-            ? `<dt>局数</dt><dd>${end.rounds} 局</dd>`
-            : `<dt>局数</dt><dd>你参战 ${stats.roundsAlive} 局 · 全桌 ${end.rounds} 局</dd>`
-        }
-        <dt>身家</dt><dd>${end.chips.A}${end.chips.A <= 0 ? '（赊着）' : ''}${sandbox ? '（沙盒·不记账）' : ''}</dd>
-        <dt>虚报率</dt><dd>${pct(stats.bluffRate)}${stats.seenBids ? `（看过骰的 ${stats.seenBids} 口）` : '（没看过骰）'}</dd>
-        ${
-          // G7：没站住的价拆成两笔——明知（自见概率不足 15%）与看走眼（悬）。
-          // 报告卡是裁判层，只报数不判居心：能证明"故意"的只有它自己留档里的 bait。
-          stats.myBluffs
-            ? `<dt>其中</dt><dd>明知 ${stats.myKnowingBluffs} 口 · 看走眼 ${stats.myThinBluffs} 口${
-                stats.knowingWildest
-                  ? ` · 最狠 ${stats.knowingWildest.bid.count} 个 ${stats.knowingWildest.bid.face}`
-                  : ''
-              }</dd>`
-            : ''
-        }
-        ${
-          // F0c：蒙报单列——闭着眼报的价不进虚报率，但更要写在脸上
-          stats.blindBids
-            ? `<dt>蒙报</dt><dd>${stats.blindBids} 口${stats.blindWildest ? ` · 最狠 ${stats.blindWildest.bid.count} 个 ${stats.blindWildest.bid.face}` : ''}</dd>`
-            : ''
-        }
-        <dt>开牌命中</dt><dd>${
-          // F0：谁的账记谁头上——三人桌按对手拆开
-          isTrio()
-            ? seats.slice(1).map((s) => `对${NAMES[s]} ${vsMe(s).iOpenedHit}/${vsMe(s).iOpened}`).join(' · ')
-            : `${stats.myChallengeHits}/${stats.myChallenges}`
-        }</dd>
-        ${stats.myCalzas ? `<dt>掐</dt><dd>${stats.myCalzaHits}/${stats.myCalzas}</dd>` : ''}
-        <dt>被他开</dt><dd>${
-          isTrio()
-            ? seats.slice(1).map((s) => `${NAMES[s]} ${vsMe(s).theyOpenedMe} 次`).join(' · ')
-            : `${stats.timesChallenged} 次`
-        }</dd>
-        <dt>平均思考</dt><dd>${(stats.avgTimeMs / 1000).toFixed(1)} 秒</dd>
+        ${report.rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}
       </dl>
       <div class="verdict"${raw ? ' data-raw' : ''}>${verdict}</div>
     </div>
     <div class="again-row">
-      <button class="ghost" id="lobbyBtn">换桌</button>
-      <button class="primary again" id="againBtn">再来一局</button>
+      <button class="ghost" id="lobbyBtn">${report.changeTable}</button>
+      <button class="primary again" id="againBtn">${report.playAgain}</button>
     </div>
-    <div class="review-row"><button class="linkish" id="reviewBtn">看看他当时怎么想的 →</button></div>
-    <div class="small-note">${sandbox ? '实验局 · 不入榜不入账不入档案' : '截屏即可分享 · 这一场已记进他的本子'} · kai-dice.pages.dev</div>`;
+    <div class="review-row"><button class="linkish" id="reviewBtn">${report.review}</button></div>
+    <div class="small-note">${report.footer} · kai-dice.pages.dev</div>`;
     ov.querySelector('#againBtn').addEventListener('click', newMatch);
     ov.querySelector('#lobbyBtn').addEventListener('click', () => {
       ov.classList.add('hidden');
@@ -1386,16 +1398,13 @@ function openReview(events) {
 }
 
 // ---------- 档案渲染件（玩家页与局内抽屉共用） ----------
-const statTableHtml = () =>
-  profile.stats.length
-    ? `<table class="stat-table"><tr><th>场</th><th>胜负</th><th>虚报</th><th>开牌</th></tr>${profile.stats
-        .slice(-6)
-        .map((s, i, arr) => {
-          const idx = profile.stats.length - arr.length + i + 1;
-          return `<tr><td>${idx}</td><td>${s.won === true ? '胜' : s.won === false ? '负' : '—'}</td><td>${Math.round(s.bluffRate * 100)}%</td><td>${s.myChallengeHits}/${s.myChallenges}</td></tr>`;
-        })
-        .join('')}</table>`
-    : '';
+const statTableHtml = () => {
+  if (!profile.stats.length) return '';
+  const archive = archiveTableCopy(profile.stats, isEnglish());
+  return `<table class="stat-table"><tr>${archive.headers.map((label) => `<th>${label}</th>`).join('')}</tr>${archive.rows
+    .map((row) => `<tr><td>${row.match}</td><td>${row.result}</td><td>${row.bluff}</td><td>${row.calls}</td></tr>`)
+    .join('')}</table>`;
+};
 
 // 每个 AI 一本账（遍历机位表，机位可增）：身份行＋行为数据＋对你战绩＋假设＋笔记
 const bookHtml = (per, extraBits = []) => {
@@ -1449,11 +1458,12 @@ function openDrawer(section, inLobby = false) {
   const rsNow = !inLobby && match ? lastEvent(ob(), 'roundStart') : null;
   const lastStat = profile.stats.at(-1);
   const insight = lastStat ? condBrief(lastStat) : '';
+  const drawer = drawerCoreCopy(isEnglish());
   d.innerHTML = `<button class="close-x" id="closeDrawer">×</button>
     <nav class="drawer-nav">${
       inLobby
-        ? '<a href="#secRules">规矩</a><a href="#secWho">对面是谁</a><a href="#secBrain">设置</a>'
-        : `<a href="#profileSec">档案</a><a href="#secRules">规矩</a><a href="#secWho">对面是谁</a>${labMods.length ? '<a href="#secMods">词条</a>' : ''}<a href="#secSeal">封印</a><a class="leave" id="leaveBtn">离桌</a>`
+        ? drawer.lobbyNav
+        : drawer.tableNav(labMods.length > 0)
     }</nav>
     ${
       inLobby
@@ -1467,30 +1477,14 @@ function openDrawer(section, inLobby = false) {
     ${rosterAll().map((per) => bookHtml(per)).join('')}`
     }
 
-    <h2 id="secRules">规矩</h2>
-    <ul>
-      <li>轮流报「桌上共有几个几」。<b>只能往上抬</b>：数量加大，或同数量、点数加大——抬不动了就只能开。</li>
-      <li><b>1 点是万能牌</b>（癞子），清点时算作任意点数；宣「斋」的那一局失效。</li>
-      <li>开只开上家：数够，开的人输；不够，报的人输。输家掉一骰，掉光出局。</li>
-      <li>每报一手，全桌各追 1 注；开牌胜者收整池。</li>
-      <li>三印的代价（倍率对全桌双向生效，赢多输也多）：盲＝没看骰就能宣、宣了整局不看，池×2　｜　斋＝首报者宣，1 不作癞子，池×1.5　｜　抬＝轮到你拍章，池×2，每人每局一次。</li>
-      <li>第 6 手报价起进深水：池自动再 ×2。倍率全部相乘。</li>
-      <li><b>小本子</b>：一场打完可以翻开看他当时怎么想的（说的一套、想的一套都在）。**翻本子是公开的**——他知道你研究过他，下回可能拿这个开你玩笑（不想让他知道，设置里可以关）。</li>
-      <li>额度片按 1／5／25／100 合并显示。不限时——但你手停多久，他们都记着。</li>
-    </ul>
+    ${drawer.rules}
 
-    <h2 id="secWho">对面是谁</h2>
-    <ul>
-      <li><b>模型是真身</b>：做决定的是一个语言模型。怎么算、什么时候掀盅、开不开你这口价，都是它自己的判断。</li>
-      <li><b>提示词只管规则</b>：发给它的只有游戏规则、能做哪些动作、输出格式，外加这一局实际发生了什么——<b>没有性格剧本，也没有任何"你该怎么说话"的交代</b>。怎么打、怎么说、说什么，全是它自己的判断。所以换个型号，你换到的是另一个对手。</li>
-      <li><b>系统说话零容忍，他说话零审查</b>：结算、报告卡、档案统计由引擎复算，错了就是 bug；他的嘴可能记歪、可能夸大——那不是故障，那是对手。不服就「戳」他。</li>
-      <li>站内的模型名只是事实性标注。本作与各模型厂商无关联、未获授权，不使用其商标与形象。<a href="about.html">说明页</a>写得更细。</li>
-    </ul>
+    ${drawer.opponent}
 
     ${
       !inLobby && labMods.length
-        ? `<h2 id="secMods">词条（本桌明牌）</h2>${labMods
-            .map((m) => `<p class="note-item"><b>「${m.name}」</b>${m.card}</p>`)
+        ? `<h2 id="secMods">${drawer.modsHeading}</h2>${labMods
+            .map((m) => `<p class="note-item"><b>「${modTextHtml(m, 'name')}」</b>${modTextHtml(m, 'card')}</p>`)
             .join('')}`
         : ''
     }
@@ -2099,12 +2093,14 @@ function openWishPanel() {
       .map(
         (m) => `
       <div class="book">
-        <div class="book-head">「${m.name}」<span class="book-tag">${m.origin === 'wish' ? '许愿' : '官方'}</span>
+        <div class="book-head">「${modTextHtml(m, 'name')}」<span class="book-tag">${
+          m.origin === 'wish' ? (isEnglish() ? 'WISH' : '许愿') : (isEnglish() ? 'OFFICIAL' : '官方')
+        }</span>
           <span class="spacer"></span>
-          <button class="linkish" data-exam="${m.id}">体检</button>
-          ${m.origin === 'wish' ? `<button class="linkish" data-del="${m.id}">撕掉</button>` : ''}
+          <button class="linkish" data-exam="${m.id}">${isEnglish() ? 'TEST' : '体检'}</button>
+          ${m.origin === 'wish' ? `<button class="linkish" data-del="${m.id}">${isEnglish() ? 'DELETE' : '撕掉'}</button>` : ''}
         </div>
-        <p class="note-item">${m.card}</p>
+        <p class="note-item">${modTextHtml(m, 'card')}</p>
         <div id="exam-${m.id}"></div>
       </div>`,
       )
@@ -2151,7 +2147,7 @@ async function runCompile(text, out) {
     return;
   }
   // 回译确认（Q39：锁编译幻觉）——作者点头，词条才生效
-  out.innerHTML = `<div class="book"><div class="book-head">「${r.ast.name}」<span class="book-tag">规则卡草稿</span></div><p class="note-item">${r.card}</p></div>
+  out.innerHTML = `<div class="book"><div class="book-head">「<span data-raw>${r.ast.name}</span>」<span class="book-tag">规则卡草稿</span></div><p class="note-item" data-raw>${r.card}</p></div>
     <p class="dim-line">上面这张卡就是你的愿望上桌后的样子——念出来的意思，和你想的一样吗？</p>
     <div class="btnrow"><button class="primary" id="wishGo">一样，试打两百场</button><button class="ghost" id="wishNo">不一样，改词重许</button></div>
     <div class="test-line" id="wishSmoke"></div>`;
@@ -2247,7 +2243,7 @@ function showLobby() {
           ? `<div class="lab-chips">${allMods()
               .map(
                 (m) =>
-                  `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" type="button" data-mod="${m.id}" aria-pressed="${lab.picks.includes(m.id)}">${m.name}${m.origin === 'wish' ? '<u>愿</u>' : ''}</button>`,
+                  `<button class="lab-chip ${lab.picks.includes(m.id) ? 'sel' : ''}" type="button" data-mod="${m.id}" aria-pressed="${lab.picks.includes(m.id)}">${modTextHtml(m, 'name')}${m.origin === 'wish' ? `<u>${isEnglish() ? 'W' : '愿'}</u>` : ''}</button>`,
               )
               .join('')}<button class="lab-chip wish" id="wishBtn" type="button">许愿＋</button></div>
       <p class="lab-note">勾上的新规矩全桌明牌。实验局不入榜、不记账、不进档案。</p>`
@@ -2337,6 +2333,7 @@ function showLobby() {
           <section class="lobby-portals" aria-label="其他模式">
             <button class="lobby-portal lobby-portal--room" id="roomBtn" type="button"><span>好友房</span><small>邀朋友同桌</small></button>
             <a class="arena-line lobby-portal lobby-portal--arena" href="docs/arena/live.html"><span>模型竞技场</span><small>双模型自战 · BYOK</small></a>
+            <a class="lobby-portal lobby-portal--codex" href="agent.html${isEnglish() ? '?lang=en' : ''}"><span>${isEnglish() ? 'MY LOCAL AGENT' : '我的本地 Agent'}</span><small>${isEnglish() ? 'Codex / Claude Code · own account' : 'Codex / Claude Code · 使用自己的账号'}</small></a>
           </section>
         </aside>
       </div>
@@ -2530,10 +2527,14 @@ async function newMatch() {
 function showRuleCardsIntro() {
   const ov = $('overlay');
   ov.classList.remove('hidden');
-  ov.innerHTML = `<div class="card fade-in"><h2>实验桌</h2>
-    ${labMods.map((m) => `<div class="rule-card"><b>「${m.name}」</b><p>${m.card}</p></div>`).join('')}
-    <p class="dim-line" style="margin-top:0.6rem">明牌：他们读的是同一张卡。实验局不入榜不入账不入档案。</p></div>
-    <div class="again-row"><button class="primary again" id="rcGo">上桌</button></div>`;
+  ov.innerHTML = `<div class="card fade-in"><h2>${isEnglish() ? 'LAB TABLE' : '实验桌'}</h2>
+    ${labMods.map((m) => `<div class="rule-card"><b>「${modTextHtml(m, 'name')}」</b><p>${modTextHtml(m, 'card')}</p></div>`).join('')}
+    <p class="dim-line" style="margin-top:0.6rem">${
+      isEnglish()
+        ? 'Shared rules: every opponent reads the same cards. Sandbox matches do not affect standings, balances, or profiles.'
+        : '明牌：他们读的是同一张卡。实验局不入榜不入账不入档案。'
+    }</p></div>
+    <div class="again-row"><button class="primary again" id="rcGo">${isEnglish() ? 'PLAY' : '上桌'}</button></div>`;
   ov.querySelector('#rcGo').addEventListener('click', () => ov.classList.add('hidden'));
 }
 
@@ -2574,11 +2575,17 @@ function showCoach() {
     const c = document.createElement('div');
     c.id = 'coach';
     c.className = 'tube-coach';
-    c.innerHTML = `<div class="coach-rules">
-      <p>触摸下管骰仓看自己的骰子；用 −／＋ 改数量，点中间换点数，再拍「报」。</p>
-      <p>觉得他吹牛，拍红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
-      <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。</p>
-    </div><div class="anywhere">点任意处，上桌</div>`;
+    c.innerHTML = isEnglish()
+      ? `<div class="coach-rules">
+        <p>Tap the lower dice bay to peek; use − / + to change the count, tap the center to change the face, then press BID.</p>
+        <p>Think the bid is false? Press the red CALL button. Ones are wild; NO-WILDS disables them for the round.</p>
+        <p>BLIND ×2, NO-WILDS ×1.5, and RAISE ×2 multiply both wins and losses.</p>
+      </div><div class="anywhere">TAP ANYWHERE TO PLAY</div>`
+      : `<div class="coach-rules">
+        <p>触摸下管骰仓看自己的骰子；用 −／＋ 改数量，点中间换点数，再拍「报」。</p>
+        <p>觉得他吹牛，拍红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
+        <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。</p>
+      </div><div class="anywhere">点任意处，上桌</div>`;
     $('app').appendChild(c);
     c.addEventListener('click', () => {
       localStorage.setItem('kai.coach.v1', '1');
@@ -2589,22 +2596,37 @@ function showCoach() {
     return;
   }
   // 标注分道：sxF/exF 指定箭头在文字条与目标上的锚点位，各占横向通道不相交
-  const marks = [
-    [['myDice'], '① 点骰盅，偷看自己的骰子', 0.30, 0.24, 0.55, 0.5],
-    [['bidBtn'], '② 报数：桌上共有几个几', 0.40, 0.04, 0.25, 0.2],
-    [['openBtn'], '③ 觉得他吹牛，拍「开」', 0.50, 0.42, 0.72, 0.5],
-    [['blindBtn', 'zhaiBtn', 'raiseBtn'], '④ 盲、斋、抬：池子翻倍，赢多输也多', 0.60, 0.02, 0.1, 0.9],
-  ].filter(([ids]) => ids.every((id) => $(id)));
+  const marks = (isEnglish()
+    ? [
+        [['myDice'], '① Tap your cup to peek at your dice', 0.30, 0.24, 0.55, 0.5],
+        [['bidBtn'], '② Bid the total count of one face', 0.40, 0.04, 0.25, 0.2],
+        [['openBtn'], '③ Think the bid is false? Press CALL', 0.50, 0.42, 0.72, 0.5],
+        [['blindBtn', 'zhaiBtn', 'raiseBtn'], '④ BLIND, NO-WILDS, and RAISE multiply the pot', 0.60, 0.02, 0.1, 0.9],
+      ]
+    : [
+        [['myDice'], '① 点骰盅，偷看自己的骰子', 0.30, 0.24, 0.55, 0.5],
+        [['bidBtn'], '② 报数：桌上共有几个几', 0.40, 0.04, 0.25, 0.2],
+        [['openBtn'], '③ 觉得他吹牛，拍「开」', 0.50, 0.42, 0.72, 0.5],
+        [['blindBtn', 'zhaiBtn', 'raiseBtn'], '④ 盲、斋、抬：池子翻倍，赢多输也多', 0.60, 0.02, 0.1, 0.9],
+      ]).filter(([ids]) => ids.every((id) => $(id)));
   // F3 教学补课（Q43⑥）：癞子／阶梯／三印代价不该靠玩家自己撞出来
   const c = document.createElement('div');
   c.id = 'coach';
-  c.innerHTML = `<svg></svg>
-    <div class="coach-rules">
-      <p>1 点是万能牌，算作任意点数（宣「斋」的那局失效）。</p>
-      <p>报价只能往上抬：数量加大，或同数量、点数加大。抬不动了就只能开。</p>
-      <p>盲 ×2、斋 ×1.5、抬 ×2 —— 倍率对全桌双向生效，赢多输也多。</p>
-    </div>
-    <div class="anywhere">看明白了？点任意处，上桌</div>`;
+  c.innerHTML = isEnglish()
+    ? `<svg></svg>
+      <div class="coach-rules">
+        <p>Ones are wild and count as any face; NO-WILDS disables them for the round.</p>
+        <p>Bids must rise: increase the count, or keep the count and increase the face. If no higher bid is possible, you must CALL.</p>
+        <p>BLIND ×2, NO-WILDS ×1.5, and RAISE ×2 apply to the whole table: win more, lose more.</p>
+      </div>
+      <div class="anywhere">READY? TAP ANYWHERE TO PLAY</div>`
+    : `<svg></svg>
+      <div class="coach-rules">
+        <p>1 点是万能牌，算作任意点数（宣「斋」的那局失效）。</p>
+        <p>报价只能往上抬：数量加大，或同数量、点数加大。抬不动了就只能开。</p>
+        <p>盲 ×2、斋 ×1.5、抬 ×2 —— 倍率对全桌双向生效，赢多输也多。</p>
+      </div>
+      <div class="anywhere">看明白了？点任意处，上桌</div>`;
   $('app').appendChild(c);
   const appBox = $('app').getBoundingClientRect();
   const svg = c.querySelector('svg');

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>和你自己的本地 Agent 打一局 · 《开！》</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="codex.css">
+</head>
+<body>
+  <aside class="nav-chip" aria-label="页面导航">
+    <a class="nav-chip__brand" href="./">开！</a>
+    <a id="languageLink" class="nav-chip__action" href="codex.html?lang=en">EN</a>
+  </aside>
+
+  <main>
+    <header class="intro">
+      <p id="eyebrow" class="eyebrow">LOCAL AGENT MATCH</p>
+      <h1 id="headline">和你自己的<br>Codex 打一局。</h1>
+      <p id="lede" class="lede">不用交 API Key。启动器在你的电脑开一张本地牌桌，调用你已经登录的 Codex，然后自动打开浏览器。</p>
+    </header>
+
+    <section class="playground" aria-labelledby="runTitle">
+      <header class="section-head">
+        <span>01</span>
+        <div><p id="runLabel">启动</p><h2 id="runTitle">复制这一条命令</h2></div>
+      </header>
+      <div class="command-block">
+        <code id="command">正在生成本机命令…</code>
+        <button id="copyButton" type="button" data-state="default">复制</button>
+      </div>
+      <p id="copyStatus" class="status" role="status" aria-live="polite">在 Terminal、PowerShell 或任意命令行中运行。</p>
+      <div class="launch-options">
+        <div><span id="opponentCaption">本地对手</span><div class="option-row" role="group" aria-label="本地对手">
+          <button type="button" class="option is-selected" data-agent="codex" aria-pressed="true">Codex</button>
+          <button type="button" class="option" data-agent="claude" aria-pressed="false">Claude Code</button>
+        </div></div>
+        <div><span id="seriesCaption">系列长度</span><div class="option-row" role="group" aria-label="系列长度">
+          <button type="button" class="option is-selected" data-best-of="1" aria-pressed="true">BO1</button>
+          <button type="button" class="option" data-best-of="3" aria-pressed="false">BO3</button>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="steps" aria-labelledby="stepsTitle">
+      <header class="section-head">
+        <span>02</span>
+        <div><p id="stepsLabel">发生什么</p><h2 id="stepsTitle">全程只在你的电脑</h2></div>
+      </header>
+      <ol>
+        <li><b>1.0</b><div><h3 id="stepOneTitle">检查 Codex</h3><p id="stepOneBody">确认本机已经安装并登录 Codex CLI。</p></div></li>
+        <li><b>2.0</b><div><h3 id="stepTwoTitle">启动本地裁判</h3><p id="stepTwoBody">下载一次性运行包，在 127.0.0.1 创建权威牌桌。</p></div></li>
+        <li><b>3.0</b><div><h3 id="stepThreeTitle">你和 Codex 入座</h3><p id="stepThreeBody">浏览器控制你的席位，Codex 通过固定席位 MCP 行动。</p></div></li>
+      </ol>
+    </section>
+
+    <section class="spec" aria-labelledby="specTitle">
+      <header class="section-head">
+        <span>03</span>
+        <div><p id="specLabel">边界</p><h2 id="specTitle">它会碰什么，不会碰什么</h2></div>
+      </header>
+      <dl>
+        <div><dt id="reqNodeLabel">需要</dt><dd id="reqNodeValue">Node.js 20+ · 已登录的 Codex CLI</dd></div>
+        <div><dt id="accountLabel">账号</dt><dd id="accountValue">只由你本机的 Codex CLI 使用</dd></div>
+        <div><dt id="networkLabel">牌桌</dt><dd id="networkValue">仅绑定 127.0.0.1，不对公网开放</dd></div>
+        <div><dt id="recordsLabel">记录</dt><dd id="recordsValue">写入你当前目录下的 kai-liars-records/</dd></div>
+        <div><dt>SHA-256</dt><dd id="packageHash">读取中…</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <footer class="foot-stmt">
+    <p id="footerStatement" class="foot-stmt__line">你的 Agent。你的额度。你的桌。</p>
+    <div class="foot-stmt__meta"><span>开！</span><span id="footerMeta">本地运行 · 无账号托管 · 非官方</span></div>
+  </footer>
+
+  <script type="module" src="codex.js"></script>
+</body>
+</html>

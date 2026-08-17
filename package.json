@@ -7,7 +7,8 @@
     "readgate": "node scripts/readgate.mjs",
     "arena": "node scripts/arena.mjs",
     "arena:archive": "node scripts/build-arena-replay.mjs",
-    "dist": "rm -rf dist && mkdir -p dist/docs/arena && cp index.html about.html about.en.html manifest.webmanifest manifest.en.webmanifest icon.svg sw.js tokens.css dist/ && cp -R src dist/src && cp docs/arena/live.html docs/arena/live.css docs/arena/live.js docs/arena/verified-board.json docs/arena/verified-replay.json dist/docs/arena/ && cp infra/pages/_worker.js dist/",
+    "agent:packages": "node scripts/build-codex-play-package.mjs",
+    "dist": "rm -rf dist && mkdir -p dist/docs/arena && cp index.html about.html about.en.html codex.html codex.css codex.js manifest.webmanifest manifest.en.webmanifest icon.svg sw.js tokens.css dist/ && cp codex.html dist/agent.html && cp -R src dist/src && cp docs/arena/live.html docs/arena/live.css docs/arena/live.js docs/arena/verified-board.json docs/arena/verified-replay.json dist/docs/arena/ && cp infra/pages/_worker.js dist/ && npm run agent:packages",
     "deploy": "npm run dist && npx wrangler pages deploy dist --project-name=kai-dice --commit-dirty=true"
   }
 }

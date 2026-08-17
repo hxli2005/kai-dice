@@ -276,6 +276,13 @@ header {
   min-height: 2.5rem;
   max-width: 88%;
   width: fit-content;
+  max-height: min(9rem, 24dvh);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  overscroll-behavior: contain;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .bubble.silent { color: var(--dim); font-style: italic; }
 
@@ -651,6 +658,13 @@ button.danger:active { transform: scale(0.95); }
   font-size: 0.82rem;
   line-height: 1.45;
   min-height: 1.4rem;
+  max-height: min(8rem, 20dvh);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  overscroll-behavior: contain;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .bidder-tag { font-size: 1rem; color: var(--dim); margin-right: 0.3rem; }
 #roundTag { font-size: 0.8rem; color: var(--dim); letter-spacing: 0.12em; margin-right: 0.2rem; }
@@ -1102,6 +1116,7 @@ button.ghost {
   width: min(100%, calc((100dvh - var(--tube-window-bar)) * 195 / 422));
   max-height: calc(100dvh - var(--tube-window-bar));
   aspect-ratio: 195 / 422;
+  container-type: inline-size;
 }
 .tube-stage-frame > canvas {
   position: absolute;
@@ -1112,6 +1127,47 @@ button.ghost {
   outline: none;
 }
 .tube-viewport .tube-fallback { image-rendering: auto; }
+.tube-speech {
+  position: absolute;
+  z-index: 2;
+  left: 19.5%;
+  right: 5.6%;
+  top: 20.1%;
+  height: 6.35%;
+  margin: 0;
+  padding: 0 0.2rem 0 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(73, 231, 154, 0.55) transparent;
+  background: rgba(2, 11, 6, 0.2);
+  color: #d8ffe8;
+  font-family: "SFMono-Regular", "PingFang SC", Menlo, ui-monospace, monospace;
+  font-size: 0.62rem;
+  font-size: clamp(0.62rem, 4.1cqw, 0.95rem);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: pan-y;
+  cursor: text;
+}
+.tube-speech::-webkit-scrollbar { width: 3px; }
+.tube-speech::-webkit-scrollbar-thumb { background: rgba(73, 231, 154, 0.55); }
+.tube-speech[data-typing='true']::after {
+  content: '▌';
+  animation: tube-caret 0.9s steps(1) infinite;
+}
+.tube-speech:focus-visible {
+  outline: 1px solid rgba(216, 255, 232, 0.75);
+  outline-offset: 1px;
+}
+@keyframes tube-caret { 50% { opacity: 0; } }
 .tube-hit-layer {
   position: absolute;
   inset: 0;
@@ -1932,6 +1988,12 @@ button.ghost {
   border-color: var(--color-accent-2);
   background-color: var(--color-tube-b-surface);
   color: var(--color-accent-2);
+}
+
+#lobby .lobby-portal--codex {
+  border-color: var(--color-accent);
+  background-color: var(--color-tube-a-surface);
+  color: var(--color-accent);
 }
 
 #lobby .lobby-portal:disabled {

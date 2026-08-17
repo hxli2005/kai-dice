@@ -1,6 +1,6 @@
 {
-  "scanned_at": "2026-08-14T01:09:36+08:00",
-  "revalidated_after": "package.json changed after the prior scan; scripts only, dependencies remain empty",
+  "scanned_at": "2026-08-17T19:53:14+08:00",
+  "revalidated_after": "package.json remains dependency-free; Codex local-play launcher and download page are additive vanilla HTML/CSS/ES modules",
   "design_system": "DESIGN.md (locked, read-only)",
   "font_stack": "Shared Tomorrow display and IBM Plex Mono body stack, with PingFang SC fallbacks",
   "palette": "Warm dark industrial phosphor palette through OKLCH custom properties",
@@ -8,7 +8,7 @@
   "spacing": "Lobby and arena share the named 4pt spacing scale",
   "framework": "Vanilla HTML, CSS, and ES modules",
   "preserve": [
-    "mobile-first 9:16 play surface",
+    "mobile-first 9:16 play surface plus responsive private PC spectator and local-agent launcher",
     "three-tube phosphor language",
     "no-account local storage"
   ]

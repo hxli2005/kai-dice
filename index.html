@@ -23,24 +23,25 @@
   <div id="tubeViewport" class="tube-viewport hidden" aria-label="《开！》三管机对局界面">
     <button id="tubeMenuBtn" class="tube-window-menu" aria-label="菜单">☰</button>
     <div class="tube-stage-frame">
-      <canvas id="tubeStage" width="780" height="1688" aria-hidden="true"></canvas>
-      <div id="tubeHitLayer" class="tube-hit-layer" aria-label="三管机操作">
-        <button id="tubePeekBtn" class="tube-hit peek" aria-label="看自己的骰子"></button>
-        <button id="tubeFace1Btn" class="tube-hit face-1" aria-label="选择一点"></button>
-        <button id="tubeFace2Btn" class="tube-hit face-2" aria-label="选择二点"></button>
-        <button id="tubeFace3Btn" class="tube-hit face-3" aria-label="选择三点"></button>
-        <button id="tubeFace4Btn" class="tube-hit face-4" aria-label="选择四点"></button>
-        <button id="tubeFace5Btn" class="tube-hit face-5" aria-label="选择五点"></button>
-        <button id="tubeFace6Btn" class="tube-hit face-6" aria-label="选择六点"></button>
-        <button id="tubeCountDownBtn" class="tube-hit count-down" aria-label="减少报价数量"></button>
-        <button id="tubeCountUpBtn" class="tube-hit count-up" aria-label="增加报价数量"></button>
-        <button id="tubeBidBtn" class="tube-hit bid" aria-label="报数"></button>
-        <button id="tubeOpenBtn" class="tube-hit open" aria-label="开"></button>
-        <button id="tubeBlindBtn" class="tube-hit blind" aria-label="宣盲"></button>
-        <button id="tubeZhaiBtn" class="tube-hit zhai" aria-label="宣斋"></button>
-        <button id="tubeRaiseBtn" class="tube-hit raise" aria-label="宣抬"></button>
+        <canvas id="tubeStage" width="780" height="1688" aria-hidden="true"></canvas>
+        <div id="tubeSpeech" class="tube-speech hidden" data-raw tabindex="0" aria-label="AI 台词"></div>
+        <div id="tubeHitLayer" class="tube-hit-layer" aria-label="三管机操作">
+          <button id="tubePeekBtn" class="tube-hit peek" aria-label="看自己的骰子"></button>
+          <button id="tubeFace1Btn" class="tube-hit face-1" aria-label="选择一点"></button>
+          <button id="tubeFace2Btn" class="tube-hit face-2" aria-label="选择二点"></button>
+          <button id="tubeFace3Btn" class="tube-hit face-3" aria-label="选择三点"></button>
+          <button id="tubeFace4Btn" class="tube-hit face-4" aria-label="选择四点"></button>
+          <button id="tubeFace5Btn" class="tube-hit face-5" aria-label="选择五点"></button>
+          <button id="tubeFace6Btn" class="tube-hit face-6" aria-label="选择六点"></button>
+          <button id="tubeCountDownBtn" class="tube-hit count-down" aria-label="减少报价数量"></button>
+          <button id="tubeCountUpBtn" class="tube-hit count-up" aria-label="增加报价数量"></button>
+          <button id="tubeBidBtn" class="tube-hit bid" aria-label="报数"></button>
+          <button id="tubeOpenBtn" class="tube-hit open" aria-label="开"></button>
+          <button id="tubeBlindBtn" class="tube-hit blind" aria-label="宣盲"></button>
+          <button id="tubeZhaiBtn" class="tube-hit zhai" aria-label="宣斋"></button>
+          <button id="tubeRaiseBtn" class="tube-hit raise" aria-label="宣抬"></button>
+        </div>
       </div>
-    </div>
     <div id="tubeA11y" class="sr-only" aria-live="polite" data-raw></div>
   </div>
   <header>

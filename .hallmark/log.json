@@ -1,5 +1,23 @@
 [
   {
+    "date": "2026-08-17",
+    "macrostructure": "Component Playground",
+    "theme": "Three-Tube Terminal",
+    "enrichment": "none",
+    "brief": "陌生玩家用一条命令在本机与自己的 Codex 或 Claude Code 对战",
+    "nav": "N2",
+    "footer": "Ft5"
+  },
+  {
+    "date": "2026-08-17",
+    "macrostructure": "Map / Diagram",
+    "theme": "Three-Tube Quiet",
+    "enrichment": "none",
+    "brief": "Codex vs Claude Code 本机极简只读直播界面",
+    "nav": "N9",
+    "footer": "Ft2"
+  },
+  {
     "date": "2026-08-14",
     "macrostructure": "Workbench",
     "theme": "Three-Tube Terminal",

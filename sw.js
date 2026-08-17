@@ -1,15 +1,20 @@
-const CACHE = 'kai-shell-v12';
+const CACHE = 'kai-shell-v16';
 const SHELL = [
   './',
   './index.html',
   './about.html',
   './about.en.html',
+  './codex.html',
+  './agent.html',
+  './codex.css',
+  './codex.js',
   './manifest.webmanifest',
   './manifest.en.webmanifest',
   './icon.svg',
   './tokens.css',
   './src/ui/style.css',
   './src/ui/main.js',
+  './src/ui/copy.js',
   './src/ui/i18n.js',
   './src/ui/tubes.js',
   './docs/arena/live.html',
