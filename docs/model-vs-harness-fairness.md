@@ -6,7 +6,7 @@
 
 ---
 
-[DEV Community 上的一篇文章](https://dev.to/haoxiang_li_a709204042e6b/are-you-benchmarking-the-model-or-the-harness-2bke)提出了一个很尖锐的问题：*Are You Benchmarking the Model—or the Harness?* 把它放进中文语境，最值得讨论的是一个数字：40% 修完只剩 6%。下面用一次 AI 大话骰实验，拆开这个问题。
+[DEV Community 上的一篇文章](https://dev.to/haoxiangli/are-you-benchmarking-the-model-or-the-harness-2bke)提出了一个很尖锐的问题：*Are You Benchmarking the Model—or the Harness?* 把它放进中文语境，最值得讨论的是一个数字：40% 修完只剩 6%。下面用一次 AI 大话骰实验，拆开这个问题。
 
 如果我早一天把稿子发出去，DeepSeek V4-Pro 可能已经多了一种性格：**不看骰也敢报价。**
 
