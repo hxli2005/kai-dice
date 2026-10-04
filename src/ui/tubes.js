@@ -1,17 +1,13 @@
-// Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: in-place workbench.
-// 方向 O「三管机」的生产表现层。
+// 《开！》对局表现层 · 2026-10「数字雨」皮肤（黑客帝国式代码瀑布＋终端面板）。
 // 规则事实只从 observe() 的快照进入；本模块不拥有、不推断、也不修改任何引擎状态。
+// 模块名沿用「三管机」时代的 tubes.js：对外接口（toTubeView / createTubeStage）不变。
 
 import { allLegalBids } from '../rules.js';
 import { isEnglish } from './i18n.js';
+import { createRain, createMosaic, GLYPHS } from './rain.js';
 
 const L = (zh, en) => (isEnglish() ? en : zh);
 
-const W = 195;
-const H = 422;
-const SS = 4;
-const RS = 2; // 低分辨率几何不变；文字与线条用 2× 栅格，避免高 DPR 手机上糊成光团。
-const GLY = '0123456789ABCDEF◢◣▲▌░▒▓ｱｶｻﾀﾅﾊﾏﾔ';
 const PIPS = {
   1: [4],
   2: [2, 6],
@@ -20,60 +16,8 @@ const PIPS = {
   5: [0, 2, 4, 6, 8],
   6: [0, 3, 6, 2, 5, 8],
 };
-const PH = {
-  a: { glass: '#020b06', fade: '2,11,6', lo: '#1b6a43', mid: '#49e79a', hot: '#d8ffe8' },
-  b: { glass: '#07090c', fade: '7,9,12', lo: '#566473', mid: '#d8e9f2', hot: '#ffffff' },
-  c: { glass: '#100a02', fade: '16,10,2', lo: '#8a5d1d', mid: '#ffc66b', hot: '#fff1d8' },
-};
-const CH = {
-  chassis: '#101216',
-  rail: '#1a1d24',
-  amber: '#ffb84d',
-  red: '#ff3b30',
-  key: '#dfe4e0',
-  keyRed: '#b3271e',
-};
-const TUBES = {
-  a: { x: 4, y: 4, w: 187, h: 108 },
-  b: { x: 4, y: 120, w: 187, h: 80 },
-  c: { x: 4, y: 220, w: 187, h: 92 },
-};
-const LED = { x: 6, y: 202, w: 183, h: 16 };
-const FACE_KEY_Y = 316;
-const COUNT_KEY_Y = 340;
-const KEY_Y = 366;
 export const SETTLEMENT_HOLD_MS = 3000;
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-const easeOut = (p) => 1 - (1 - p) ** 3;
-const CHIP_TRACES = {
-  up: [[156, 27], [185, 27], [185, 115], [171, 115], [171, 128]],
-  down: [[156, 228], [185, 228], [185, 145], [171, 145], [171, 141]],
-};
-function tracePoint(trace, progress) {
-  let total = 0;
-  const lengths = [];
-  for (let i = 1; i < trace.length; i++) {
-    const dx = trace[i][0] - trace[i - 1][0];
-    const dy = trace[i][1] - trace[i - 1][1];
-    const length = Math.hypot(dx, dy);
-    lengths.push(length);
-    total += length;
-  }
-  let distance = clamp(progress, 0, 1) * total;
-  for (let i = 1; i < trace.length; i++) {
-    const length = lengths[i - 1];
-    if (distance <= length) {
-      const p = length ? distance / length : 0;
-      return [
-        trace[i - 1][0] + (trace[i][0] - trace[i - 1][0]) * p,
-        trace[i - 1][1] + (trace[i][1] - trace[i - 1][1]) * p,
-      ];
-    }
-    distance -= length;
-  }
-  return trace.at(-1);
-}
-const nowMs = () => performance.now();
 
 export function toTubeView(o, {
   opponentName = L('它', 'AI'),
@@ -152,31 +96,48 @@ export function toTubeView(o, {
   };
 }
 
-export function createTubeStage(canvas, handlers = {}) {
-  const viewport = canvas.closest('.tube-viewport');
-  const a11y = document.getElementById('tubeA11y');
-  const speechEl = document.getElementById('tubeSpeech');
-  const off = document.createElement('canvas');
-  off.width = W * RS;
-  off.height = H * RS;
-  let ctx = off.getContext('2d');
-  ctx.scale(RS, RS);
-  const main2d = ctx;
-  canvas.width = W * SS;
-  canvas.height = H * SS;
-  canvas.style.imageRendering = 'auto';
-
-  const tubes = {};
-  for (const [key, base] of Object.entries(TUBES)) {
-    const pc = document.createElement('canvas');
-    pc.width = base.w * RS;
-    pc.height = base.h * RS;
-    const pctx = pc.getContext('2d');
-    pctx.scale(RS, RS);
-    pctx.fillStyle = PH[key].glass;
-    pctx.fillRect(0, 0, base.w, base.h);
-    tubes[key] = { ...base, pc, pctx };
-  }
+export function createTubeStage(host, handlers = {}) {
+  const $ = (id) => document.getElementById(id);
+  const viewport = host.closest('.tube-viewport');
+  const a11y = $('tubeA11y');
+  const speechEl = $('tubeSpeech');
+  const el = {
+    tagline: $('mxTagline'),
+    oppName: $('mxOppName'),
+    oppState: $('mxOppState'),
+    oppAcct: $('mxOppAcct'),
+    oppDice: $('mxOppDice'),
+    aiTag: $('mxAiTag'),
+    bidLbl: $('mxBidLbl'),
+    bid: $('mxBid'),
+    bidX: $('mxBidX'),
+    rel: $('mxRel'),
+    hud: $('mxHud'),
+    myName: $('mxMyName'),
+    round: $('mxRound'),
+    myAcct: $('mxMyAcct'),
+    myDice: $('mxMyDice'),
+    peek: $('tubePeekBtn'),
+    count: $('mxCount'),
+    more: $('mxMoreBtn'),
+    extra: $('mxExtra'),
+    bidBtn: $('tubeBidBtn'),
+    openBtn: $('tubeOpenBtn'),
+    blind: $('tubeBlindBtn'),
+    zhai: $('tubeZhaiBtn'),
+    raise: $('tubeRaiseBtn'),
+    faces: [1, 2, 3, 4, 5, 6].map((f) => $(`tubeFace${f}Btn`)),
+  };
+  const rain = createRain(host);
+  const mosaics = {
+    count: createMosaic($('mxBidCount'), { cell: 7 }),
+    face: createMosaic($('mxBidFace'), { cell: 7 }),
+    word: createMosaic($('mxVerdictWord'), { cell: 6, under: 0.5 }),
+  };
+  const ro = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(() => Object.values(mosaics).forEach((m) => m.layout()))
+    : null;
+  for (const id of ['mxBidCount', 'mxBidFace', 'mxVerdictWord']) ro?.observe($(id));
 
   const reducedMq = matchMedia('(prefers-reduced-motion: reduce)');
   let reduced = reducedMq.matches;
@@ -187,55 +148,61 @@ export function createTubeStage(canvas, handlers = {}) {
   let disposed = false;
   let view = null;
   let lastView = null;
-  let phase = 'boot';
-  let bootAt = 0;
-  let power = 0;
-  let warm = { a: 0, b: 0, c: 0, ctl: 0 };
+  let phase = 'idle';
   let timeScale = 1;
-  let last = nowMs();
-  let time = 0;
-  let fr = 1;
-  let parX = 0;
-  let parY = 0;
-  let shakeX = 0;
-  let shakeY = 0;
-  let flash = 0;
-  let glitch = 0;
-  let judLed = 0;
-  let ledHitAt = -Infinity;
-  let judHitAt = -Infinity;
-  let bidPop = 0;
-  let potPop = 0;
-  let deny = null;
-  let press = null;
-  let pokeMenu = false;
-  let moreMenu = false;
-  let speech = { full: '', shown: '', n: 0, acc: 0, doneAt: 0 };
-  let followSpeech = true;
   let thinking = false;
-  let wave = { ph: 0, voice: 0, flat: 0, chaos: 0 };
   let reveal = null;
   let verdict = null;
-  let float = null;
-  let displayPot = 0;
-  let displayStacks = { up: 0, down: 0 };
-  let lastSpark = 0;
-  let quality = 3;
-  let lowFrames = 0;
-  let renderError = null;
-  const buttons = [];
-  const particles = [];
-  const tubeParticles = { a: [], b: [], c: [] };
-  const packs = [];
-  const ripples = [];
+  let extraOpen = false;
+  let speech = { full: '', shown: '', n: 0, acc: 0, doneAt: 0 };
+  let followSpeech = true;
+  const shown = { pot: 0, up: 0, down: 0 };
+  const target = { pot: 0, up: 0, down: 0 };
+  let last = performance.now();
+  let raf = 0;
+
+  // ---------- 静态文案（随语言） ----------
+  function label() {
+    el.tagline.textContent = L('KAI · 数字雨对局', 'KAI · DIGITAL RAIN');
+    el.myName.textContent = L('> 你', '> YOU');
+    el.aiTag.textContent = L('AI生成', 'AI TEXT');
+    el.peek.textContent = L('[ 解码我的骰子 ]', '[ DECODE MY DICE ]');
+    el.blind.innerHTML = `<i></i>${L('盲', 'BLIND')}`;
+    el.zhai.innerHTML = `<i></i>${L('斋', 'NO-WILD')}`;
+    el.raise.innerHTML = `<i></i>${L('抬', 'RAISE')}`;
+    el.bidBtn.querySelector('b').textContent = L('报', 'BID');
+    el.openBtn.querySelector('b').textContent = L('开', 'CALL');
+    el.faces.forEach((b, i) => (b.innerHTML = pipHtml(i + 1)));
+  }
+
+  function pipHtml(face) {
+    const on = PIPS[face] ?? [];
+    return `<span class="mx-pip${face === 1 ? ' is-wild' : ''}">${Array.from({ length: 9 }, (_, i) => `<i${on.includes(i) ? '' : ' class="x"'}></i>`).join('')}</span>`;
+  }
+  const glyph = () => GLYPHS[(Math.random() * GLYPHS.length) | 0];
 
   function setActive(next) {
     active = !!next;
     viewport?.classList.toggle('hidden', !active);
     document.getElementById('app')?.classList.toggle('tube-mode', active);
-    if (active && phase === 'boot' && bootAt === 0) bootAt = nowMs();
+    if (active) {
+      label();
+      rain.start();
+      viewport.classList.remove('mx-boot');
+      void viewport.offsetWidth;
+      viewport.classList.add('mx-boot');
+      rain.surge(3, 1200);
+      Object.values(mosaics).forEach((m) => m.layout());
+      cancelAnimationFrame(raf);
+      last = performance.now();
+      raf = requestAnimationFrame(loop);
+    } else {
+      rain.stop();
+      cancelAnimationFrame(raf);
+    }
   }
 
+  // ---------- 台词：真流式接点保持不变 ----------
   const onSpeechScroll = () => {
     if (!speechEl) return;
     followSpeech = speechEl.scrollHeight - speechEl.scrollTop - speechEl.clientHeight < 8;
@@ -258,10 +225,13 @@ export function createTubeStage(canvas, handlers = {}) {
 
   function setThinking(next) {
     thinking = !!next;
+    viewport?.classList.toggle('mx-thinking', thinking);
     if (thinking) {
-      wave.chaos = Math.max(wave.chaos, 0.18);
+      rain.surge(1.6, 700);
       announce(isEnglish() ? 'AI is thinking.' : '对手正在思考。');
     }
+    paintOpp();
+    paintBid();
   }
 
   function say(text, seat = 'B') {
@@ -272,7 +242,6 @@ export function createTubeStage(canvas, handlers = {}) {
     announce(`${view?.opponentName ?? L('它', 'AI')}: ${text}`);
   }
 
-  // 真流式管线的接点：上游逐 token 调用；现有非流式通道仍可调用 say()。
   function appendSpeech(token, seat = 'B') {
     if (!token || seat !== 'B') return;
     if (speech.n >= speech.full.length) speech.doneAt = 0;
@@ -286,46 +255,202 @@ export function createTubeStage(canvas, handlers = {}) {
     syncSpeech();
   }
 
+  // ---------- 画面：对手区 ----------
+  function paintOpp() {
+    if (!view) return;
+    const name = view.opponentName ?? L('它', 'AI');
+    el.oppName.textContent = `> ${[...name].length > 22 ? `${[...name].slice(0, 22).join('')}…` : name}`;
+    el.oppState.textContent = thinking ? L('在想', 'THINKING') : L('在看', 'WATCHING');
+    el.oppState.classList.toggle('is-off', view.connected === false);
+    const count = reveal ? reveal.upper.length : view.oppDiceCount ?? 0;
+    syncDiceRow(el.oppDice, count, (i) => {
+      if (reveal) return i < reveal.upperN ? { face: reveal.upper[i], hit: isHit(i) } : null;
+      return i < (view.oppShown?.length ?? 0) ? { face: view.oppShown[i] } : null;
+    });
+  }
+
+  function paintMine() {
+    if (!view) return;
+    const faces = reveal?.lower ?? view.myDice;
+    const count = reveal?.lower.length ?? view.myDiceCount ?? 0;
+    const offset = reveal ? reveal.upper.length : 0;
+    syncDiceRow(el.myDice, count, (i) => (faces ? { face: faces[i], hit: reveal ? isHit(offset + i) : false } : null));
+    el.peek.classList.toggle('hidden', !!faces || !view.legal.peek || !!reveal);
+    el.round.textContent = isEnglish() ? `R${String(view.round).padStart(2, '0')}` : `第 ${view.round} 局`;
+  }
+
+  function isHit(index) {
+    if (!reveal || reveal.countIndex <= index) return false;
+    const all = [...reveal.upper, ...reveal.lower];
+    const face = all[index];
+    return face === reveal.rv.bid.face || (!reveal.rv.zhai && face === 1);
+  }
+
+  // 每颗骰子是一格：盖着＝滚动的代码字，揭开＝发光点阵；解码瞬间短暂闪白。
+  function syncDiceRow(row, count, faceOf) {
+    while (row.children.length > count) row.lastElementChild.remove();
+    while (row.children.length < count) {
+      const d = document.createElement('span');
+      d.className = 'mx-die is-covered';
+      d.innerHTML = '<em></em>';
+      row.appendChild(d);
+    }
+    [...row.children].forEach((d, i) => {
+      const info = faceOf(i);
+      const key = info ? `f${info.face}` : 'c';
+      if (d.dataset.key !== key) {
+        const wasCovered = d.dataset.key === 'c' || !d.dataset.key;
+        d.dataset.key = key;
+        d.classList.toggle('is-covered', !info);
+        d.innerHTML = info ? pipHtml(info.face) : '<em></em>';
+        if (info && wasCovered) {
+          d.classList.remove('is-decoding');
+          void d.offsetWidth;
+          d.classList.add('is-decoding');
+        }
+      }
+      d.classList.toggle('is-hit', !!info?.hit);
+    });
+  }
+
+  // ---------- 画面：报价＝码字 ----------
+  function paintBid() {
+    if (!view && !reveal) return;
+    const bid = reveal?.rv.bid ?? view?.currentBid;
+    const who = bid?.player === 'A' ? L('你', 'YOU') : [...(view?.opponentName ?? L('它', 'AI'))].slice(0, 14).join('');
+    el.bidLbl.textContent = verdict
+      ? L('· 判 定 ·', '· RULING ·')
+      : reveal
+        ? (reveal.rv.calza ? L('· 掐 · 点 清 ·', '· SPOT ON · COUNT ·') : L('· 开 · 点 清 ·', '· CALL · COUNT ·'))
+        : thinking
+          ? L('· 对手在想 ·', '· AI THINKING ·')
+          : bid
+            ? (isEnglish() ? `· ${who} BIDS ·` : `· ${who} 报 ·`)
+            : L('· 待 报 ·', '· AWAITING BID ·');
+    el.bid.classList.toggle('is-verdict', !!verdict);
+    el.bid.classList.toggle('is-empty', !bid);
+    if (verdict) {
+      mosaics.word.set(verdict.word);
+      el.rel.textContent = verdict.relation;
+    } else if (reveal) {
+      mosaics.count.set(String(reveal.countN));
+      mosaics.face.set(String(bid.count));
+      el.bidX.textContent = reveal.rv.calza ? '=?' : '/';
+      el.rel.textContent = isEnglish() ? `bid: ${bid.count} × ${bid.face}` : `验：${bid.count} 个 ${bid.face}`;
+    } else if (bid) {
+      mosaics.count.set(String(bid.count));
+      mosaics.face.set(String(bid.face));
+      el.bidX.textContent = L('个', '×');
+      el.rel.textContent = '';
+    } else {
+      mosaics.count.set('');
+      mosaics.face.set('');
+      el.bidX.textContent = '_';
+      el.rel.textContent = '';
+    }
+    if (!verdict) mosaics.word.set('');
+  }
+
+  function paintHud() {
+    if (!view) return;
+    const fuse = view.fuse ?? 0;
+    const cells = Array.from({ length: 10 }, (_, i) => `<i class="${i >= 5 ? 'deep' : ''}${i < fuse ? ' on' : ''}"></i>`).join('');
+    const mult = view.potMult ?? 1;
+    el.hud.innerHTML = `<span>${L('池', 'POT')}<b data-k="pot">${pad(shown.pot)}</b></span><span>×<b>${Number.isInteger(mult) ? mult : mult.toFixed(1)}</b></span><span class="mx-ladder" title="${L('阶梯／深水', 'LADDER / DEEP')}">${cells}</span>`;
+    el.hud.classList.toggle('is-deep', fuse > 5);
+  }
+
+  const pad = (n) => {
+    const v = Math.round(n);
+    return `${v < 0 ? '-' : ''}${String(Math.abs(v)).padStart(3, '0')}`;
+  };
+
+  function paintAccts() {
+    el.oppAcct.textContent = `${L('账', 'BAL')} ${pad(shown.up)}`;
+    el.myAcct.textContent = `${L('账', 'BAL')} ${pad(shown.down)}`;
+    // 显示值扣掉了托管在池里的那一注；欠账要按真实账本判，开局押进底注不算欠
+    const stake = reveal ? 0 : view?.stakePerSeat ?? 0;
+    el.oppAcct.classList.toggle('is-debt', shown.up + stake < 0);
+    el.myAcct.classList.toggle('is-debt', shown.down + stake < 0);
+    const potEl = el.hud.querySelector('[data-k="pot"]');
+    if (potEl) potEl.textContent = pad(shown.pot);
+  }
+
+  // ---------- 画面：控制区 ----------
+  function paintControls() {
+    if (!view) return;
+    const canAct = view.myTurn && phase !== 'seq' && phase !== 'settle';
+    const sel = view.selectedBid;
+    el.faces.forEach((b, i) => b.classList.toggle('is-sel', sel?.face === i + 1));
+    el.count.innerHTML = sel
+      ? `<small>${L('数量', 'COUNT')}</small><b>${String(sel.count).padStart(2, '0')}</b><small>${L('个', '×')} ${sel.face}</small>`
+      : `<small>${L('数量', 'COUNT')}</small><b>--</b>`;
+    el.bidBtn.querySelector('small').textContent = sel ? (isEnglish() ? `${sel.count} × ${sel.face}` : `${sel.count} 个 ${sel.face}`) : '';
+    const cur = view.currentBid;
+    el.openBtn.querySelector('small').textContent = cur ? (isEnglish() ? `vs ${cur.count} × ${cur.face}` : `验 ${cur.count} 个 ${cur.face}`) : '';
+    el.blind.classList.toggle('is-on', !!view.declarations?.blind);
+    el.zhai.classList.toggle('is-on', !!view.declarations?.zhai);
+    el.raise.classList.toggle('is-on', !!view.declarations?.raise);
+    const hasMods = !!view.modActions?.length;
+    el.more.textContent = hasMods ? L('扩', 'MORE') : L('戳', 'POKE');
+    el.more.disabled = !canAct;
+    if (!canAct && extraOpen) toggleExtra(false);
+    viewport?.classList.toggle('mx-seq', phase === 'seq' || phase === 'settle');
+  }
+
+  function toggleExtra(next = !extraOpen) {
+    extraOpen = next;
+    el.more.setAttribute('aria-expanded', String(extraOpen));
+    el.extra.classList.toggle('hidden', !extraOpen);
+    if (!extraOpen) return;
+    const pokes = isEnglish() ? ['Wrong', 'Bluffing', 'Hold on'] : ['你记错了', '你在演', '慢着'];
+    const mods = (view?.modActions ?? []).slice(0, 3);
+    el.extra.innerHTML = [
+      ...mods.map((m) => `<button class="mx-key mx-chip" type="button" data-mod="${m.type}">${m.label}</button>`),
+      ...pokes.map((p) => `<button class="mx-key mx-chip" type="button" data-poke="${p}">「${p}」</button>`),
+    ].join('');
+  }
+  el.more.addEventListener('click', () => toggleExtra());
+  el.extra.addEventListener('click', (event) => {
+    const b = event.target.closest('button');
+    if (!b) return;
+    toggleExtra(false);
+    if (b.dataset.mod) handlers.mod?.(b.dataset.mod);
+    else if (b.dataset.poke) handlers.poke?.(b.dataset.poke);
+  });
+
   function update(next) {
     if (!next) return;
     lastView = view;
     view = next;
     const effectivePot = (value) => value?.potEffective ?? (value?.pot ?? 0) * (value?.potMult ?? 1);
-    const stackTarget = (value, side) => (value?.chips?.[side === 'up' ? 'upper' : 'lower'] ?? 0) - (value?.stakePerSeat ?? 0);
+    const stackOf = (value, side) => (value?.chips?.[side === 'up' ? 'upper' : 'lower'] ?? 0) - (value?.stakePerSeat ?? 0);
     const newRound = lastView?.round !== next.round;
-    if (!Number.isFinite(displayPot) || lastView == null || newRound) {
-      displayPot = effectivePot(next);
-      displayStacks = { up: stackTarget(next, 'up'), down: stackTarget(next, 'down') };
-      if (newRound) packs.length = 0;
-    }
-    if (newRound) {
-      verdict = null;
-      reveal = null;
-      float = null;
-      judLed = 0;
-      wave.flat = 0;
-      speech = { full: speech.full, shown: speech.shown, n: speech.n, acc: 0, doneAt: speech.doneAt };
+    target.pot = effectivePot(next);
+    target.up = stackOf(next, 'up');
+    target.down = stackOf(next, 'down');
+    if (lastView == null || newRound) {
+      Object.assign(shown, target);
+      if (newRound) {
+        verdict = null;
+        reveal = null;
+      }
     }
     const oldBid = lastView?.currentBid;
     const newBid = next.currentBid;
     const bidChanged = !!(newBid && (!oldBid || oldBid.count !== newBid.count || oldBid.face !== newBid.face || oldBid.player !== newBid.player));
-    const stakeDelta = Math.max(0, (next.stakePerSeat ?? 0) - (lastView?.stakePerSeat ?? next.stakePerSeat ?? 0));
-    if (!newRound && stakeDelta > 0 && !reveal) {
-      bidPop = 1;
-      const lead = bidChanged && newBid.player === 'B' ? 'up' : 'down';
-      const follow = lead === 'up' ? 'down' : 'up';
-      ledHitAt = time;
-      packs.push({ from: lead, born: time, dur: reduced ? 120 : 390, amount: stakeDelta, flow: 'in' });
-      packs.push({ from: follow, born: time + (reduced ? 40 : 120), dur: reduced ? 120 : 390, amount: stakeDelta, flow: 'in' });
-      handlers.sfx?.tick?.();
-    } else if (!newRound && !reveal && packs.length === 0) {
-      displayPot = effectivePot(next);
-      displayStacks = { up: stackTarget(next, 'up'), down: stackTarget(next, 'down') };
-    }
     if (bidChanged) {
-      bidPop = 1;
-      ledHitAt = time;
+      rain.surge(1.8, 500);
+      handlers.sfx?.tick?.();
     }
+    if (!newRound && (next.stakePerSeat ?? 0) > (lastView?.stakePerSeat ?? 0)) el.hud.classList.add('is-pulse');
+    paintOpp();
+    paintMine();
+    paintBid();
+    paintHud();
+    paintAccts();
+    paintControls();
+    setTimeout(() => el.hud.classList.remove('is-pulse'), 420);
     const label = newBid
       ? (isEnglish()
           ? `${newBid.player === 'A' ? 'You' : next.opponentName} bids ${newBid.count} × ${newBid.face}`
@@ -334,19 +459,13 @@ export function createTubeStage(canvas, handlers = {}) {
     announce(label);
   }
 
-  function finishBoot() {
-    power = 1;
-    warm = { a: 1, b: 1, c: 1, ctl: 1 };
-    phase = 'idle';
-  }
-
   function scaledWait(ms) {
     if (reduced) ms = Math.min(150, ms * 0.35);
     return new Promise((resolve) => {
       let acc = 0;
-      let prev = nowMs();
+      let prev = performance.now();
       const tick = () => {
-        const n = nowMs();
+        const n = performance.now();
         acc += (n - prev) * timeScale;
         prev = n;
         if (acc >= ms || disposed) resolve();
@@ -356,35 +475,28 @@ export function createTubeStage(canvas, handlers = {}) {
     });
   }
 
-  function burstTube(key, x, y, count, palette, speed = 1.5) {
-    if (reduced || quality < 2) count = Math.min(3, count);
-    const list = tubeParticles[key];
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.3 + Math.random());
-      list.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.8, life: 1, c: palette[i % palette.length] });
-    }
+  function glitch(ms = 420) {
+    if (reduced || !viewport) return;
+    viewport.classList.remove('mx-glitch');
+    void viewport.offsetWidth;
+    viewport.classList.add('mx-glitch');
+    setTimeout(() => viewport.classList.remove('mx-glitch'), ms);
   }
 
-  function shellBurst(x, y, count, color) {
-    if (reduced || quality < 2) count = Math.min(2, count);
-    for (let i = 0; i < count; i++) particles.push({
-      x,
-      y,
-      vx: (Math.random() - 0.5) * 1.7,
-      vy: -0.5 - Math.random() * 1.4,
-      life: 1,
-      c: color,
-    });
+  function floatText(text, side) {
+    const acct = side === 'up' ? el.oppAcct : el.myAcct;
+    const f = document.createElement('span');
+    f.className = 'mx-float';
+    f.textContent = text;
+    acct.closest('.mx-ph').appendChild(f);
+    setTimeout(() => f.remove(), 1600);
   }
 
   async function showShowdown({ rv, re, by, sayText = '', names = {} }) {
     if (!active) return false;
     phase = 'seq';
     timeScale = 1;
-    pokeMenu = false;
-    moreMenu = false;
-    wave.chaos = 1;
+    toggleExtra(false);
     reveal = {
       rv,
       re,
@@ -393,83 +505,67 @@ export function createTubeStage(canvas, handlers = {}) {
       upper: rv.dice.B ?? [],
       lower: rv.dice.A ?? [],
       upperN: 0,
-      lowerN: rv.dice.A?.length ?? 0,
       countN: 0,
       countIndex: 0,
     };
     if (sayText) say(sayText, by);
-    await scaledWait(240);
-    flash = 1;
-    glitch = 1;
-    shakeX = reduced ? 0 : 4;
-    shakeY = reduced ? 0 : 2;
+    paintControls();
+    paintBid();
+    await scaledWait(200);
+    glitch();
+    rain.surge(2.4, 1400);
     handlers.sfx?.slam?.();
-    wave.flat = 1;
-    const upperFaces = reveal.upper;
-    for (let i = 0; i < upperFaces.length; i++) {
+    for (let i = 0; i < reveal.upper.length; i++) {
       reveal.upperN = i + 1;
-      burstTube('a', 27 + i * 30 + 11, 69, 6, [PH.a.mid, PH.a.hot]);
+      paintOpp();
       handlers.sfx?.land?.();
-      await scaledWait(160);
+      await scaledWait(170);
     }
-    const all = [...upperFaces, ...reveal.lower];
-    const isHit = (face) => face === rv.bid.face || (!rv.zhai && face === 1);
+    const all = [...reveal.upper, ...reveal.lower];
+    const hit = (face) => face === rv.bid.face || (!rv.zhai && face === 1);
     for (let i = 0; i < all.length; i++) {
       reveal.countIndex = i + 1;
-      if (isHit(all[i])) {
+      if (hit(all[i])) {
         reveal.countN++;
+        paintOpp();
+        paintMine();
+        paintBid();
         handlers.sfx?.tick?.();
-        const key = i < upperFaces.length ? 'a' : 'c';
-        const j = i < upperFaces.length ? i : i - upperFaces.length;
-        burstTube(key, (key === 'a' ? 27 : 10) + j * (key === 'a' ? 30 : 36) + 12, key === 'a' ? 69 : 45, 4, [PH[key].hot]);
-        await scaledWait(150);
+        await scaledWait(160);
       }
     }
+    paintOpp();
+    paintMine();
     const success = rv.calza ? !!rv.exact : !!rv.stands;
     const actual = reveal.countN;
     const winnerTag = re.winner === 'A' ? L('你', 'you') : L('它', 'the AI');
     const loserTag = re.loser === 'A' ? L('你', 'you') : L('它', 'the AI');
+    const title = rv.calza
+      ? (rv.exact ? L('掐中', 'EXACT') : L('掐空', 'MISS'))
+      : success ? L('成立', 'TRUE') : L('不成立', 'FALSE');
     verdict = {
-      title: rv.calza
-        ? (rv.exact ? L('掐  中', 'CALZA') : L('掐  空', 'MISSED'))
-        : success ? L('成  立', 'STANDS') : L('不 成 立', 'FALSE'),
-      relation: `${actual} ${rv.calza ? (rv.exact ? '=' : '≠') : success ? '≥' : '<'} ${rv.bid.count}`,
+      title,
+      word: title,
+      relation: `${actual} ${rv.calza ? (rv.exact ? '=' : '≠') : success ? '≥' : '<'} ${rv.bid.count} · ${isEnglish() ? `${loserTag} lose a die` : `${loserTag}掉一颗骰`}`,
     };
-    judLed = 1;
-    judHitAt = time;
     announce(isEnglish()
-      ? `${verdict.title}: actual ${actual}; ${rv.calza ? `calza ${rv.bid.count}` : `bid ${rv.bid.count}`}. ${loserTag} lose; ${winnerTag} take the ${Math.round(displayPot)} pot.`
-      : `${verdict.title}：实中 ${actual}，${rv.calza ? `掐 ${rv.bid.count}` : `报价 ${rv.bid.count}`}；${loserTag}输，托管池 ${Math.round(displayPot)} 全部归${winnerTag}`);
-    flash = Math.max(flash, 0.25);
-    if (!reduced) {
-      shakeX = 3;
-      shakeY = 2;
-    }
+      ? `${title}: actual ${actual}; ${rv.calza ? `calza ${rv.bid.count}` : `bid ${rv.bid.count}`}. ${loserTag} lose; ${winnerTag} take the ${Math.round(shown.pot)} pot.`
+      : `${title}：实中 ${actual}，${rv.calza ? `掐 ${rv.bid.count}` : `报价 ${rv.bid.count}`}；${loserTag}输，托管池 ${Math.round(shown.pot)} 全部归${winnerTag}`);
+    viewport?.classList.toggle('mx-win', re.winner === 'A');
+    viewport?.classList.toggle('mx-lose', re.winner !== 'A');
+    paintBid();
+    glitch(600);
+    rain.surge(2.6, 1000);
     handlers.sfx?.verdict?.();
-    burstTube('b', TUBES.b.w / 2, 50, 24, [PH.b.hot, PH.b.mid], 2.2);
-    await scaledWait(85);
+    await scaledWait(520);
     const winnerSide = re.winner === 'A' ? 'down' : 'up';
-    const startPot = Math.max(0, displayPot);
-    const steps = clamp(Math.ceil(startPot / 3), 5, 10);
-    const packetAmount = steps ? startPot / steps : 0;
-    for (let i = 0; i < steps; i++) {
-      packs.push({
-        from: winnerSide,
-        born: time,
-        dur: reduced ? 120 : 390,
-        amount: packetAmount,
-        flow: 'out',
-        reverse: true,
-      });
-      handlers.sfx?.chips?.();
-      await scaledWait(85);
-    }
-    await scaledWait(reduced ? 130 : 410);
-    displayPot = 0;
+    const startPot = Math.max(0, shown.pot);
     if (startPot) {
-      float = { text: `+${Math.round(startPot)}`, key: winnerSide === 'down' ? 'c' : 'a', born: time };
-      const key = winnerSide === 'down' ? 'c' : 'a';
-      burstTube(key, key === 'c' ? 150 : 24, key === 'c' ? 18 : 94, 8, [PH[key].hot, PH[key].mid]);
+      target[winnerSide] = shown[winnerSide] + startPot;
+      target.pot = 0;
+      floatText(`+${Math.round(startPot)}`, winnerSide);
+      handlers.sfx?.chips?.();
+      await scaledWait(reduced ? 120 : 620);
       handlers.sfx?.jackpot?.();
     }
     phase = 'settle';
@@ -482,886 +578,55 @@ export function createTubeStage(canvas, handlers = {}) {
   function clearShowdown() {
     reveal = null;
     verdict = null;
-    float = null;
-    judLed = 0;
-    judHitAt = -Infinity;
-    wave.flat = 0;
-    if (phase !== 'boot') phase = 'idle';
+    phase = 'idle';
     timeScale = 1;
+    viewport?.classList.remove('mx-win', 'mx-lose');
+    paintOpp();
+    paintMine();
+    paintBid();
+    paintControls();
   }
 
-  function pillow(c, x, y, w, h, r, bow) {
-    c.beginPath();
-    c.moveTo(x + r, y);
-    c.quadraticCurveTo(x + w / 2, y - bow, x + w - r, y);
-    c.quadraticCurveTo(x + w, y, x + w, y + r);
-    c.quadraticCurveTo(x + w + bow, y + h / 2, x + w, y + h - r);
-    c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    c.quadraticCurveTo(x + w / 2, y + h + bow, x + r, y + h);
-    c.quadraticCurveTo(x, y + h, x, y + h - r);
-    c.quadraticCurveTo(x - bow, y + h / 2, x, y + r);
-    c.quadraticCurveTo(x, y, x + r, y);
-    c.closePath();
-  }
-
-  function tx(text, x, y, size, color, { bold = false, mono = false, align = 'left', alpha = 1 } = {}) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.font = `${bold ? '700 ' : size <= 8 ? '600 ' : ''}${size}px ${mono ? '"SFMono-Regular","PingFang SC",Menlo,ui-monospace,monospace' : 'system-ui,"PingFang SC",sans-serif'}`;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'top';
-    ctx.fillText(String(text), Math.round(x), Math.round(y));
-    ctx.restore();
-  }
-
-  function drawDie(x, y, size, face, pal, hit = false, covered = false) {
-    ctx.save();
-    ctx.globalAlpha = covered ? 0.5 : 1;
-    ctx.fillStyle = pal.lo;
-    ctx.fillRect(Math.round(x), Math.round(y), size, size);
-    ctx.strokeStyle = covered ? pal.lo : pal.mid;
-    ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, size - 1, size - 1);
-    if (covered) {
-      const g = GLY[(time / 150 + x) % GLY.length | 0];
-      tx(g, x + size / 2, y + size * 0.28, size * 0.42, pal.mid, { mono: true, align: 'center' });
-    } else {
-      const u = size / 7.5;
-      const pip = Math.max(2, Math.round(u * 1.35));
-      ctx.fillStyle = pal.hot;
-      for (const i of PIPS[face] ?? [])
-        ctx.fillRect(Math.round(x + u * 1.6 + (i % 3) * u * 2.05), Math.round(y + u * 1.35 + ((i / 3) | 0) * u * 2.05), pip, pip);
-      if (face === 1) {
-        ctx.strokeStyle = pal.hot;
-        ctx.strokeRect(Math.round(x) + 2.5, Math.round(y) + 2.5, size - 5, size - 5);
-      }
-    }
-    if (hit) {
-      ctx.globalAlpha = 0.42;
-      ctx.fillStyle = pal.hot;
-      ctx.fillRect(Math.round(x), Math.round(y), size, size);
-    }
-    ctx.restore();
-  }
-
-  function puck(x, y, pal, alpha = 1) {
-    ctx.save();
-    ctx.globalAlpha *= alpha;
-    ctx.fillStyle = pal.lo;
-    ctx.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 3);
-    ctx.strokeStyle = pal.hot;
-    ctx.beginPath();
-    ctx.ellipse(Math.round(x), Math.round(y - 1), 4, 1.6, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawChipDock(x, y, value, pal, pulse = 0) {
-    const v = Math.round(value);
-    const debt = v < 0;
-    ctx.save();
-    ctx.globalAlpha *= 0.72 + pulse * 0.28;
-    ctx.strokeStyle = pal.lo;
-    ctx.strokeRect(x + 0.5, y + 0.5, 46, 18);
-    ctx.fillStyle = pal.lo;
-    ctx.fillRect(x + 3, y + 14, 14, 2);
-    puck(x + 7, y + 12, pal, debt ? 0.25 : 0.72);
-    puck(x + 10, y + 9, pal, debt ? 0.18 : 0.86);
-    puck(x + 7, y + 6, pal, debt ? 0.12 : 1);
-    if (debt) {
-      ctx.strokeStyle = pal.hot;
-      ctx.beginPath();
-      ctx.moveTo(x + 2, y + 16);
-      ctx.lineTo(x + 17, y + 3);
-      ctx.stroke();
-    }
-    tx(String(v), x + 43, y + 4, 10, pal.hot, { bold: true, mono: true, align: 'right' });
-    if (pulse > 0) {
-      ctx.globalAlpha *= pulse;
-      ctx.strokeStyle = pal.hot;
-      ctx.strokeRect(x - pulse * 2 + 0.5, y - pulse + 0.5, 46 + pulse * 4, 18 + pulse * 2);
-    }
-    ctx.restore();
-  }
-
-  function drawHopper(cx, y, value, pal, pulse = 0, compact = false) {
-    const w = compact ? 25 : 43;
-    const h = compact ? 15 : 23;
-    ctx.save();
-    ctx.translate(cx, y);
-    const scale = 1 + pulse * 0.18;
-    ctx.scale(scale, scale);
-    ctx.strokeStyle = pal.mid;
-    ctx.beginPath();
-    ctx.moveTo(-w / 2, -h / 2);
-    ctx.lineTo(-w / 2 + 4, h / 2);
-    ctx.lineTo(w / 2 - 4, h / 2);
-    ctx.lineTo(w / 2, -h / 2);
-    ctx.stroke();
-    ctx.fillStyle = pal.lo;
-    ctx.fillRect(-w / 2 + 3, h / 2 - 3, w - 6, 2);
-    const coins = compact ? 2 : 3;
-    for (let i = 0; i < coins; i++) puck(-w / 2 + 8 + i * 7, -h / 2 + 4 + (i % 2) * 2, pal, 0.65 + i * 0.15);
-    tx(Math.round(value), compact ? 8 : 6, compact ? -5 : -7, compact ? 8 : 13, pal.hot, { bold: true, mono: true, align: 'center' });
-    ctx.restore();
-  }
-
-  function drawRoundCounter(pal, tube) {
-    const y = tube.h - 16;
-    tx(L('局', 'R'), 6, y - 1, 9, pal.mid, { bold: true });
-    // 桌面机械计数器：三枚滚轮中末轮缓慢咬合，替代“计数器在桌”。
-    ctx.strokeStyle = pal.lo;
-    ctx.strokeRect(23.5, y - 1.5, 31, 12);
-    const digits = String(view?.round ?? 1).padStart(3, '0').slice(-3);
-    [...digits].forEach((digit, i) => {
-      ctx.strokeRect(26.5 + i * 9, y + 0.5, 7, 8);
-      tx(digit, 30 + i * 9, y + 1, 6.5, i === 2 ? pal.hot : pal.mid, { mono: true, align: 'center' });
-    });
-  }
-
-  function drawBidReadout(sel, pal, tube, enabled) {
-    const y = 68;
-    ctx.save();
-    ctx.globalAlpha = enabled ? 1 : 0.42;
-    ctx.strokeStyle = pal.lo;
-    ctx.beginPath();
-    ctx.moveTo(tube.w / 2 - 29, y + 17.5);
-    ctx.lineTo(tube.w / 2 + 29, y + 17.5);
-    ctx.stroke();
-    tx(sel.count, tube.w / 2 - 20, y, 16, pal.hot, { bold: true, mono: true, align: 'center' });
-    tx(L('个', '×'), tube.w / 2 - 5, y + 7, 8, pal.mid, { bold: true, align: 'center' });
-    drawDie(tube.w / 2 + 7, y, 18, sel.face, pal);
-    ctx.restore();
-  }
-
-  function tubeFrame(tube) {
-    ctx.fillStyle = CH.rail;
-    ctx.fillRect(tube.x - 4, tube.y - 4, tube.w + 8, tube.h + 8);
-    ctx.globalAlpha = 0.2;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(tube.x - 4, tube.y - 4, tube.w + 8, 1);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#0b0d11';
-    ctx.fillRect(tube.x - 2, tube.y - 2, tube.w + 4, tube.h + 4);
-    ctx.fillStyle = '#000';
-    pillow(ctx, tube.x - 1, tube.y - 1, tube.w + 2, tube.h + 2, 14, 3);
-    ctx.fill();
-  }
-
-  function drawTube(key, index, drawContent) {
-    const tube = tubes[key];
-    const pal = PH[key];
-    tubeFrame(tube);
-    const p = tube.pctx;
-    const fade = 1 - 0.7 ** Math.max(fr, 0);
-    if (fade > 0) {
-      p.fillStyle = `rgba(${pal.fade},${fade.toFixed(3)})`;
-      p.fillRect(0, 0, tube.w, tube.h);
-    }
-    const save = ctx;
-    ctx = p;
-    const level = warm[key];
-    if (level > 0 && level < 0.35) {
-      ctx.fillStyle = pal.hot;
-      ctx.fillRect(tube.w / 2 - 2, tube.h / 2 - 1, 4, 2);
-    } else if (level >= 0.35 && level < 0.7) {
-      const k = (level - 0.35) / 0.35;
-      ctx.fillStyle = pal.hot;
-      ctx.fillRect(tube.w / 2 - (tube.w / 2 - 6) * k, tube.h / 2 - 1, (tube.w - 12) * k, 1);
-    }
-    ctx = save;
-
-    ctx.save();
-    pillow(ctx, tube.x, tube.y, tube.w, tube.h, 13, 2.5);
-    ctx.clip();
-    ctx.fillStyle = pal.glass;
-    ctx.fillRect(tube.x - 3, tube.y - 3, tube.w + 6, tube.h + 6);
-    ctx.save();
-    pillow(ctx, tube.x + 4, tube.y + 4, tube.w - 8, tube.h - 8, 11, 2);
-    ctx.clip();
-    ctx.drawImage(tube.pc, tube.x, tube.y, tube.w, tube.h);
-    if (level >= 0.7) {
-      ctx.save();
-      ctx.translate(tube.x, tube.y);
-      drawContent(pal, { ...tube, x: 0, y: 0 });
-      ctx.restore();
-    }
-    if (quality > 1) {
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = '#000';
-      for (let y = tube.y + (index % 2); y < tube.y + tube.h; y += 2) ctx.fillRect(tube.x, y, tube.w, 1);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-    const shade = ctx.createRadialGradient(tube.x + tube.w / 2, tube.y + tube.h / 2, 4, tube.x + tube.w / 2, tube.y + tube.h / 2, tube.w * 0.62);
-    shade.addColorStop(0, 'rgba(255,255,255,.028)');
-    shade.addColorStop(1, 'rgba(0,0,0,.08)');
-    ctx.fillStyle = shade;
-    ctx.fillRect(tube.x, tube.y, tube.w, tube.h);
-    const edge = ctx.createLinearGradient(0, tube.y, 0, tube.y + tube.h);
-    edge.addColorStop(0, 'rgba(255,255,255,.20)');
-    edge.addColorStop(0.35, 'rgba(255,255,255,.035)');
-    edge.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.strokeStyle = edge;
-    pillow(ctx, tube.x + 1.5, tube.y + 1.5, tube.w - 3, tube.h - 3, 12, 2.2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawWave(pal) {
-    const y0 = 40;
-    wave.ph += (0.09 + wave.chaos * 0.3 + (thinking ? 0.12 : 0)) * fr;
-    wave.voice *= 0.86 ** fr;
-    wave.chaos *= 0.985 ** fr;
-    const amp = (5 + wave.voice * 7 + wave.chaos * 12 + (thinking ? 3 : 0)) * (1 - wave.flat);
-    ctx.strokeStyle = pal.hot;
-    ctx.beginPath();
-    for (let x = 10; x <= 177; x += 2) {
-      const k = (x - 10) / 167;
-      const y = Math.sin(k * 9 + wave.ph) * Math.sin(k * 23 - wave.ph * 1.7) * amp;
-      if (x === 10) ctx.moveTo(x, y0 + y);
-      else ctx.lineTo(x, y0 + y);
-    }
-    ctx.stroke();
-    ctx.fillStyle = pal.hot;
-    ctx.fillRect(176, y0 - 1, 2, 2);
-  }
-
-  function stepTubeParticles(key) {
-    const list = tubeParticles[key];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const p = list[i];
-      p.x += p.vx * fr;
-      p.y += p.vy * fr;
-      p.vy += 0.045 * fr;
-      p.life -= 0.025 * fr;
-      if (p.life <= 0) list.splice(i, 1);
-      else {
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.c;
-        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function drawUpper(pal, tube) {
-    const opponentLabel = [...(view?.opponentName ?? L('它', 'AI'))].length > 12
-      ? `${[...(view?.opponentName ?? L('它', 'AI'))].slice(0, 12).join('')}…`
-      : view?.opponentName ?? L('它', 'AI');
-    tx(opponentLabel, 6, 5, 10, pal.mid, { bold: true });
-    drawChipDock(tube.w - 52, 18, displayStacks.up, pal, potPop);
-    ctx.fillStyle = view?.connected === false ? pal.lo : pal.hot;
-    ctx.fillRect(tube.w - 30, 8, 3, 3);
-    tx(thinking ? L('在想', 'THINKING') : L('在看', 'WATCH'), tube.w - 24, 6, thinking && isEnglish() ? 6 : 8, thinking ? pal.hot : pal.mid, { mono: true });
-    drawWave(pal);
-    const count = reveal ? reveal.upper.length : view?.oppDiceCount ?? 0;
-    for (let i = 0; i < count; i++) {
-      const face = reveal?.upper[i] ?? view?.oppShown?.[i];
-      const shown = reveal ? i < reveal.upperN : i < (view?.oppShown?.length ?? 0);
-      drawDie(27 + i * 30, 58, 22, shown ? face : 1, pal, false, !shown);
-    }
+  // ---------- 帧循环：打字机、码字、数字滚动 ----------
+  function loop(now) {
+    if (disposed || !active) return;
+    const dt = Math.min(50, now - last);
+    last = now;
+    const fr = (dt * timeScale) / 16.7;
     if (speech.full && speech.n < speech.full.length) {
       speech.acc += fr;
       if (speech.acc > 2.2) {
         speech.acc = 0;
         speech.n++;
         speech.shown = speech.full.slice(0, speech.n);
-        if (speech.n >= speech.full.length) speech.doneAt = time;
+        if (speech.n >= speech.full.length) speech.doneAt = now;
         syncSpeech();
-        wave.voice = 1;
         if (speech.n % 3 === 0) handlers.sfx?.type?.();
       }
     }
-    ctx.strokeStyle = pal.lo;
-    ctx.strokeRect(5.5, 86.5, 29, 11);
-    tx(L('AI生成', 'AI TEXT'), 8, 89, 7, pal.mid, { mono: true });
-    stepTubeParticles('a');
-  }
-
-  function drawCenter(pal, tube) {
-    const bid = reveal?.rv.bid ?? view?.currentBid;
-    const bidder = bid?.player === 'A' ? L('你', 'YOU') : [...(view?.opponentName ?? L('它', 'AI'))].slice(0, 10).join('');
-    tx(verdict ? L('· 判 定 ·', '· RULING ·') : reveal ? L('· 点 清 ·', '· COUNT ·') : thinking ? L('· 对手在想 ·', '· AI THINKING ·') : bid ? (isEnglish() ? `· ${bidder} BID ·` : `· ${bidder} 报 ·`) : L('· 待 报 ·', '· AWAIT BID ·'),
-      tube.w / 2, 6, 8, pal.lo, { mono: true, align: 'center' });
-    if (bid && !reveal) {
-      const scale = 1 + bidPop * 0.18;
-      ctx.save();
-      ctx.translate(tube.w / 2, 29);
-      ctx.scale(scale, scale);
-      tx(bid.count, -24, -14, 30, pal.hot, { bold: true, align: 'center' });
-      tx(L('个', '×'), 0, -1, 11, pal.mid, { bold: true, align: 'center' });
-      tx(bid.face, 24, -14, 30, pal.hot, { bold: true, align: 'center' });
-      ctx.restore();
-    }
-    if (verdict) {
-      const blink = 0.86 + 0.14 * Math.sin(time / 120);
-      tx(verdict.relation, tube.w / 2, 24, 14, pal.hot, { bold: true, mono: true, align: 'center' });
-      ctx.globalAlpha = blink;
-      ctx.fillStyle = pal.hot;
-      ctx.fillRect(10, 44, tube.w - 20, 14);
-      ctx.globalAlpha = 1;
-      tx(verdict.title, tube.w / 2, 46, 10.5, pal.glass, { bold: true, align: 'center' });
-    }
-    drawHopper(tube.w - 16, 14, displayPot, pal, potPop, true);
-    stepTubeParticles('b');
-  }
-
-  function addButton(id, x, y, w, h, label, enabled = true, style = 'dark', font = 10, extra = {}) {
-    buttons.push({ id, x, y, w, h, label, enabled, style, font, ...extra });
-  }
-
-  function drawLower(pal, tube) {
-    drawChipDock(tube.w - 52, 5, displayStacks.down, pal, potPop);
-
-    const faces = reveal?.lower ?? view?.myDice;
-    const count = reveal?.lower.length ?? view?.myDiceCount ?? 0;
-    for (let i = 0; i < count; i++) {
-      const face = faces?.[i] ?? 1;
-      const hit = !!(reveal && reveal.countIndex > reveal.upper.length + i && (face === reveal.rv.bid.face || (!reveal.rv.zhai && face === 1)));
-      drawDie(10 + i * 36, 28, 30, face, pal, hit, !faces);
-    }
-    if (!faces && view?.legal.peek) {
-      tx(L('触摸骰仓看骰', 'TAP DICE BAY TO PEEK'), tube.w / 2, 61, isEnglish() ? 5.2 : 7, pal.mid, { mono: true, align: 'center' });
-      addButton('peek', TUBES.c.x + 6, TUBES.c.y + 22, TUBES.c.w - 12, 47, '', true);
-    }
-
-    const sel = view?.selectedBid;
-    if (sel && !reveal) {
-      const enabled = view.myTurn && view.legal.bid;
-      drawBidReadout(sel, pal, tube, enabled);
-    }
-    drawRoundCounter(pal, tube);
-    stepTubeParticles('c');
-  }
-
-  function drawLedBar() {
-    const ledX = (i) => (i < 5 ? LED.x + 4 + i * 13 : LED.x + 76 + (i - 5) * 13);
-    ctx.fillStyle = CH.rail;
-    ctx.fillRect(LED.x - 2, LED.y - 2, LED.w + 4, LED.h + 4);
-    ctx.fillStyle = '#080a0e';
-    ctx.fillRect(LED.x, LED.y, LED.w, LED.h);
-    ctx.strokeStyle = '#343a44';
-    ctx.strokeRect(LED.x + 0.5, LED.y + 0.5, LED.w - 1, LED.h - 1);
-    ctx.fillStyle = '#20252d';
-    ctx.fillRect(LED.x + 70, LED.y + 1, 1, LED.h - 2);
-    ctx.fillRect(LED.x + 143, LED.y + 1, 1, LED.h - 2);
-    const fuse = view?.fuse ?? 0;
-    const stepPulse = phase === 'boot' ? 0 : Math.max(0, 1 - (time - ledHitAt) / 520);
-    for (let i = 0; i < 10; i++) {
-      const x = ledX(i);
-      const deep = i >= 5;
-      const on = phase === 'boot' ? ((time / 70) | 0) % 10 === i : i < fuse;
-      ctx.fillStyle = on ? (deep ? CH.red : CH.amber) : deep ? '#2a0e0c' : '#241a08';
-      ctx.fillRect(Math.round(x), LED.y + 9, 10, 4);
-      if (i === fuse - 1 && stepPulse > 0) {
-        ctx.globalAlpha = stepPulse;
-        ctx.strokeStyle = deep ? CH.red : CH.amber;
-        const ex = (1 - stepPulse) * 3;
-        ctx.strokeRect(Math.round(x - ex), LED.y + 9 - ex * 0.35, 10 + ex * 2, 4 + ex * 0.7);
-        ctx.globalAlpha = 1;
-      }
-      if (on) {
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(Math.round(x), LED.y + 9, 10, 1);
-        ctx.globalAlpha = 1;
+    let moved = false;
+    for (const k of ['pot', 'up', 'down']) {
+      const d = target[k] - shown[k];
+      if (Math.abs(d) > 0.01) {
+        shown[k] += d * Math.min(1, 0.12 * fr);
+        if (Math.abs(target[k] - shown[k]) < 0.5) shown[k] = target[k];
+        moved = true;
       }
     }
-    if (phase !== 'boot' && fuse > 0 && time - lastSpark > 440) {
-      lastSpark = time;
-      const x = ledX(Math.min(9, fuse - 1)) + 5;
-      shellBurst(x, LED.y + 9, fuse > 5 ? 2 : 1, fuse > 5 ? CH.red : CH.amber);
+    if (moved) paintAccts();
+    for (const m of Object.values(mosaics)) m.draw(dt);
+    // 盖着的骰子：代码字滚动（降帧，免得抢戏）
+    if (((now / 110) | 0) !== ((last - dt) / 110 | 0)) {
+      for (const em of viewport.querySelectorAll('.mx-die.is-covered em')) em.textContent = glyph();
     }
-    tx(L('阶梯', 'LADDER'), LED.x + 4, LED.y + 2, isEnglish() ? 4.4 : 5.5, '#858e9b', { mono: true });
-    tx(fuse > 5 ? (isEnglish() ? `DEEP×${view?.potMult ?? 2}` : `深水×${view?.potMult ?? 2}`) : L('深水', 'DEEP'), LED.x + 76, LED.y + 2, isEnglish() ? 4.5 : 5.5, fuse > 5 ? '#e87855' : '#8a665f', { mono: true });
-    tx(L('判定', 'RULING'), LED.x + 149, LED.y + 2, isEnglish() ? 4.2 : 5.5, judLed ? '#e87855' : '#858e9b', { mono: true });
-    const judPulse = judLed ? Math.max(0.35, Math.max(0, 1 - (time - judHitAt) / 600)) : 0;
-    if (judPulse) {
-      ctx.globalAlpha = 0.24 * judPulse;
-      ctx.fillStyle = CH.red;
-      ctx.fillRect(LED.x + LED.w - 17, LED.y + 7, 14, 8);
-      ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = judLed ? (((time / 180) | 0) % 2 ? CH.red : '#7a1d16') : '#241012';
-    ctx.fillRect(LED.x + LED.w - 14, LED.y + 9, 8, 5);
-  }
-
-  function bevel(button) {
-    if (button.face) {
-      const pushed = press?.id === button.id && time - press.at < 160 ? 1 : 0;
-      const selected = !!button.selected;
-      const x = Math.round(button.x);
-      const y = Math.round(button.y + (selected ? 2 : pushed));
-      if (!button.enabled && !selected) {
-        ctx.fillStyle = '#080a0e';
-        ctx.fillRect(x, y + 1, button.w, button.h - 1);
-        ctx.strokeStyle = '#242a33';
-        ctx.strokeRect(x + 0.5, y + 1.5, button.w - 1, button.h - 2);
-      } else {
-        if (!selected) {
-          ctx.fillStyle = '#050608';
-          ctx.fillRect(x + 1, y + 2, button.w, button.h);
-        }
-        ctx.fillStyle = selected ? '#1b160d' : '#1a1e25';
-        ctx.fillRect(x, y, button.w, button.h - 1);
-        ctx.strokeStyle = selected ? '#a9762e' : '#3c444f';
-        ctx.strokeRect(x + 0.5, y + 0.5, button.w - 1, button.h - 2);
-        ctx.globalAlpha = selected ? 0.28 : 0.45;
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x + 1, y + 1, button.w - 2, 1);
-        ctx.globalAlpha = 1;
-      }
-      const px = x + 8;
-      const py = y + 4;
-      ctx.fillStyle = button.enabled ? (selected ? PH.c.hot : PH.c.mid) : selected ? '#9d7337' : '#3e4650';
-      for (const pip of PIPS[button.face]) {
-        ctx.fillRect(px + (pip % 3) * 4, py + Math.floor(pip / 3) * 4, 2, 2);
-      }
-      return;
-    }
-    const pushed = press?.id === button.id && time - press.at < 160 ? 1 : 0;
-    const denied = deny?.id === button.id && time - deny.at < 300 ? Math.round(Math.sin((time - deny.at) / 18) * 2) : 0;
-    const x = button.x + denied;
-    const y = button.y + pushed;
-    const fill = button.style === 'light' ? CH.key : button.style === 'red' ? CH.keyRed : '#14171d';
-    const color = button.enabled ? (button.style === 'light' ? '#10141c' : button.style === 'red' ? '#ffe9e4' : '#c9cdd6') : '#454d5a';
-    ctx.globalAlpha = button.enabled ? 1 : 0.38;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(Math.round(x) + 1, Math.round(y) + 2, button.w, button.h);
-    ctx.fillStyle = fill;
-    ctx.fillRect(Math.round(x), Math.round(y), button.w, button.h - 1 + pushed);
-    ctx.globalAlpha *= 0.38;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(Math.round(x), Math.round(y), button.w, 1);
-    ctx.globalAlpha = button.enabled ? 1 : 0.38;
-    if (button.label) tx(button.label, x + button.w / 2, y + (button.h - button.font) / 2 - 1, button.font, color, { bold: true, align: 'center' });
-    ctx.globalAlpha = 1;
-  }
-
-  function drawCountGauge(message = '') {
-    const x = 47;
-    const y = COUNT_KEY_Y;
-    ctx.fillStyle = '#080a0e';
-    ctx.fillRect(x, y, 101, 22);
-    ctx.strokeStyle = '#343a44';
-    ctx.strokeRect(x + 0.5, y + 0.5, 100, 21);
-    if (message) {
-      tx(message, x + 50.5, y + 7, 6.5, '#89919d', { mono: true, align: 'center' });
-      return;
-    }
-    tx(L('数量', 'COUNT'), x + 50.5, y + 8, 7, '#747d89', { mono: true, align: 'center' });
-  }
-
-  function drawControls() {
-    const canAct = view?.myTurn && phase !== 'seq' && phase !== 'settle';
-    const selected = view?.selectedBid;
-    const bidAdjust = !!(canAct && selected && view?.legal.bid);
-
-    for (let face = 1; face <= 6; face++) {
-      addButton(`face:${face}`, 8 + (face - 1) * 30, FACE_KEY_Y, 27, 22, '', !!(bidAdjust && view?.legal.faces?.includes(face)), 'dark', 10, {
-        face,
-        selected: selected?.face === face,
-      });
-    }
-
-    if (pokeMenu) {
-      const labels = isEnglish() ? ['Wrong', 'Bluffing', 'Hold on'] : ['你记错了', '你在演', '慢着'];
-      labels.forEach((label, i) => addButton(`poke:${label}`, 9 + i * 59, COUNT_KEY_Y, 55, 22, label, !!canAct, 'dark', 6.5));
-    } else if (moreMenu && view?.modActions?.length) {
-      const items = [
-        ...view.modActions.slice(0, 3).map((mod) => ({ id: `mod:${mod.type}`, label: mod.label, enabled: !!canAct })),
-        { id: 'poke', label: L('戳', 'POKE'), enabled: !!canAct },
-      ];
-      items.forEach((item, i) => addButton(item.id, 8 + i * 45, COUNT_KEY_Y, 42, 22, item.label, item.enabled, 'dark', 6.5));
-    } else {
-      const denyMessage = deny && time - deny.at < 900 ? deny.message : '';
-      addButton('countDown', 8, COUNT_KEY_Y, 35, 22, '−', !!(bidAdjust && view?.legal.countDown), 'dark', 14);
-      drawCountGauge(denyMessage);
-      addButton('countUp', 152, COUNT_KEY_Y, 35, 22, '＋', !!(bidAdjust && view?.legal.countUp), 'dark', 14);
-    }
-
-    if (phase === 'seq') {
-      ctx.strokeStyle = '#454d5a';
-      ctx.setLineDash([3, 3]);
-      ctx.strokeRect(8.5, KEY_Y + 0.5, 178, 29);
-      ctx.setLineDash([]);
-      tx(L('演出中 · 触摸加速', 'SEQUENCE · TAP TO SKIP'), W / 2, KEY_Y + 13, isEnglish() ? 6 : 8, '#606873', { mono: true, align: 'center' });
-    } else {
-      addButton('bid', 8, KEY_Y, 86, 30, L('报', 'BID'), !!(canAct && view?.legal.bid), 'light', isEnglish() ? 11 : 15);
-      addButton('open', 100, KEY_Y, 87, 30, L('开', 'CALL'), !!(canAct && view?.legal.open), 'red', isEnglish() ? 11 : 15);
-    }
-    const hasMods = !!view?.modActions?.length;
-    const declarations = [
-      ['blind', L('盲', 'BLIND'), !!view?.legal.blind],
-      ['zhai', L('斋', 'NO-WILD'), !!view?.legal.zhai],
-      ['raise', L('抬', 'RAISE'), !!view?.legal.raise],
-      [hasMods ? 'more' : 'poke', hasMods ? L('扩', 'MORE') : L('戳', 'POKE'), true],
-    ];
-    declarations.forEach(([id, label, enabled], i) => addButton(id, 8 + i * 46, KEY_Y + 34, 42, 20, label, !!(canAct && enabled), 'dark', isEnglish() ? 6.5 : 10));
-    for (const button of buttons) if (button.id !== 'peek') bevel(button);
-  }
-
-  function stepShellEffects() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * fr;
-      p.y += p.vy * fr;
-      p.vy += 0.04 * fr;
-      p.life -= 0.03 * fr;
-      if (p.life <= 0) particles.splice(i, 1);
-      else {
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.c;
-        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
-      }
-    }
-    ctx.globalAlpha = 1;
-    for (let i = packs.length - 1; i >= 0; i--) {
-      const p = packs[i];
-      if (time < p.born) continue;
-      const k = clamp((time - p.born) / p.dur, 0, 1);
-      const trace = p.reverse ? [...CHIP_TRACES[p.from]].reverse() : CHIP_TRACES[p.from];
-      const pal = p.from === 'up' ? PH.a : PH.c;
-      const train = clamp(Math.ceil(Math.abs(p.amount ?? 1)), 1, 3);
-      for (let j = train - 1; j >= 0; j--) {
-        const [x, y] = tracePoint(trace, easeOut(Math.max(0, k - j * 0.045)));
-        puck(x, y, pal, 1 - j * 0.2);
-      }
-      if (k >= 1) {
-        if (!p.applied && p.amount) {
-          p.applied = true;
-          if (p.flow === 'out') {
-            displayPot = Math.max(0, displayPot - p.amount);
-            displayStacks[p.from] += p.amount;
-            const key = p.from === 'up' ? 'a' : 'c';
-            burstTube(key, 151, p.from === 'up' ? 27 : 12, 5, [pal.hot, pal.mid], 1.5);
-          } else {
-            displayStacks[p.from] -= p.amount;
-            displayPot += p.amount;
-            burstTube('b', TUBES.b.w - 16, p.from === 'up' ? 10 : 20, 6, [PH.b.hot, pal.mid], 1.5);
-          }
-          potPop = 1;
-          handlers.sfx?.chips?.();
-        }
-        packs.splice(i, 1);
-      }
-    }
-    if (float) {
-      const k = (time - float.born) / 1100;
-      if (k >= 1) float = null;
-      else {
-        const tube = TUBES[float.key];
-        const pal = PH[float.key];
-        const alpha = k < 0.15 ? k / 0.15 : 1 - easeOut(Math.max(0, (k - 0.45) / 0.55));
-        tx(float.text, tube.x + tube.w / 2, tube.y + (float.key === 'c' ? 25 : 55) - easeOut(k) * 12, 16, pal.hot, { bold: true, align: 'center', alpha });
-      }
-    }
-    for (let i = ripples.length - 1; i >= 0; i--) {
-      const r = ripples[i];
-      const k = (time - r.born) / 350;
-      if (k >= 1) ripples.splice(i, 1);
-      else {
-        const s = easeOut(k) * 8;
-        ctx.globalAlpha = 0.35 * (1 - k);
-        ctx.strokeStyle = PH.b.mid;
-        ctx.strokeRect(Math.round(r.x - s), Math.round(r.y - s), Math.round(s * 2), Math.round(s * 2));
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-
-  function draw() {
-    ctx = main2d;
-    buttons.length = 0;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = CH.chassis;
-    ctx.fillRect(0, 0, W, H);
-    for (let x = 0; x < W; x += 3) {
-      ctx.globalAlpha = 0.04;
-      ctx.fillStyle = ((x / 3) | 0) % 2 ? '#fff' : '#000';
-      ctx.fillRect(x, 0, 1, H);
-    }
-    ctx.globalAlpha = 1;
-
-    if (phase === 'boot') {
-      for (const [key, index] of [['a', 0], ['b', 1], ['c', 2]]) drawTube(key, index, () => {});
-      drawLedBar();
-      tx(L('开！', 'KAI!'), W / 2, H / 2 - 26, 28, '#fff', { bold: true, align: 'center' });
-      tx(L('三 管 机 · 正 在 通 电', 'THREE-TUBE TABLE · POWER ON'), W / 2, H / 2 + 8, isEnglish() ? 5.5 : 7, '#8c949f', { mono: true, align: 'center' });
-      tx(L('触 摸 跳 过', 'TAP TO SKIP'), W / 2, H / 2 + 24, 6, '#535a65', { mono: true, align: 'center' });
-      return;
-    }
-
-    ctx.save();
-    ctx.translate(reduced ? 0 : shakeX * (Math.random() - 0.5), reduced ? 0 : shakeY * (Math.random() - 0.5));
-    drawTube('a', 0, drawUpper);
-    drawTube('b', 1, drawCenter);
-    drawTube('c', 2, drawLower);
-    drawLedBar();
-    stepShellEffects();
-    drawControls();
-    ctx.restore();
-    if (flash > 0 && !reduced) {
-      ctx.globalAlpha = flash;
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  const VS = 'attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0.,1.);}';
-  const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-varying vec2 v;uniform sampler2D tex;uniform float t,power,glitch,look,q;uniform vec2 res;
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*2.-1.;c*=1.+.030*dot(c,c);vec2 uv=c*.5+.5;vec2 db=max(max(-uv,uv-1.),vec2(0.));float edge=1.-smoothstep(.0,.010,max(db.x,db.y));uv=clamp(uv,0.,1.);uv.x+=(hash(vec2(floor(uv.y*48.),floor(t*24.)))-.5)*glitch*.09;vec2 st=vec2(uv.x,1.-uv.y);vec2 tp=1./res;vec2 sn=(floor(st*res)+.5)*tp;vec2 dir=st-.5;float ca=.0016+glitch*.005;vec3 col;col.r=texture2D(tex,sn+dir*ca).r;col.g=texture2D(tex,sn).g;col.b=texture2D(tex,sn-dir*ca).b;if(q>1.5){vec3 bl=vec3(0.);bl+=texture2D(tex,st+vec2(1.6,0.)*tp).rgb;bl+=texture2D(tex,st+vec2(-1.6,0.)*tp).rgb;bl+=texture2D(tex,st+vec2(0.,1.6)*tp).rgb;bl+=texture2D(tex,st+vec2(0.,-1.6)*tp).rgb;bl*=.25;col+=max(bl-.45,0.)*.70;}col*=.965+.035*sin(st.y*res.y*3.14159);col*=.99+.01*sin(gl_FragCoord.x*2.094);col*=1.+.015*sin(uv.y*7.-t*1.3);float vg=1.-smoothstep(.42,1.35,length(c));col*=mix(.80,1.10,vg);col+=vec3(1.)*(1.-smoothstep(.0,.05,abs(uv.y-.5)))*(1.-power)*1.4;col+=(hash(st*res+mod(t*60.,971.))-.5)*.014;vec3 bez=vec3(.050,.053,.061)*(1.08-.38*v.y)+col*.10;col=mix(bez,col,edge);float gla=exp(-pow(v.x*.78+v.y*.45-.60-look*.10,2.)*70.);col+=vec3(.85,.92,1.)*gla*.035;gl_FragColor=vec4(col,1.);}`;
-  let glPack = null;
-  let glOk = false;
-  let glValidated = false;
-  let fallbackCanvas = null;
-
-  function ensureFallback() {
-    if (fallbackCanvas) return fallbackCanvas;
-    fallbackCanvas = document.createElement('canvas');
-    fallbackCanvas.width = W * SS;
-    fallbackCanvas.height = H * SS;
-    fallbackCanvas.className = 'tube-fallback';
-    fallbackCanvas.setAttribute('aria-hidden', 'true');
-    canvas.insertAdjacentElement('afterend', fallbackCanvas);
-    return fallbackCanvas;
-  }
-
-  function buildGl() {
-    if (new URLSearchParams(location.search).has('2d')) return null;
-    const gl = canvas.getContext('webgl', { antialias: false, alpha: false });
-    if (!gl) return null;
-    const shader = (type, source) => {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, source);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-      return s;
-    };
-    try {
-      const prog = gl.createProgram();
-      gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
-      gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-      gl.useProgram(prog);
-      const buffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-      const loc = gl.getAttribLocation(prog, 'p');
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.uniform2f(gl.getUniformLocation(prog, 'res'), W * RS, H * RS);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      return {
-        gl,
-        t: gl.getUniformLocation(prog, 't'),
-        power: gl.getUniformLocation(prog, 'power'),
-        glitch: gl.getUniformLocation(prog, 'glitch'),
-        look: gl.getUniformLocation(prog, 'look'),
-        q: gl.getUniformLocation(prog, 'q'),
-      };
-    } catch (error) {
-      console.warn('[三管机] WebGL 降级：', error.message);
-      return null;
-    }
-  }
-
-  function present() {
-    if (glOk && glPack) {
-      const gl = glPack.gl;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
-      gl.uniform1f(glPack.t, (time / 1000) % 120);
-      gl.uniform1f(glPack.power, power);
-      gl.uniform1f(glPack.glitch, reduced ? 0 : glitch);
-      gl.uniform1f(glPack.look, reduced ? 0 : parX);
-      gl.uniform1f(glPack.q, quality);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      // 某些移动 GPU 会“成功”编译却只交付黑帧。首个可操作帧抽检白色主键，
-      // 黑帧就立即转 2D，不能让特效能力拖垮可玩性。
-      if (!glValidated && phase === 'idle' && view?.myTurn) {
-        const pixels = new Uint8Array(40 * 20 * 4);
-        gl.readPixels(184, 162, 40, 20, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        let peak = 0;
-        for (let i = 0; i < pixels.length; i += 4) peak = Math.max(peak, pixels[i], pixels[i + 1], pixels[i + 2]);
-        glValidated = true;
-        if (peak < 96) {
-          glOk = false;
-          console.info('[三管机] WebGL 黑帧，自动转 2D');
-          ensureFallback();
-        }
-      }
-      return;
-    }
-    const target = ensureFallback();
-    canvas.classList.add('hidden');
-    target.classList.remove('hidden');
-    const out = target.getContext('2d');
-    out.imageSmoothingEnabled = false;
-    out.clearRect(0, 0, target.width, target.height);
-    out.drawImage(off, 0, 0, target.width, target.height);
-  }
-
-  glPack = buildGl();
-  glOk = !!glPack;
-  if (!glOk) ensureFallback();
-  canvas.addEventListener('webglcontextlost', (event) => {
-    event.preventDefault();
-    glOk = false;
-    ensureFallback();
-  });
-  canvas.addEventListener('webglcontextrestored', () => {
-    glPack = buildGl();
-    glOk = !!glPack;
-    glValidated = false;
-    if (glOk) {
-      canvas.classList.remove('hidden');
-      fallbackCanvas?.classList.add('hidden');
-    }
-  });
-
-  function toGame(event) {
-    const target = fallbackCanvas && !fallbackCanvas.classList.contains('hidden') ? fallbackCanvas : canvas;
-    const box = target.getBoundingClientRect();
-    return [((event.clientX - box.left) / box.width) * W, ((event.clientY - box.top) / box.height) * H];
-  }
-
-  function denyButton(id, message = L('现在不能用', 'NOT AVAILABLE')) {
-    deny = { id, message, at: time };
-    handlers.sfx?.deny?.();
-    navigator.vibrate?.(24);
-  }
-
-  function activateButton(id) {
-    const button = buttons.findLast((b) => b.id === id);
-    if (button && !button.enabled) return denyButton(id);
-    press = { id, at: time };
-    navigator.vibrate?.(12);
-    if (id === 'menu') handlers.menu?.();
-    else if (id === 'peek') handlers.peek?.();
-    else if (id === 'countDown') handlers.count?.(-1);
-    else if (id === 'countUp') handlers.count?.(1);
-    else if (id.startsWith('face:')) handlers.face?.(Number(id.slice(5)));
-    else if (id === 'bid') {
-      pokeMenu = false;
-      moreMenu = false;
-      handlers.bid?.();
-    } else if (id === 'open') {
-      pokeMenu = false;
-      moreMenu = false;
-      handlers.open?.();
-    } else if (id === 'blind' || id === 'zhai' || id === 'raise') {
-      pokeMenu = false;
-      moreMenu = false;
-      handlers.declare?.(id);
-    } else if (id === 'more') {
-      moreMenu = !moreMenu;
-      pokeMenu = false;
-    } else if (id === 'poke') {
-      pokeMenu = !pokeMenu;
-      moreMenu = false;
-    } else if (id.startsWith('poke:')) {
-      pokeMenu = false;
-      handlers.poke?.(id.slice(5));
-    } else if (id.startsWith('mod:')) {
-      moreMenu = false;
-      handlers.mod?.(id.slice(4));
-    }
+    raf = requestAnimationFrame(loop);
   }
 
   const pointerDown = (event) => {
     if (!active) return;
-    const [x, y] = toGame(event);
-    if (phase === 'boot') return finishBoot();
-    if (phase === 'seq') {
-      timeScale = 3.2;
-      return;
-    }
-    const target = fallbackCanvas && !fallbackCanvas.classList.contains('hidden') ? fallbackCanvas : canvas;
-    const box = target.getBoundingClientRect();
-    const minGameW = (44 / box.width) * W;
-    const minGameH = (44 / box.height) * H;
-    const hit = [...buttons].reverse().find((b) => {
-      const slopX = Math.max(0, (minGameW - b.w) / 2);
-      const slopY = Math.max(0, (minGameH - b.h) / 2);
-      return x >= b.x - slopX && x <= b.x + b.w + slopX && y >= b.y - slopY && y <= b.y + b.h + slopY;
-    });
-    if (hit) activateButton(hit.id);
-    else ripples.push({ x, y, born: time });
+    if (phase === 'seq' && !event.target.closest('button')) timeScale = 3.2;
   };
-  const pointerMove = (event) => {
-    if (!active || reduced) return;
-    const [x, y] = toGame(event);
-    parX = (x / W - 0.5) * 2;
-    parY = (y / H - 0.5) * 2;
-  };
-  const pointerUp = () => (press = null);
   viewport?.addEventListener('pointerdown', pointerDown);
-  viewport?.addEventListener('pointermove', pointerMove);
-  viewport?.addEventListener('pointerup', pointerUp);
-
-  function loop(ts) {
-    if (disposed) return;
-    const dt = Math.min(50, ts - last);
-    last = ts;
-    if (active) {
-      fr = (dt * timeScale) / 16.7;
-      time += dt * timeScale;
-      if (phase === 'boot') {
-        const elapsed = ts - bootAt;
-        power = clamp(elapsed / 650, 0, 1);
-        warm.a = clamp((elapsed - 650) / 420, 0, 1);
-        warm.b = clamp((elapsed - 810) / 420, 0, 1);
-        warm.c = clamp((elapsed - 970) / 420, 0, 1);
-        warm.ctl = clamp((elapsed - 1130) / 300, 0, 1);
-        if (elapsed >= 1430) finishBoot();
-      }
-      flash *= 0.88 ** Math.max(fr, 0);
-      glitch *= 0.97 ** Math.max(fr, 0);
-      shakeX *= 0.9 ** Math.max(fr, 0);
-      shakeY *= 0.9 ** Math.max(fr, 0);
-      bidPop *= 0.88 ** Math.max(fr, 0);
-      potPop *= 0.88 ** Math.max(fr, 0);
-      if (dt > 22) lowFrames++;
-      else lowFrames = Math.max(0, lowFrames - 1);
-      if (lowFrames > 180 && quality > 1) {
-        quality--;
-        lowFrames = 0;
-        console.info(`[三管机] 自动降档到 ${quality}`);
-      }
-      try {
-        draw();
-        present();
-      } catch (error) {
-        if (!renderError) console.error('[三管机] 表现层降级：', error);
-        renderError = error;
-        glOk = false;
-        ctx = main2d;
-        ctx.fillStyle = CH.chassis;
-        ctx.fillRect(0, 0, W, H);
-        tx(L('显示已降级', 'DISPLAY FALLBACK'), W / 2, H / 2 - 10, isEnglish() ? 9 : 11, CH.key, { bold: true, align: 'center' });
-        tx(L('规则与操作仍可继续', 'RULES AND CONTROLS STILL WORK'), W / 2, H / 2 + 10, isEnglish() ? 5.2 : 7, '#7b838f', { mono: true, align: 'center' });
-        announce(isEnglish() ? `Display fallback: ${error?.message ?? 'unknown error'}` : `显示已降级：${error?.message ?? '未知错误'}`);
-        present();
-      }
-    }
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
 
   return {
     setActive,
@@ -1375,13 +640,13 @@ void main(){vec2 vb=(v-.5)*1.045+.5;vb.y=(vb.y-.5)/max(power,.001)+.5;vec2 c=vb*
     isActive: () => active,
     destroy() {
       disposed = true;
+      rain.stop();
+      ro?.disconnect();
+      cancelAnimationFrame(raf);
       viewport?.removeEventListener('pointerdown', pointerDown);
-      viewport?.removeEventListener('pointermove', pointerMove);
-      viewport?.removeEventListener('pointerup', pointerUp);
       reducedMq.removeEventListener?.('change', onReduced);
       speechEl?.removeEventListener('scroll', onSpeechScroll);
       speechEl?.removeEventListener('pointerdown', stopSpeechPointer);
-      fallbackCanvas?.remove();
     },
   };
 }

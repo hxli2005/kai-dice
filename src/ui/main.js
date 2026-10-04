@@ -20,6 +20,7 @@ import { computeStats, persona, templateVerdict, condBrief, bigPotBrief, diceByR
 import { loadProfile, appendMatch, profileBrief, profilePromptData, bumpResets, mindOf, saveProfile, loadPass, savePass, loadGuest, saveGuest, loadLedger, saveLedger, balanceOf, openerFacts, mergeHypotheses, recordBaits } from './profile.js';
 import { sfx, unlockAudio } from './audio.js';
 import { createTubeStage, toTubeView } from './tubes.js';
+import { createRain } from './rain.js';
 import { installEnglishUi, isEnglish, languageUrl } from './i18n.js';
 import { archiveTableCopy, drawerCoreCopy, matchReportCopy, modActionLabel, modDisplay } from './copy.js';
 
@@ -2259,8 +2260,9 @@ function showLobby() {
       <header class="lobby-mast">
         <div class="lobby-brand" aria-label="《开！》大厅">
           <span class="lobby-brand__mark">开！</span>
-          <span class="lobby-brand__name">三管对局机</span>
+          <span class="lobby-brand__name">数字雨对局机</span>
         </div>
+        <p class="lobby-wake" aria-hidden="true" data-lines="${isEnglish() ? 'Wake up, guest…|The table is waiting.|Pick an opponent.' : '醒醒，客人……|桌子在等你。|挑一个对手。'}"></p>
         <nav class="lobby-utility" aria-label="大厅工具">
           <span class="lobby-prompt" aria-hidden="true">&gt;</span>
           <button id="lobbySettings" type="button">--设置</button>
@@ -2407,6 +2409,51 @@ function showLobby() {
   };
   draw();
   lb.classList.remove('hidden');
+  typeWake(lb.querySelector('.lobby-wake'));
+}
+
+// 大厅开场：终端逐字打出三行（只打一次；重绘时直接给全文）
+let wakeTyped = false;
+function typeWake(el) {
+  if (!el) return;
+  const lines = el.dataset.lines.split('|');
+  if (wakeTyped || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.innerHTML = lines.map((l) => `<span>&gt; ${l}</span>`).join('');
+    return;
+  }
+  wakeTyped = true;
+  let li = 0;
+  let ci = 0;
+  el.innerHTML = '';
+  const tick = () => {
+    if (!el.isConnected || li >= lines.length) return;
+    let span = el.children[li];
+    if (!span) {
+      span = document.createElement('span');
+      el.appendChild(span);
+    }
+    ci++;
+    span.textContent = `> ${lines[li].slice(0, ci)}`;
+    if (ci >= lines[li].length) {
+      li++;
+      ci = 0;
+      setTimeout(tick, 420);
+    } else setTimeout(tick, 55);
+  };
+  setTimeout(tick, 300);
+}
+
+// 大厅背后的数字雨：大厅可见才转，离开就停（省电）
+const lobbyRainHost = $('lobbyRain');
+const lobbyRain = lobbyRainHost ? createRain(lobbyRainHost, { density: 0.8 }) : null;
+if (lobbyRain) {
+  const syncLobbyRain = () => {
+    const on = !$('lobby').classList.contains('hidden');
+    lobbyRainHost.classList.toggle('hidden', !on);
+    if (on) lobbyRain.start();
+    else lobbyRain.stop();
+  };
+  new MutationObserver(syncLobbyRain).observe($('lobby'), { attributes: true, attributeFilter: ['class'] });
 }
 
 // ---------- 玩家页（榜上每行翻开一页；你和他们同一种书卡语法——平等公民） ----------
@@ -2577,13 +2624,13 @@ function showCoach() {
     c.className = 'tube-coach';
     c.innerHTML = isEnglish()
       ? `<div class="coach-rules">
-        <p>Tap the lower dice bay to peek; use − / + to change the count, tap the center to change the face, then press BID.</p>
-        <p>Think the bid is false? Press the red CALL button. Ones are wild; NO-WILDS disables them for the round.</p>
+        <p>Tap DECODE MY DICE to peek; pick a face, use − / + to change the count, then press BID.</p>
+        <p>Think the bid is false? Press the red CALL key. Ones are wild; NO-WILDS disables them for the round.</p>
         <p>BLIND ×2, NO-WILDS ×1.5, and RAISE ×2 multiply both wins and losses.</p>
       </div><div class="anywhere">TAP ANYWHERE TO PLAY</div>`
       : `<div class="coach-rules">
-        <p>触摸下管骰仓看自己的骰子；用 −／＋ 改数量，点中间换点数，再拍「报」。</p>
-        <p>觉得他吹牛，拍红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
+        <p>点「解码我的骰子」看自己的骰子；选点数、用 −／＋ 改数量，再按绿色「报」。</p>
+        <p>觉得它在吹牛，按红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
         <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。</p>
       </div><div class="anywhere">点任意处，上桌</div>`;
     $('app').appendChild(c);

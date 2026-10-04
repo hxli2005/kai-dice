@@ -43,7 +43,7 @@ test('大厅在旧样式前加载共享电子管令牌，离线壳同步升版',
   const worker = read('sw.js');
 
   assert.ok(html.indexOf('href="tokens.css"') < html.indexOf('href="src/ui/style.css"'));
-  assert.match(worker, /const CACHE = 'kai-shell-v16'/);
+  assert.match(worker, /const CACHE = 'kai-shell-v17'/);
   assert.match(worker, /'\.\/tokens\.css'/);
   assert.match(worker, /'\.\/codex\.html'/);
   assert.match(worker, /'\.\/agent\.html'/);

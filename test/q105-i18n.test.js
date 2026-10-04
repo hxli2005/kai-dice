@@ -108,7 +108,7 @@ test('Q105 first-game coach has direct English render branches for both layouts'
   const main = fs.readFileSync(new URL('../src/ui/main.js', import.meta.url), 'utf8');
   const serviceWorker = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.ok([...main.matchAll(/c\.innerHTML = isEnglish\(\)/g)].length >= 2);
-  assert.match(main, /Tap the lower dice bay to peek/);
+  assert.match(main, /Tap DECODE MY DICE to peek/);
   assert.match(main, /Bids must rise: increase the count/);
   assert.match(main, /BLIND ×2, NO-WILDS ×1\.5, and RAISE ×2/);
   assert.match(serviceWorker, /src\/ui\/copy\.js/);
