@@ -172,7 +172,6 @@ export function createTubeStage(host, handlers = {}) {
     el.raise.innerHTML = `<i></i>${L('抬', 'RAISE')}`;
     el.bidBtn.querySelector('b').textContent = L('报', 'BID');
     el.openBtn.querySelector('b').textContent = L('开', 'CALL');
-    el.openBtn.querySelector('small').textContent = L('RED PILL', 'RED PILL');
     el.faces.forEach((b, i) => (b.innerHTML = pipHtml(i + 1)));
   }
 
@@ -386,7 +385,9 @@ export function createTubeStage(host, handlers = {}) {
     el.count.innerHTML = sel
       ? `<small>${L('数量', 'COUNT')}</small><b>${String(sel.count).padStart(2, '0')}</b><small>${L('个', '×')} ${sel.face}</small>`
       : `<small>${L('数量', 'COUNT')}</small><b>--</b>`;
-    el.bidBtn.querySelector('small').textContent = sel ? (isEnglish() ? `${sel.count} × ${sel.face}` : `${sel.count} 个 ${sel.face}`) : 'BLUE PILL';
+    el.bidBtn.querySelector('small').textContent = sel ? (isEnglish() ? `${sel.count} × ${sel.face}` : `${sel.count} 个 ${sel.face}`) : '';
+    const cur = view.currentBid;
+    el.openBtn.querySelector('small').textContent = cur ? (isEnglish() ? `vs ${cur.count} × ${cur.face}` : `验 ${cur.count} 个 ${cur.face}`) : '';
     el.blind.classList.toggle('is-on', !!view.declarations?.blind);
     el.zhai.classList.toggle('is-on', !!view.declarations?.zhai);
     el.raise.classList.toggle('is-on', !!view.declarations?.raise);

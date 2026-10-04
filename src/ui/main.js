@@ -2624,13 +2624,13 @@ function showCoach() {
     c.className = 'tube-coach';
     c.innerHTML = isEnglish()
       ? `<div class="coach-rules">
-        <p>Tap DECODE MY DICE to peek; pick a face, use − / + to change the count, then press the blue BID pill.</p>
-        <p>Think the bid is false? Press the red CALL pill. Ones are wild; NO-WILDS disables them for the round.</p>
+        <p>Tap DECODE MY DICE to peek; pick a face, use − / + to change the count, then press BID.</p>
+        <p>Think the bid is false? Press the red CALL key. Ones are wild; NO-WILDS disables them for the round.</p>
         <p>BLIND ×2, NO-WILDS ×1.5, and RAISE ×2 multiply both wins and losses.</p>
       </div><div class="anywhere">TAP ANYWHERE TO PLAY</div>`
       : `<div class="coach-rules">
-        <p>点「解码我的骰子」看自己的骰子；选点数、用 −／＋ 改数量，再按蓝色药丸「报」。</p>
-        <p>觉得它在吹牛，按红色药丸「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
+        <p>点「解码我的骰子」看自己的骰子；选点数、用 −／＋ 改数量，再按绿色「报」。</p>
+        <p>觉得它在吹牛，按红色「开」。1 点是万能牌；宣「斋」后，1 点不再万能。</p>
         <p>盲 ×2、斋 ×1.5、抬 ×2，赢多输也多。</p>
       </div><div class="anywhere">点任意处，上桌</div>`;
     $('app').appendChild(c);

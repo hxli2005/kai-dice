@@ -34,13 +34,10 @@
   --color-accent-2: oklch(91% 0.15 150);
   --color-accent-2-ink: oklch(14% 0.06 150);
 
-  /* 药丸 */
+  /* 警示红（开） */
   --color-pill-red: oklch(63% 0.25 27);
   --color-pill-red-hi: oklch(78% 0.15 25);
   --color-pill-red-lo: oklch(36% 0.15 27);
-  --color-pill-blue: oklch(58% 0.22 262);
-  --color-pill-blue-hi: oklch(78% 0.12 255);
-  --color-pill-blue-lo: oklch(32% 0.15 265);
 
   --color-focus: oklch(97% 0.05 150);
   --color-error: oklch(66% 0.24 27);
@@ -56,7 +53,6 @@
   --color-glow-soft: oklch(86% 0.27 145 / 0.22);
   --color-glow-faint: oklch(86% 0.27 145 / 0.08);
   --color-glow-red: oklch(63% 0.25 27 / 0.55);
-  --color-glow-blue: oklch(58% 0.22 262 / 0.55);
   --color-sheen: oklch(100% 0 0 / 0.7);
   --color-shade: oklch(0% 0 0 / 0.55);
   --color-scanline: oklch(0% 0 0 / 0.22);
