@@ -3,45 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#050608">
+<meta name="theme-color" content="#000000">
 <meta name="color-scheme" content="dark">
 <title>《开！》大厅</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<!-- 字体**不得阻塞渲染**：fonts.googleapis.com 在中国大陆不可达，而且是"挂住"不是"快速失败"——
-     作为 <link rel=stylesheet> 会把整页卡成白屏直到超时（实测就是"打不开"的病因）。
-     改成 media=print + onload 提级：拿不到就永远用 tokens.css 里的 PingFang SC 兜底，页面照常出。
-     离线壳同理——sw.js 只缓存同源资源，这条本来就进不了缓存。 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Michroma&family=Space+Mono:wght@400;700&family=ZCOOL+QingKe+HuangYou&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<!-- 字体自托管（fonts/ShareTechMono.woff2，OFL）：不走 fonts.googleapis.com——大陆不可达且会挂住整页。
+     汉字一律用系统字，不打包中文字体。 -->
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="src/ui/style.css">
 </head>
 <body>
 <div id="app">
-  <div id="tubeViewport" class="tube-viewport hidden" aria-label="《开！》三管机对局界面">
-    <button id="tubeMenuBtn" class="tube-window-menu" aria-label="菜单">☰</button>
-    <div class="tube-stage-frame">
-        <canvas id="tubeStage" width="780" height="1688" aria-hidden="true"></canvas>
+  <div id="tubeViewport" class="tube-viewport mx hidden" aria-label="《开！》数字雨对局界面">
+    <div id="tubeStage" class="mx-rain" aria-hidden="true"></div>
+    <div class="mx-ui">
+      <header class="mx-bar">
+        <div class="mx-logo"><b>开！</b><small id="mxTagline"></small></div>
+        <button id="tubeMenuBtn" class="mx-icon" type="button" aria-label="菜单">≡</button>
+      </header>
+      <section class="mx-panel mx-opp" aria-labelledby="mxOppName">
+        <div class="mx-ph">
+          <span class="mx-name" id="mxOppName"></span>
+          <span class="mx-live" id="mxOppState"></span>
+          <span class="mx-acct" id="mxOppAcct"></span>
+        </div>
+        <div class="mx-dice mx-dice--opp" id="mxOppDice"></div>
         <div id="tubeSpeech" class="tube-speech hidden" data-raw tabindex="0" aria-label="AI 台词"></div>
-        <div id="tubeHitLayer" class="tube-hit-layer" aria-label="三管机操作">
-          <button id="tubePeekBtn" class="tube-hit peek" aria-label="看自己的骰子"></button>
-          <button id="tubeFace1Btn" class="tube-hit face-1" aria-label="选择一点"></button>
-          <button id="tubeFace2Btn" class="tube-hit face-2" aria-label="选择二点"></button>
-          <button id="tubeFace3Btn" class="tube-hit face-3" aria-label="选择三点"></button>
-          <button id="tubeFace4Btn" class="tube-hit face-4" aria-label="选择四点"></button>
-          <button id="tubeFace5Btn" class="tube-hit face-5" aria-label="选择五点"></button>
-          <button id="tubeFace6Btn" class="tube-hit face-6" aria-label="选择六点"></button>
-          <button id="tubeCountDownBtn" class="tube-hit count-down" aria-label="减少报价数量"></button>
-          <button id="tubeCountUpBtn" class="tube-hit count-up" aria-label="增加报价数量"></button>
-          <button id="tubeBidBtn" class="tube-hit bid" aria-label="报数"></button>
-          <button id="tubeOpenBtn" class="tube-hit open" aria-label="开"></button>
-          <button id="tubeBlindBtn" class="tube-hit blind" aria-label="宣盲"></button>
-          <button id="tubeZhaiBtn" class="tube-hit zhai" aria-label="宣斋"></button>
-          <button id="tubeRaiseBtn" class="tube-hit raise" aria-label="宣抬"></button>
+        <span class="mx-ai-tag" id="mxAiTag"></span>
+      </section>
+      <section class="mx-stage" aria-live="off">
+        <div class="mx-lbl" id="mxBidLbl"></div>
+        <div class="mx-bid" id="mxBid">
+          <canvas id="mxBidCount" aria-hidden="true"></canvas>
+          <span class="mx-bid-x" id="mxBidX"></span>
+          <canvas id="mxBidFace" aria-hidden="true"></canvas>
+          <canvas id="mxVerdictWord" class="mx-verdict-word" aria-hidden="true"></canvas>
+        </div>
+        <div class="mx-rel" id="mxRel"></div>
+        <div class="mx-hud" id="mxHud"></div>
+      </section>
+      <section class="mx-panel mx-mine">
+        <div class="mx-ph">
+          <span class="mx-name" id="mxMyName"></span>
+          <span class="mx-round" id="mxRound"></span>
+          <span class="mx-acct" id="mxMyAcct"></span>
+        </div>
+        <div class="mx-dice mx-dice--mine" id="mxMyDice"></div>
+        <button id="tubePeekBtn" class="mx-peek" type="button" aria-label="看自己的骰子"></button>
+      </section>
+      <div class="mx-ctl">
+        <div class="mx-faces">
+          <button id="tubeFace1Btn" class="mx-key mx-face" type="button" data-face="1" aria-label="选择一点"></button>
+          <button id="tubeFace2Btn" class="mx-key mx-face" type="button" data-face="2" aria-label="选择二点"></button>
+          <button id="tubeFace3Btn" class="mx-key mx-face" type="button" data-face="3" aria-label="选择三点"></button>
+          <button id="tubeFace4Btn" class="mx-key mx-face" type="button" data-face="4" aria-label="选择四点"></button>
+          <button id="tubeFace5Btn" class="mx-key mx-face" type="button" data-face="5" aria-label="选择五点"></button>
+          <button id="tubeFace6Btn" class="mx-key mx-face" type="button" data-face="6" aria-label="选择六点"></button>
+        </div>
+        <div class="mx-step">
+          <button id="tubeCountDownBtn" class="mx-key" type="button" aria-label="减少报价数量">−</button>
+          <div class="mx-count" id="mxCount"></div>
+          <button id="tubeCountUpBtn" class="mx-key" type="button" aria-label="增加报价数量">+</button>
+        </div>
+        <div class="mx-decl">
+          <button id="tubeBlindBtn" class="mx-tog" type="button" aria-label="宣盲"></button>
+          <button id="tubeZhaiBtn" class="mx-tog" type="button" aria-label="宣斋"></button>
+          <button id="tubeRaiseBtn" class="mx-tog" type="button" aria-label="宣抬"></button>
+          <button id="mxMoreBtn" class="mx-tog mx-tog--more" type="button" aria-expanded="false"></button>
+        </div>
+        <div class="mx-extra hidden" id="mxExtra"></div>
+        <div class="mx-pills">
+          <button id="tubeBidBtn" class="mx-pill mx-pill--blue" type="button" aria-label="报数"><b></b><small></small></button>
+          <button id="tubeOpenBtn" class="mx-pill mx-pill--red" type="button" aria-label="开"><b></b><small></small></button>
         </div>
       </div>
+    </div>
     <div id="tubeA11y" class="sr-only" aria-live="polite" data-raw></div>
   </div>
   <header>
@@ -92,6 +129,7 @@
 
   <div id="overlay" class="hidden"></div>
   <div id="drawer" class="hidden"></div>
+  <div id="lobbyRain" class="lobby-rain hidden" aria-hidden="true"></div>
   <div id="lobby" class="hidden"></div>
 </div>
 <script type="module" src="src/ui/main.js"></script>

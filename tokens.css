@@ -1,81 +1,76 @@
-/* 《开！》· 复古未来主义「任务控制台」设计令牌 · OKLCH only
- * 方向：六七十年代太空时代控制台——深空底、搪瓷青机壳、镀铬框、辉光管橙、磷光青、琥珀、奶油胶木键。
+/* 《开！》· 数字雨设计令牌 · OKLCH only
+ * 方向：黑客帝国式代码瀑布——纯黑底、磷光绿三档（头字白绿／主绿／暗绿）、终端面板、红蓝药丸。
  * 远离赌场皮肤（DESIGN §5.5）：不用绿呢、金边、霓虹招牌与筹码圆片。 */
+@font-face {
+  font-family: "Share Tech Mono";
+  src: url("fonts/ShareTechMono.woff2") format("woff2");
+  font-display: swap;
+}
+
 :root {
-  /* 深空底 */
-  --color-paper: oklch(13% 0.035 262);
-  --color-paper-2: oklch(17% 0.04 250);
-  --color-paper-3: oklch(22% 0.045 240);
-  --color-paper-4: oklch(27% 0.045 230);
-  --color-space-violet: oklch(24% 0.09 292);
-  --color-space-deep: oklch(9% 0.03 265);
+  /* 黑底与面板 */
+  --color-paper: oklch(0% 0 0);
+  --color-paper-2: oklch(10% 0.03 150 / 0.78);
+  --color-paper-3: oklch(14% 0.045 150 / 0.82);
+  --color-paper-4: oklch(19% 0.06 150 / 0.86);
 
-  /* 文字：奶油色丝印 */
-  --color-ink: oklch(94% 0.03 85);
-  --color-ink-2: oklch(86% 0.035 85);
-  --color-muted: oklch(76% 0.035 195);
-  --color-neutral: oklch(66% 0.035 205);
-  --color-rule: oklch(36% 0.04 215);
-  --color-rule-strong: oklch(52% 0.05 205);
+  /* 磷光绿阶 */
+  --color-rain-head: oklch(97% 0.05 150);
+  --color-rain-hot: oklch(91% 0.15 150);
+  --color-rain-core: oklch(86% 0.27 145);
+  --color-rain-mid: oklch(68% 0.22 145);
+  --color-rain-dim: oklch(46% 0.15 145);
+  --color-rain-deep: oklch(28% 0.09 145);
 
-  /* 三种磷光 */
-  --color-accent: oklch(87% 0.14 176);
-  --color-accent-ink: oklch(17% 0.035 190);
-  --color-accent-2: oklch(84% 0.15 78);
-  --color-accent-2-ink: oklch(19% 0.035 70);
-  --color-nixie: oklch(72% 0.19 45);
-  --color-nixie-hot: oklch(91% 0.07 60);
+  --color-ink: oklch(95% 0.07 150);
+  --color-ink-2: oklch(88% 0.14 150);
+  --color-muted: oklch(72% 0.17 147);
+  --color-neutral: oklch(58% 0.14 147);
+  --color-rule: oklch(86% 0.27 145 / 0.24);
+  --color-rule-strong: oklch(86% 0.27 145 / 0.5);
 
-  --color-focus: oklch(82% 0.15 70);
-  --color-error: oklch(69% 0.2 32);
-  --color-success: oklch(85% 0.15 165);
-  --color-judge: oklch(94% 0.04 80);
+  --color-accent: oklch(86% 0.27 145);
+  --color-accent-ink: oklch(14% 0.06 150);
+  --color-accent-2: oklch(91% 0.15 150);
+  --color-accent-2-ink: oklch(14% 0.06 150);
 
-  /* 管面 */
-  --color-tube-a-surface: oklch(15% 0.035 192);
-  --color-tube-b-surface: oklch(15% 0.03 66);
-  --color-tube-judge-surface: oklch(14% 0.04 40);
+  /* 药丸 */
+  --color-pill-red: oklch(63% 0.25 27);
+  --color-pill-red-hi: oklch(78% 0.15 25);
+  --color-pill-red-lo: oklch(36% 0.15 27);
+  --color-pill-blue: oklch(58% 0.22 262);
+  --color-pill-blue-hi: oklch(78% 0.12 255);
+  --color-pill-blue-lo: oklch(32% 0.15 265);
 
-  /* 机壳材质 */
-  --color-enamel: oklch(40% 0.055 189);
-  --color-enamel-hi: oklch(49% 0.065 187);
-  --color-enamel-lo: oklch(27% 0.045 192);
-  --color-enamel-deep: oklch(21% 0.035 195);
-  --color-cream: oklch(94% 0.04 86);
-  --color-cream-lo: oklch(81% 0.07 84);
-  --color-cream-lip: oklch(66% 0.07 80);
-  --color-orange: oklch(70% 0.2 42);
-  --color-orange-hi: oklch(79% 0.15 52);
-  --color-orange-lo: oklch(50% 0.16 38);
-  --color-mustard: oklch(82% 0.15 76);
-  --color-chrome-hi: oklch(98% 0.004 110);
-  --color-chrome: oklch(77% 0.012 170);
-  --color-chrome-lo: oklch(40% 0.015 182);
+  --color-focus: oklch(97% 0.05 150);
+  --color-error: oklch(66% 0.24 27);
+  --color-success: oklch(86% 0.27 145);
+  --color-judge: oklch(97% 0.05 150);
+
+  --color-tube-a-surface: oklch(8% 0.03 150 / 0.8);
+  --color-tube-b-surface: oklch(8% 0.03 150 / 0.8);
+  --color-tube-judge-surface: oklch(11% 0.05 150 / 0.86);
 
   /* 光与影 */
-  --color-star: oklch(97% 0.02 90 / 0.85);
-  --color-star-dim: oklch(90% 0.04 220 / 0.45);
-  --color-orbit: oklch(87% 0.14 176 / 0.16);
-  --color-orbit-warm: oklch(79% 0.15 52 / 0.22);
-  --color-planet: oklch(66% 0.19 38 / 0.55);
-  --color-planet-rim: oklch(60% 0.2 10 / 0.35);
-  --color-glow-orange: oklch(70% 0.2 42 / 0.45);
-  --color-glow-teal: oklch(87% 0.14 176 / 0.38);
-  --color-glow-amber: oklch(84% 0.15 78 / 0.38);
-  --color-sheen: oklch(100% 0 0 / 0.1);
-  --color-sheen-soft: oklch(100% 0 0 / 0.04);
-  --color-shadow: oklch(6% 0.02 260 / 0.62);
-  --color-shadow-soft: oklch(6% 0.02 260 / 0.32);
+  --color-glow: oklch(86% 0.27 145 / 0.6);
+  --color-glow-soft: oklch(86% 0.27 145 / 0.22);
+  --color-glow-faint: oklch(86% 0.27 145 / 0.08);
+  --color-glow-red: oklch(63% 0.25 27 / 0.55);
+  --color-glow-blue: oklch(58% 0.22 262 / 0.55);
+  --color-sheen: oklch(100% 0 0 / 0.7);
+  --color-shade: oklch(0% 0 0 / 0.55);
+  --color-scanline: oklch(0% 0 0 / 0.22);
+  --color-atmosphere: oklch(86% 0.27 145 / 0.06);
+  --color-overlay: oklch(0% 0 0 / 0.84);
+  --color-transparent: oklch(0% 0 0 / 0);
 
-  --color-scanline: oklch(92% 0.05 180 / 0.045);
-  --color-atmosphere: oklch(64% 0.18 40 / 0.2);
-  --color-overlay: oklch(9% 0.03 262 / 0.86);
-  --color-transparent: oklch(0% 0.005 262 / 0);
-
-  --font-display: "Michroma", "ZCOOL QingKe HuangYou", "PingFang SC", "Hiragino Sans GB", sans-serif;
-  --font-han: "ZCOOL QingKe HuangYou", "PingFang SC", "Hiragino Sans GB", sans-serif;
-  --font-body: "Space Mono", "PingFang SC", "Hiragino Sans GB", ui-monospace, monospace;
+  --font-display: "Share Tech Mono", "SFMono-Regular", Menlo, Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+  --font-body: "Share Tech Mono", "SFMono-Regular", Menlo, Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+  --font-han: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-outlier: var(--font-body);
+
+  --glow-text: 0 0 0.35rem var(--color-glow), 0 0 1.1rem var(--color-glow-soft);
+  --glow-box: 0 0 0.9rem var(--color-glow-soft), inset 0 0 1.6rem var(--color-glow-faint);
 
   --space-3xs: 0.125rem;
   --space-2xs: 0.25rem;
@@ -107,26 +102,11 @@
 
   --rule-hair: 0.0625rem;
   --rule-medium: 0.125rem;
-  --rule-chrome: 0.25rem;
   --radius-none: 0;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1.25rem;
-  --radius-tube: 1.5rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-tube: 0;
   --radius-pill: 999px;
-
-  /* 复合材质（只由上面的色令牌拼成） */
-  --chrome-ring: linear-gradient(140deg, var(--color-chrome-hi) 0%, var(--color-chrome) 22%, var(--color-chrome-lo) 50%, var(--color-chrome) 76%, var(--color-chrome-lo) 100%);
-  --enamel-panel: linear-gradient(160deg, var(--color-enamel-hi) 0%, var(--color-enamel) 38%, var(--color-enamel-lo) 100%);
-  --starfield:
-    radial-gradient(circle at 17% 23%, var(--color-star) 0 0.06rem, var(--color-transparent) 0.09rem) 0 0 / 9rem 9rem,
-    radial-gradient(circle at 71% 61%, var(--color-star-dim) 0 0.05rem, var(--color-transparent) 0.08rem) 0 0 / 6.5rem 6.5rem,
-    radial-gradient(circle at 43% 87%, var(--color-star) 0 0.04rem, var(--color-transparent) 0.07rem) 0 0 / 13rem 13rem,
-    radial-gradient(circle at 88% 12%, var(--color-star-dim) 0 0.07rem, var(--color-transparent) 0.11rem) 0 0 / 17rem 17rem;
-  --nebula:
-    radial-gradient(ellipse 70% 55% at 100% 105%, var(--color-atmosphere), var(--color-transparent) 70%),
-    radial-gradient(ellipse 80% 60% at 0% 0%, var(--color-space-violet), var(--color-transparent) 70%),
-    radial-gradient(ellipse 120% 90% at 50% 40%, var(--color-paper-2), var(--color-space-deep) 100%);
 
   --z-base: 1;
   --z-raised: 10;

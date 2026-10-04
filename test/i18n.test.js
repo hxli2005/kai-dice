@@ -78,10 +78,14 @@ test('界面文案整句翻译，不留半截', () => {
 test('字体不得阻塞渲染（大陆不可达时会白屏）', () => {
   for (const page of ['index.html', 'docs/arena/live.html']) {
     const html = fs.readFileSync(new URL(`../${page}`, import.meta.url), 'utf8');
-    const gf = html.match(/<link[^>]*fonts\.googleapis\.com\/css2[^>]*>/)?.[0] ?? '';
-    assert.ok(gf, `${page} 找不到字体 link`);
-    assert.match(gf, /media="print"/, `${page} 的字体 link 仍在阻塞渲染`);
+    // 外部字体 link 要么没有（现状：自托管），要么必须是 media=print 非阻塞写法
+    for (const gf of html.match(/<link[^>]*fonts\.googleapis\.com\/css2[^>]*>/g) ?? [])
+      assert.match(gf, /media="print"/, `${page} 的字体 link 仍在阻塞渲染`);
   }
+  // 自托管字体必须 swap：字体文件到之前先用系统字出字
+  const tokens = fs.readFileSync(new URL('../tokens.css', import.meta.url), 'utf8');
+  for (const face of tokens.match(/@font-face\s*\{[^}]*\}/g) ?? [])
+    assert.match(face, /font-display:\s*swap/, '自托管字体缺 font-display: swap');
 });
 
 test('English guide, manifest, prompt contract, and offline shell ship together', () => {
