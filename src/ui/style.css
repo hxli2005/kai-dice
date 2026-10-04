@@ -2116,3 +2116,572 @@ button.ghost {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+ * 复古未来主义「任务控制台」层（2026-10 重构）
+ * 深空底 · 搪瓷青机壳 · 镀铬框 · 辉光管橙 · 磷光青 · 琥珀 · 奶油胶木键。
+ * 本层只从 tokens.css 取色，覆盖其上各历史皮肤层；画布三管机见 src/ui/tubes.js。
+ * ========================================================================== */
+:root {
+  --bg: var(--color-paper);
+  --wood: var(--color-enamel-lo);
+  --wood-hi: var(--color-enamel);
+  --lamp: var(--color-accent-2);
+  --lamp-dim: var(--color-cream-lip);
+  --ink: var(--color-ink);
+  --dim: var(--color-muted);
+  --red: var(--color-orange-lo);
+  --red-hi: var(--color-orange);
+  --die-face: var(--color-cream);
+  --die-pip: var(--color-accent-ink);
+  --serif: var(--font-body);
+  --mono: var(--font-body);
+}
+
+html { background-color: var(--color-space-deep); }
+body {
+  background: var(--starfield), var(--nebula) var(--color-space-deep);
+  font-family: var(--font-body);
+}
+
+#app,
+#lobby,
+.tube-viewport {
+  background: var(--starfield), var(--nebula) var(--color-paper);
+}
+#app { max-width: 34rem; }
+#app::before { background: none; }
+
+/* ---------- 深空：轨道环与行星（纯装饰，不吃点击） ---------- */
+#lobby::before,
+.tube-viewport::after {
+  position: fixed;
+  inset-inline-start: 50%;
+  inset-block-start: 58%;
+  width: 150vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  background:
+    radial-gradient(farthest-side, var(--color-transparent) calc(100% - 0.125rem), var(--color-orbit) calc(100% - 0.0625rem), var(--color-transparent) 100%),
+    radial-gradient(farthest-side, var(--color-transparent) calc(84% - 0.125rem), var(--color-orbit-warm) calc(84% - 0.0625rem), var(--color-transparent) 84%);
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  z-index: 0;
+}
+#lobby::after {
+  position: fixed;
+  inset-inline-end: -18vmax;
+  inset-block-end: -22vmax;
+  width: 52vmax;
+  height: 52vmax;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, var(--color-orange-hi), var(--color-planet) 38%, var(--color-planet-rim) 62%, var(--color-transparent) 72%);
+  content: "";
+  filter: blur(0.06rem);
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 0;
+}
+#lobby > .lobby-machine { position: relative; z-index: var(--z-base); }
+
+/* ---------- 三管机窗口：顶条铭牌＋镀铬菜单钮 ---------- */
+.tube-viewport::before {
+  grid-row: 1;
+  justify-self: start;
+  align-self: center;
+  margin-inline-start: max(var(--space-md), env(safe-area-inset-left));
+  padding-block-start: env(safe-area-inset-top);
+  color: var(--color-cream);
+  content: "开！ · KAI-1";
+  font-family: var(--font-han);
+  font-size: var(--text-md);
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 0.9rem var(--color-glow-orange);
+  z-index: 1;
+}
+.lang-en .tube-viewport::before { content: "KAI! · KAI-1"; font-family: var(--font-display); font-size: var(--text-sm); }
+.tube-stage-frame {
+  z-index: 1;
+  filter: drop-shadow(0 1.4rem 2.2rem var(--color-shadow));
+}
+.tube-window-menu,
+#menuBtn {
+  border: var(--rule-medium) solid transparent;
+  border-radius: 50%;
+  background:
+    linear-gradient(170deg, var(--color-enamel-hi), var(--color-enamel-lo)) padding-box,
+    var(--chrome-ring) border-box;
+  color: var(--color-cream);
+  box-shadow: 0 0.2rem 0.6rem var(--color-shadow), inset 0 var(--rule-hair) var(--color-sheen);
+}
+.tube-window-menu:hover { background: linear-gradient(170deg, var(--color-enamel-hi), var(--color-enamel)) padding-box, var(--chrome-ring) border-box; }
+.tube-window-menu:active { background: linear-gradient(170deg, var(--color-enamel-lo), var(--color-enamel)) padding-box, var(--chrome-ring) border-box; }
+.tube-window-menu:focus-visible { outline-color: var(--color-mustard); }
+
+.tube-speech {
+  background: var(--color-transparent);
+  color: var(--color-accent);
+  font-family: var(--font-body);
+  font-weight: 400;
+  text-shadow: 0 0 0.35rem var(--color-glow-teal);
+  scrollbar-color: var(--color-glow-teal) var(--color-transparent);
+}
+.tube-speech::-webkit-scrollbar-thumb { background: var(--color-glow-teal); }
+.tube-hit:focus-visible { outline-color: var(--color-mustard); background: var(--color-mustard); }
+
+/* ---------- 大厅：控制台铭牌 ---------- */
+#lobby { font-family: var(--font-body); }
+.lobby-mast {
+  position: relative;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: var(--color-transparent);
+}
+.lobby-brand { align-items: center; gap: var(--space-lg); text-transform: none; }
+.lobby-brand__mark {
+  position: relative;
+  padding-inline: var(--space-xs) var(--space-sm);
+  background: linear-gradient(175deg, var(--color-cream) 10%, var(--color-mustard) 55%, var(--color-orange) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--color-transparent);
+  font-family: var(--font-han);
+  font-size: var(--text-3xl);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  filter: drop-shadow(0 0 1.1rem var(--color-glow-orange));
+}
+.lobby-brand__mark::after {
+  position: absolute;
+  inset: 50% -18% auto -14%;
+  height: 46%;
+  border: var(--rule-hair) solid var(--color-orange);
+  border-radius: 50%;
+  content: "";
+  transform: translateY(-50%) rotate(-12deg);
+  opacity: 0.8;
+  z-index: -1;
+}
+.lobby-brand__name {
+  display: grid;
+  gap: var(--space-3xs);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.24em;
+}
+.lobby-brand__name::after {
+  color: var(--color-orange-hi);
+  content: "KAI-1 · MISSION CONSOLE";
+  font-size: 0.5625rem;
+  letter-spacing: 0.3em;
+}
+.lobby-utility { gap: var(--space-2xs); flex-wrap: wrap; }
+.lobby-prompt, .lobby-caret { display: none; }
+.lobby-utility button,
+.lobby-utility a {
+  min-height: 2.25rem;
+  padding-inline: var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-shadow-soft);
+  color: var(--color-ink-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+}
+
+/* ---------- 大厅：搪瓷控制台＋镀铬屏 ---------- */
+#lobby .lobby-console {
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at var(--space-sm) var(--space-sm), var(--color-chrome) 0 0.16rem, var(--color-chrome-lo) 0.2rem, var(--color-transparent) 0.24rem),
+    radial-gradient(circle at calc(100% - var(--space-sm)) var(--space-sm), var(--color-chrome) 0 0.16rem, var(--color-chrome-lo) 0.2rem, var(--color-transparent) 0.24rem),
+    radial-gradient(circle at var(--space-sm) calc(100% - var(--space-sm)), var(--color-chrome) 0 0.16rem, var(--color-chrome-lo) 0.2rem, var(--color-transparent) 0.24rem),
+    radial-gradient(circle at calc(100% - var(--space-sm)) calc(100% - var(--space-sm)), var(--color-chrome) 0 0.16rem, var(--color-chrome-lo) 0.2rem, var(--color-transparent) 0.24rem),
+    var(--enamel-panel);
+  box-shadow:
+    inset 0 var(--rule-hair) var(--color-sheen),
+    inset 0 calc(var(--rule-hair) * -2) var(--color-shadow-soft),
+    0 1.4rem 2.6rem var(--color-shadow);
+}
+#lobby .lobby-console::before {
+  display: block;
+  height: 0.25rem;
+  margin: 0 var(--space-lg) var(--space-3xs) auto;
+  width: 6rem;
+  background: linear-gradient(to bottom, var(--color-cream) 0 33%, var(--color-mustard) 33% 66%, var(--color-orange) 66%);
+  border-radius: var(--radius-pill);
+  content: "";
+}
+.lobby-tube,
+.lobby-judge,
+.lobby-module,
+#lobby .lab-box {
+  border: var(--rule-chrome) solid var(--color-transparent);
+  box-shadow: inset 0 0 2.2rem var(--color-shadow), 0 0.35rem 0.9rem var(--color-shadow-soft);
+}
+.lobby-tube {
+  border-radius: var(--radius-tube);
+  background: linear-gradient(var(--tube-surface), var(--tube-surface)) padding-box, var(--chrome-ring) border-box;
+}
+.lobby-tube::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, var(--color-sheen) 0%, var(--color-sheen-soft) 30%, var(--color-transparent) 31%);
+  content: "";
+  pointer-events: none;
+}
+.lobby-tube--mode { --tube-surface: var(--color-tube-a-surface); background-color: var(--color-tube-a-surface); }
+.lobby-tube--roster { --tube-surface: var(--color-tube-b-surface); background-color: var(--color-tube-b-surface); }
+.lobby-tube__head { border-block-end-style: dashed; border-block-end-color: currentColor; }
+.lobby-tube__head h2,
+.lobby-module__head h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 0.7rem currentColor;
+}
+.lobby-tube__head h2::before {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline-end: var(--space-xs);
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0.6rem currentColor;
+  content: "";
+  vertical-align: 0.12em;
+}
+
+#lobby .mode-btn {
+  border-color: currentColor;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-transparent);
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  opacity: 0.72;
+}
+#lobby .mode-btn.sel {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink);
+  opacity: 1;
+  box-shadow: 0 0 1.2rem var(--color-glow-teal), inset 0 var(--rule-hair) var(--color-sheen);
+}
+#lobby .mode-btn.sel::before { content: "◉ "; }
+#lobby .mode-note { color: var(--color-accent); opacity: 0.82; }
+
+/* 裁判线路：一条辉光管读数带＋橙色胶木大键 */
+.lobby-judge {
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--color-tube-judge-surface), var(--color-tube-judge-surface)) padding-box, var(--chrome-ring) border-box;
+  background-color: var(--color-tube-judge-surface);
+  color: var(--color-nixie);
+}
+.lobby-judge__label { color: var(--color-orange-hi); opacity: 0.72; letter-spacing: 0.2em; }
+.lobby-judge strong {
+  color: var(--color-nixie-hot);
+  font-family: var(--font-han);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 0.5rem var(--color-nixie), 0 0 1.4rem var(--color-glow-orange);
+}
+.lobby-judge__state { color: var(--color-nixie); }
+#lobby #lobbyStart {
+  min-width: 7.5rem;
+  min-height: 3rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(to bottom, var(--color-orange-hi), var(--color-orange) 70%);
+  color: var(--color-cream);
+  font-family: var(--font-han);
+  font-size: var(--text-md);
+  font-weight: 400;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  text-shadow: 0 var(--rule-hair) 0 var(--color-orange-lo);
+  box-shadow: 0 0.3rem 0 var(--color-orange-lo), 0 0.6rem 1.4rem var(--color-glow-orange), inset 0 var(--rule-hair) var(--color-sheen);
+  transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+#lobby #lobbyStart:active:not(:disabled) {
+  transform: translateY(0.2rem);
+  box-shadow: 0 0.1rem 0 var(--color-orange-lo), 0 0.3rem 0.8rem var(--color-glow-orange);
+}
+#lobby #lobbyStart:disabled { filter: saturate(0.3); box-shadow: 0 0.3rem 0 var(--color-orange-lo); }
+
+/* 对手卡：琥珀屏上的接线位 */
+#lobby .p-card {
+  border-color: var(--color-glow-amber);
+  border-radius: var(--radius-md);
+  background-color: var(--color-shadow-soft);
+  color: var(--color-accent-2);
+}
+#lobby .p-card.sel {
+  border-color: var(--color-accent-2);
+  background-color: var(--color-shadow-soft);
+  box-shadow: 0 0 1.2rem var(--color-glow-amber), inset 0 0 1.2rem var(--color-glow-amber);
+}
+#lobby .p-card.sel::after { color: var(--color-mustard); text-shadow: 0 0 0.5rem var(--color-glow-amber); }
+#lobby .p-card .seal,
+#lobby .board-row .seal.mini {
+  border: var(--rule-medium) solid var(--color-transparent);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--color-paper-4), var(--color-space-deep)) padding-box, var(--chrome-ring) border-box;
+  color: var(--color-accent-2);
+  text-shadow: 0 0 0.5rem var(--color-glow-amber);
+}
+#lobby .p-name { font-family: var(--font-display); font-size: var(--text-sm); text-shadow: 0 0 0.6rem var(--color-glow-amber); }
+#lobby .p-card.add-guest { border-color: var(--color-rule-strong); color: var(--color-ink-2); background-color: var(--color-transparent); }
+
+/* 机架模块：小号搪瓷面板，屏嵌其中 */
+.lobby-module,
+#lobby .lab-box {
+  border-radius: var(--radius-md);
+  background: var(--enamel-panel) padding-box, var(--chrome-ring) border-box;
+  color: var(--color-ink);
+  box-shadow: inset 0 var(--rule-hair) var(--color-sheen), 0 0.8rem 1.6rem var(--color-shadow);
+}
+.lobby-module__head { color: var(--color-cream); border-block-end-color: var(--color-sheen); }
+.lobby-module__head h2 { text-shadow: none; }
+#lobby .lobby-board {
+  margin-block-start: var(--space-sm);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-tube-b-surface);
+  box-shadow: inset 0 0 1.2rem var(--color-shadow);
+}
+#lobby .board-row { border-block-end-color: var(--color-rule); color: var(--color-accent-2); }
+#lobby .board-row b { color: var(--color-mustard); font-family: var(--font-body); }
+#lobby .board-row.me, #lobby .board-row.me b { color: var(--color-accent); }
+#lobby .board-empty { color: var(--color-accent-2); opacity: 0.8; }
+#lobby .lab-head { color: var(--color-cream); font-family: var(--font-display); border-block-end-color: var(--color-sheen); }
+#lobby .lab-head i.on { color: var(--color-mustard); text-shadow: 0 0 0.5rem var(--color-glow-amber); }
+#lobby .lab-chip {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(to bottom, var(--color-cream), var(--color-cream-lo));
+  color: var(--color-accent-ink);
+  box-shadow: 0 0.18rem 0 var(--color-cream-lip);
+}
+#lobby .lab-chip.sel {
+  background: linear-gradient(to bottom, var(--color-orange-hi), var(--color-orange));
+  color: var(--color-cream);
+  box-shadow: 0 0.18rem 0 var(--color-orange-lo), 0 0 1rem var(--color-glow-orange);
+}
+#lobby .lab-note { color: var(--color-muted); }
+
+#lobby .lobby-portal {
+  border: var(--rule-medium) solid var(--color-transparent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(160deg, var(--color-enamel), var(--color-enamel-lo)) padding-box, var(--chrome-ring) border-box;
+  color: var(--color-cream);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  box-shadow: 0 0.5rem 1rem var(--color-shadow-soft), inset 0 var(--rule-hair) var(--color-sheen);
+}
+#lobby .lobby-portal small { color: var(--color-muted); font-family: var(--font-body); }
+#lobby .lobby-portal::before {
+  display: none;
+}
+#lobby .lobby-portal span::before {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-inline-end: var(--space-xs);
+  border-radius: 50%;
+  background: var(--portal-lamp, var(--color-cream));
+  box-shadow: 0 0 0.55rem var(--portal-lamp, var(--color-cream));
+  content: "";
+  vertical-align: 0.1em;
+}
+#lobby .lobby-portal--room { --portal-lamp: var(--color-mustard); }
+#lobby .lobby-portal--arena { --portal-lamp: var(--color-orange); color: var(--color-cream); background: linear-gradient(160deg, var(--color-enamel), var(--color-enamel-lo)) padding-box, var(--chrome-ring) border-box; }
+#lobby .lobby-portal--codex { --portal-lamp: var(--color-accent); color: var(--color-cream); background: linear-gradient(160deg, var(--color-enamel), var(--color-enamel-lo)) padding-box, var(--chrome-ring) border-box; }
+#lobby .lobby-note { border-radius: var(--radius-md); border-color: var(--color-mustard); background-color: var(--color-shadow-soft); }
+#lobby .lobby-colophon { background: none; border-block-start-color: var(--color-rule); color: var(--color-neutral); letter-spacing: 0.06em; text-align: center; }
+
+@media (hover: hover) and (pointer: fine) {
+  #lobby .p-card:hover { border-color: var(--color-accent-2); }
+  #lobby .mode-btn:hover { opacity: 1; border-color: currentColor; }
+  #lobby .lobby-portal:hover,
+  .lobby-utility button:hover,
+  .lobby-utility a:hover { border-color: var(--color-mustard); color: var(--color-cream); }
+  #lobby #lobbyStart:hover:not(:disabled) { filter: brightness(1.06); }
+}
+
+/* ---------- 弹层：开牌、报告卡、教学 ---------- */
+#overlay,
+#app.tube-mode #overlay,
+#app.tube-mode #coach,
+#coach {
+  background: var(--starfield), var(--color-overlay);
+  backdrop-filter: blur(0.5rem);
+}
+#overlay .kai {
+  color: var(--color-nixie-hot);
+  font-family: var(--font-han);
+  font-weight: 400;
+  text-shadow: 0 0 0.6rem var(--color-nixie), 0 0 2.4rem var(--color-glow-orange);
+}
+#overlay .count { color: var(--color-mustard); font-family: var(--font-body); }
+.card,
+#app.tube-mode .card,
+#app.tube-mode #coach .coach-rules,
+#coach .coach-rules {
+  border: var(--rule-chrome) solid var(--color-transparent);
+  border-radius: var(--radius-lg);
+  background: var(--enamel-panel) padding-box, var(--chrome-ring) border-box;
+  color: var(--color-ink);
+  box-shadow: 0 1.6rem 3.2rem var(--color-shadow), inset 0 var(--rule-hair) var(--color-sheen);
+}
+.card h2 { color: var(--color-cream-lo); font-family: var(--font-display); letter-spacing: 0.24em; }
+.card .persona { color: var(--color-mustard); font-family: var(--font-display); font-size: var(--text-lg); line-height: 1.3; overflow-wrap: anywhere; text-shadow: 0 0 1rem var(--color-glow-amber); }
+.card dt { color: var(--color-muted); }
+.card .verdict { border-top-color: var(--color-sheen); }
+.card .verdict::before { color: var(--color-orange-hi); }
+#coach .coach-rules p { color: var(--color-ink); }
+#coach .anywhere { color: var(--color-mustard); font-family: var(--font-display); letter-spacing: 0.2em; text-shadow: 0 0 0.8rem var(--color-glow-amber); }
+
+/* 通用按钮：奶油胶木＝主，橙＝危险 */
+button.primary,
+#overlay .again {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(to bottom, var(--color-cream), var(--color-cream-lo));
+  color: var(--color-accent-ink);
+  font-family: var(--font-han);
+  letter-spacing: 0.14em;
+  box-shadow: 0 0.22rem 0 var(--color-cream-lip), 0 0.5rem 1rem var(--color-shadow-soft);
+}
+button.danger {
+  border-radius: var(--radius-md);
+  background: linear-gradient(to bottom, var(--color-orange-hi), var(--color-orange));
+  color: var(--color-cream);
+  font-family: var(--font-han);
+  box-shadow: 0 0.22rem 0 var(--color-orange-lo), 0 0.5rem 1.2rem var(--color-glow-orange);
+}
+button.danger:not(:disabled) { box-shadow: 0 0.22rem 0 var(--color-orange-lo), 0 0.5rem 1.2rem var(--color-glow-orange); }
+
+/* ---------- 抽屉：维修舱门 ---------- */
+#drawer,
+#app.lobby-mode #drawer {
+  border-inline-start: var(--rule-chrome) solid var(--color-chrome);
+  background-color: var(--color-enamel-deep);
+  background-image: linear-gradient(170deg, var(--color-enamel-lo), var(--color-enamel-deep) 40%, var(--color-space-deep));
+  color: var(--color-ink);
+}
+#drawer h2 {
+  color: var(--color-mustard);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 0.7rem var(--color-glow-amber);
+}
+#drawer input,
+#drawer select,
+#drawer textarea {
+  border-color: var(--color-rule-strong);
+  background-color: var(--color-tube-a-surface);
+  color: var(--color-accent);
+  font-family: var(--font-body);
+}
+#drawer input:focus,
+#drawer select:focus,
+#drawer textarea:focus { outline: var(--rule-medium) solid var(--color-mustard); outline-offset: var(--rule-hair); }
+.drawer-nav a { border-color: var(--color-rule-strong); color: var(--color-cream); border-radius: var(--radius-pill); }
+.book,
+.mode-btn,
+.p-card,
+.board,
+.lab-box {
+  border-color: var(--color-rule);
+}
+.book { border-radius: var(--radius-md); background-color: var(--color-shadow-soft); }
+.book-head { color: var(--color-mustard); }
+.hyp .tally { color: var(--color-mustard); }
+.hyp .tally i, .insight { border-left-color: var(--color-orange); }
+.hyp .tally i { color: var(--color-orange-hi); }
+.insight { background-color: var(--color-shadow-soft); }
+.ledger-line b { color: var(--color-mustard); }
+.close-x { color: var(--color-cream); }
+
+/* ---------- 三人桌：同一台控制台的 DOM 版 ---------- */
+header .who .name,
+.strip-head b { font-family: var(--font-display); letter-spacing: 0.1em; }
+.seal,
+.stamp {
+  border-radius: 50%;
+  border-color: var(--color-orange);
+  background-color: var(--color-shadow-soft);
+  color: var(--color-orange-hi);
+  font-family: var(--font-han);
+}
+.bubble,
+.strip-bubble {
+  border-color: var(--color-glow-teal);
+  background-color: var(--color-tube-a-surface);
+  color: var(--color-accent);
+  font-family: var(--font-body);
+}
+.chip-dot,
+.chip-dot.d1,
+.chip-dot.d5,
+.chip-dot.d25,
+.chip-dot.d100 {
+  border-radius: 50%;
+  border-color: var(--color-glow-amber);
+  background: radial-gradient(circle at 35% 30%, var(--color-mustard), var(--color-accent-2-ink));
+  box-shadow: 0 0 0.4rem var(--color-glow-amber);
+}
+.chip-dot i,
+.chip-dot.d1 i,
+.chip-dot.d5 i,
+.chip-dot.d25 i,
+.chip-dot.d100 i { color: var(--color-cream); font-family: var(--font-body); }
+
+/* 三人桌：对手条＝青磷光小屏，桌心＝辉光管读数，自己＝搪瓷控制台面 */
+#app:not(.tube-mode):not(.lobby-mode) .opp-strip {
+  padding: var(--space-xs);
+  border: var(--rule-medium) solid var(--color-transparent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--color-tube-a-surface), var(--color-tube-a-surface)) padding-box, var(--chrome-ring) border-box;
+  box-shadow: inset 0 0 1.2rem var(--color-shadow), 0 0.5rem 1rem var(--color-shadow-soft);
+}
+.opp-strip .strip-head b { color: var(--color-accent); text-shadow: 0 0 0.5rem var(--color-glow-teal); }
+.opp-strip.turn { box-shadow: 0 0 1.4rem var(--color-glow-teal), inset 0 0 1.2rem var(--color-shadow); }
+.die.back {
+  border: var(--rule-hair) dashed var(--color-glow-teal);
+  background: var(--color-tube-a-surface);
+  box-shadow: inset 0 0 0.6rem var(--color-shadow);
+}
+.die {
+  background: linear-gradient(to bottom, var(--color-cream), var(--color-cream-lo));
+  box-shadow: 0 0.15rem 0 var(--color-cream-lip), 0 0.4rem 0.8rem var(--color-shadow-soft);
+}
+.die.wild i { background: var(--color-orange); }
+.die.hit { box-shadow: 0 0 0.9rem var(--color-mustard), 0 0.15rem 0 var(--color-cream-lip); }
+#bidBig .n {
+  color: var(--color-nixie-hot);
+  font-family: var(--font-body);
+  font-weight: 400;
+  text-shadow: 0 0 0.4rem var(--color-nixie), 0 0 1.6rem var(--color-glow-orange);
+}
+#bidBig .x { color: var(--color-nixie); }
+#bidBig .none { border-color: var(--color-glow-orange); }
+#pot, #hint { color: var(--color-muted); }
+#pot b { color: var(--color-mustard); }
+#app:not(.tube-mode):not(.lobby-mode) > footer {
+  margin: 0 var(--space-xs) var(--space-xs);
+  padding: var(--space-md) var(--space-sm) max(var(--space-sm), env(safe-area-inset-bottom));
+  border-radius: var(--radius-lg);
+  background: var(--enamel-panel);
+  box-shadow: inset 0 var(--rule-hair) var(--color-sheen), 0 -0.6rem 1.6rem var(--color-shadow-soft);
+}
+.stepper button { color: var(--color-cream); }
+.stepper .val { color: var(--color-mustard); font-family: var(--font-body); text-shadow: 0 0 0.6rem var(--color-glow-amber); }
+#facePick .die.sel { outline-color: var(--color-orange); box-shadow: 0 0 0.9rem var(--color-glow-orange); }
+#drawer a { color: var(--color-mustard); }
